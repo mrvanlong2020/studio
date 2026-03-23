@@ -1,167 +1,169 @@
 import { useState } from "react";
-import { Layout } from "@/components/layout";
-import { Card, CardContent, Button, Input, Dialog, Label, Textarea } from "@/components/ui-elements";
-import { useCustomers, useCreateCustomerMutation, useUpdateCustomerMutation, useDeleteCustomerMutation } from "@/hooks/use-customers";
-import { formatDate } from "@/lib/formatters";
-import { Search, Plus, User, Phone, MapPin, MoreVertical, Trash2, Edit } from "lucide-react";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useToast } from "@/hooks/use-toast";
+import { useListCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer } from "@workspace/api-client-react";
+import { formatVND, formatDate } from "@/lib/utils";
+import { Card, CardContent, Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Textarea } from "@/components/ui";
+import { Search, Plus, User, Phone, MapPin, Edit, Trash2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 
-const customerSchema = z.object({
-  name: z.string().min(2, "Tên phải có ít nhất 2 ký tự"),
-  phone: z.string().min(10, "Số điện thoại không hợp lệ"),
-  email: z.string().email("Email không hợp lệ").optional().or(z.literal('')),
-  address: z.string().optional(),
-  notes: z.string().optional(),
-});
-
-type CustomerFormValues = z.infer<typeof customerSchema>;
-
-export default function Customers() {
+export default function CustomersPage() {
   const [search, setSearch] = useState("");
-  const { data: customers, isLoading } = useCustomers(search);
-  const [isFormOpen, setIsFormOpen] = useState(false);
+  const { data: customers = [], isLoading } = useListCustomers({ search: search.length > 2 ? search : undefined });
+  const createCustomer = useCreateCustomer();
+  const updateCustomer = useUpdateCustomer();
+  const deleteCustomer = useDeleteCustomer();
+  const queryClient = useQueryClient();
+
+  const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  
-  const createMutation = useCreateCustomerMutation();
-  const updateMutation = useUpdateCustomerMutation();
-  const deleteMutation = useDeleteCustomerMutation();
-  const { toast } = useToast();
+  const [formData, setFormData] = useState({ name: "", phone: "", email: "", address: "", notes: "" });
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<CustomerFormValues>({
-    resolver: zodResolver(customerSchema)
-  });
+  const handleOpenEdit = (c: any) => {
+    setFormData({ name: c.name, phone: c.phone, email: c.email||"", address: c.address||"", notes: c.notes||"" });
+    setEditingId(c.id);
+    setIsOpen(true);
+  };
 
-  const openCreate = () => {
+  const handleOpenCreate = () => {
+    setFormData({ name: "", phone: "", email: "", address: "", notes: "" });
     setEditingId(null);
-    reset({ name: "", phone: "", email: "", address: "", notes: "" });
-    setIsFormOpen(true);
+    setIsOpen(true);
   };
 
-  const openEdit = (customer: any) => {
-    setEditingId(customer.id);
-    reset({
-      name: customer.name,
-      phone: customer.phone,
-      email: customer.email || "",
-      address: customer.address || "",
-      notes: customer.notes || ""
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const action = editingId 
+      ? updateCustomer.mutateAsync({ id: editingId, data: formData })
+      : createCustomer.mutateAsync({ data: formData });
+      
+    action.then(() => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      setIsOpen(false);
     });
-    setIsFormOpen(true);
-  };
-
-  const onSubmit = (data: CustomerFormValues) => {
-    // Convert empty strings to null for optional fields to match schema if needed, though API usually handles empty strings
-    const payload = {
-      ...data,
-      email: data.email || null,
-      address: data.address || null,
-      notes: data.notes || null,
-    };
-
-    if (editingId) {
-      updateMutation.mutate({ id: editingId, data: payload }, {
-        onSuccess: () => {
-          setIsFormOpen(false);
-          toast({ title: "Thành công", description: "Đã cập nhật khách hàng." });
-        }
-      });
-    } else {
-      createMutation.mutate(payload, {
-        onSuccess: () => {
-          setIsFormOpen(false);
-          toast({ title: "Thành công", description: "Đã thêm khách hàng mới." });
-        }
-      });
-    }
   };
 
   const handleDelete = (id: number) => {
-    if (confirm("Bạn có chắc chắn muốn xóa khách hàng này?")) {
-      deleteMutation.mutate(id, {
-        onSuccess: () => toast({ title: "Đã xóa", description: "Xóa khách hàng thành công." })
+    if(confirm("Bạn có chắc muốn xóa khách hàng này?")) {
+      deleteCustomer.mutate({ id }, {
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/customers"] })
       });
     }
   };
 
   return (
-    <Layout>
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-4xl font-serif font-bold text-foreground">Khách hàng</h1>
-          <p className="text-muted-foreground mt-2">Quản lý thông tin cô dâu chú rể</p>
+          <h1 className="text-3xl font-bold tracking-tight">Khách hàng</h1>
+          <p className="text-muted-foreground mt-1">Quản lý thông tin và công nợ khách hàng</p>
         </div>
-        <Button onClick={openCreate} className="gap-2">
-          <Plus className="w-5 h-5" /> Thêm khách hàng
-        </Button>
-      </div>
-
-      <Card className="mb-8">
-        <CardContent className="p-4 flex gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+        
+        <div className="flex items-center gap-4 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input 
-              placeholder="Tìm kiếm theo tên hoặc SĐT..." 
-              className="pl-10"
+              placeholder="Tìm tên, số điện thoại..." 
+              className="pl-9"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={e => setSearch(e.target.value)}
             />
           </div>
-        </CardContent>
-      </Card>
+          
+          <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={handleOpenCreate} className="gap-2"><Plus className="w-4 h-4"/> Thêm mới</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{editingId ? "Sửa khách hàng" : "Thêm khách hàng mới"}</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">Họ và tên *</label>
+                    <Input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Nguyễn Văn A" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">Số điện thoại *</label>
+                    <Input required value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="09..." />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">Email</label>
+                  <Input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="email@example.com" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">Địa chỉ</label>
+                  <Input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="Địa chỉ chi tiết" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">Ghi chú</label>
+                  <Textarea value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Ghi chú thêm..." />
+                </div>
+                <Button type="submit" className="w-full" disabled={createCustomer.isPending || updateCustomer.isPending}>
+                  Lưu thông tin
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
 
-      <Card className="overflow-hidden">
+      <Card>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-muted/50 text-muted-foreground font-medium border-b border-border">
+          <table className="w-full text-left text-sm whitespace-nowrap">
+            <thead className="bg-muted/50 text-muted-foreground uppercase text-xs font-semibold">
               <tr>
-                <th className="px-6 py-4 rounded-tl-xl">Khách hàng</th>
+                <th className="px-6 py-4 rounded-tl-2xl">Khách hàng</th>
                 <th className="px-6 py-4">Liên hệ</th>
                 <th className="px-6 py-4">Địa chỉ</th>
-                <th className="px-6 py-4">Ngày tham gia</th>
-                <th className="px-6 py-4 text-right rounded-tr-xl">Thao tác</th>
+                <th className="px-6 py-4 text-center">Số booking</th>
+                <th className="px-6 py-4 text-right">Công nợ</th>
+                <th className="px-6 py-4 text-center rounded-tr-2xl">Thao tác</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-border">
               {isLoading ? (
-                <tr><td colSpan={5} className="text-center py-10">Đang tải...</td></tr>
-              ) : customers?.length === 0 ? (
-                <tr><td colSpan={5} className="text-center py-10 text-muted-foreground">Không tìm thấy khách hàng nào.</td></tr>
+                <tr><td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">Đang tải...</td></tr>
+              ) : customers.length === 0 ? (
+                <tr><td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">Không tìm thấy khách hàng</td></tr>
               ) : (
-                customers?.map((customer) => (
-                  <tr key={customer.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                customers.map(customer => (
+                  <tr key={customer.id} className="hover:bg-muted/30 transition-colors group">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                          {customer.name.charAt(0)}
+                          {customer.name.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <div className="font-medium text-foreground">{customer.name}</div>
+                          <p className="font-semibold text-foreground">{customer.name}</p>
+                          <p className="text-xs text-muted-foreground">Tham gia: {formatDate(customer.createdAt)}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex flex-col gap-1">
-                        <span className="flex items-center gap-2 text-muted-foreground"><Phone className="w-3 h-3"/> {customer.phone}</span>
-                        {customer.email && <span className="flex items-center gap-2 text-muted-foreground"><User className="w-3 h-3"/> {customer.email}</span>}
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-muted-foreground"/> {customer.phone}</div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 max-w-[200px] truncate text-muted-foreground">
-                      {customer.address || "—"}
+                    <td className="px-6 py-4 max-w-[200px] truncate">
+                      {customer.address || <span className="text-muted-foreground italic">Trống</span>}
                     </td>
-                    <td className="px-6 py-4 text-muted-foreground">
-                      {formatDate(customer.createdAt)}
+                    <td className="px-6 py-4 text-center font-medium">
+                      {customer.totalBookings}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => openEdit(customer)} className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors">
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => handleDelete(customer.id)} className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                      <span className={`font-bold ${customer.totalDebt > 0 ? 'text-destructive' : 'text-emerald-600'}`}>
+                        {formatVND(customer.totalDebt)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(customer)}>
+                          <Edit className="w-4 h-4 text-blue-500" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(customer.id)}>
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -171,46 +173,6 @@ export default function Customers() {
           </table>
         </div>
       </Card>
-
-      <Dialog isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} title={editingId ? "Sửa khách hàng" : "Thêm khách hàng mới"}>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-2">
-            <Label>Tên khách hàng <span className="text-destructive">*</span></Label>
-            <Input {...register("name")} placeholder="VD: Nguyễn Văn A & Trần Thị B" />
-            {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Số điện thoại <span className="text-destructive">*</span></Label>
-              <Input {...register("phone")} placeholder="09..." />
-              {errors.phone && <p className="text-xs text-destructive">{errors.phone.message}</p>}
-            </div>
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input {...register("email")} placeholder="email@example.com" />
-              {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Địa chỉ</Label>
-            <Input {...register("address")} placeholder="Số nhà, đường, quận/huyện..." />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Ghi chú</Label>
-            <Textarea {...register("notes")} placeholder="Thông tin thêm về sở thích, yêu cầu..." />
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-border mt-6">
-            <Button type="button" variant="ghost" onClick={() => setIsFormOpen(false)}>Hủy</Button>
-            <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
-              {createMutation.isPending || updateMutation.isPending ? "Đang lưu..." : "Lưu thông tin"}
-            </Button>
-          </div>
-        </form>
-      </Dialog>
-    </Layout>
+    </div>
   );
 }

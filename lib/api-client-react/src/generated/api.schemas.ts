@@ -16,6 +16,8 @@ export interface Customer {
   email?: string | null;
   address?: string | null;
   notes?: string | null;
+  totalBookings: number;
+  totalDebt: number;
   createdAt: string;
 }
 
@@ -50,6 +52,8 @@ export interface Booking {
   depositAmount: number;
   remainingAmount: number;
   notes?: string | null;
+  assignedStaffId?: number | null;
+  assignedStaffName?: string | null;
   createdAt: string;
 }
 
@@ -60,6 +64,7 @@ export interface CreateBookingRequest {
   packageType: string;
   totalAmount: number;
   depositAmount: number;
+  assignedStaffId?: number | null;
   notes?: string | null;
 }
 
@@ -81,6 +86,7 @@ export interface UpdateBookingRequest {
   status?: UpdateBookingRequestStatus;
   totalAmount?: number;
   depositAmount?: number;
+  assignedStaffId?: number | null;
   notes?: string | null;
 }
 
@@ -101,6 +107,7 @@ export interface Dress {
   color: string;
   size: string;
   style?: string | null;
+  category?: string | null;
   rentalPrice: number;
   depositRequired: number;
   isAvailable: boolean;
@@ -126,6 +133,7 @@ export interface CreateDressRequest {
   color: string;
   size: string;
   style?: string | null;
+  category?: string | null;
   rentalPrice: number;
   depositRequired: number;
   condition: CreateDressRequestCondition;
@@ -257,7 +265,325 @@ export interface DashboardStats {
   overdueRentals: number;
   revenueThisMonth: number;
   totalRevenue: number;
+  profitThisMonth: number;
+  totalExpenseThisMonth: number;
+  totalIncomeThisMonth: number;
   upcomingBookings: Booking[];
+  pendingTasks: number;
+  totalDebt: number;
+}
+
+export type TaskPriority = (typeof TaskPriority)[keyof typeof TaskPriority];
+
+export const TaskPriority = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+  urgent: "urgent",
+} as const;
+
+export type TaskStatus = (typeof TaskStatus)[keyof typeof TaskStatus];
+
+export const TaskStatus = {
+  todo: "todo",
+  in_progress: "in_progress",
+  done: "done",
+  cancelled: "cancelled",
+} as const;
+
+export interface Task {
+  id: number;
+  title: string;
+  description?: string | null;
+  assigneeId?: number | null;
+  assigneeName?: string | null;
+  bookingId?: number | null;
+  priority: TaskPriority;
+  status: TaskStatus;
+  dueDate?: string | null;
+  createdAt: string;
+}
+
+export type CreateTaskRequestPriority =
+  (typeof CreateTaskRequestPriority)[keyof typeof CreateTaskRequestPriority];
+
+export const CreateTaskRequestPriority = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+  urgent: "urgent",
+} as const;
+
+export interface CreateTaskRequest {
+  title: string;
+  description?: string | null;
+  assigneeId?: number | null;
+  bookingId?: number | null;
+  priority: CreateTaskRequestPriority;
+  dueDate?: string | null;
+}
+
+export type UpdateTaskRequestPriority =
+  (typeof UpdateTaskRequestPriority)[keyof typeof UpdateTaskRequestPriority];
+
+export const UpdateTaskRequestPriority = {
+  low: "low",
+  medium: "medium",
+  high: "high",
+  urgent: "urgent",
+} as const;
+
+export type UpdateTaskRequestStatus =
+  (typeof UpdateTaskRequestStatus)[keyof typeof UpdateTaskRequestStatus];
+
+export const UpdateTaskRequestStatus = {
+  todo: "todo",
+  in_progress: "in_progress",
+  done: "done",
+  cancelled: "cancelled",
+} as const;
+
+export interface UpdateTaskRequest {
+  title?: string;
+  description?: string | null;
+  assigneeId?: number | null;
+  priority?: UpdateTaskRequestPriority;
+  status?: UpdateTaskRequestStatus;
+  dueDate?: string | null;
+}
+
+export type QuoteStatus = (typeof QuoteStatus)[keyof typeof QuoteStatus];
+
+export const QuoteStatus = {
+  draft: "draft",
+  sent: "sent",
+  accepted: "accepted",
+  rejected: "rejected",
+} as const;
+
+export interface QuoteItem {
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+export interface Quote {
+  id: number;
+  customerId: number;
+  customerName: string;
+  customerPhone: string;
+  title: string;
+  items: QuoteItem[];
+  totalAmount: number;
+  discount: number;
+  finalAmount: number;
+  status: QuoteStatus;
+  validUntil?: string | null;
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface CreateQuoteRequest {
+  customerId: number;
+  title: string;
+  items: QuoteItem[];
+  discount: number;
+  validUntil?: string | null;
+  notes?: string | null;
+}
+
+export type UpdateQuoteRequestStatus =
+  (typeof UpdateQuoteRequestStatus)[keyof typeof UpdateQuoteRequestStatus];
+
+export const UpdateQuoteRequestStatus = {
+  draft: "draft",
+  sent: "sent",
+  accepted: "accepted",
+  rejected: "rejected",
+} as const;
+
+export interface UpdateQuoteRequest {
+  title?: string;
+  items?: QuoteItem[];
+  discount?: number;
+  status?: UpdateQuoteRequestStatus;
+  validUntil?: string | null;
+  notes?: string | null;
+}
+
+export type ServiceType = (typeof ServiceType)[keyof typeof ServiceType];
+
+export const ServiceType = {
+  package: "package",
+  addon: "addon",
+} as const;
+
+export interface Service {
+  id: number;
+  name: string;
+  description?: string | null;
+  type: ServiceType;
+  price: number;
+  duration?: string | null;
+  includes: string[];
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type CreateServiceRequestType =
+  (typeof CreateServiceRequestType)[keyof typeof CreateServiceRequestType];
+
+export const CreateServiceRequestType = {
+  package: "package",
+  addon: "addon",
+} as const;
+
+export interface CreateServiceRequest {
+  name: string;
+  description?: string | null;
+  type: CreateServiceRequestType;
+  price: number;
+  duration?: string | null;
+  includes: string[];
+  isActive: boolean;
+}
+
+export type TransactionType =
+  (typeof TransactionType)[keyof typeof TransactionType];
+
+export const TransactionType = {
+  income: "income",
+  expense: "expense",
+} as const;
+
+export type TransactionPaymentMethod =
+  (typeof TransactionPaymentMethod)[keyof typeof TransactionPaymentMethod];
+
+export const TransactionPaymentMethod = {
+  cash: "cash",
+  bank_transfer: "bank_transfer",
+  momo: "momo",
+  zalo_pay: "zalo_pay",
+} as const;
+
+export interface Transaction {
+  id: number;
+  type: TransactionType;
+  category: string;
+  amount: number;
+  description: string;
+  paymentMethod: TransactionPaymentMethod;
+  transactionDate: string;
+  createdAt: string;
+}
+
+export type CreateTransactionRequestType =
+  (typeof CreateTransactionRequestType)[keyof typeof CreateTransactionRequestType];
+
+export const CreateTransactionRequestType = {
+  income: "income",
+  expense: "expense",
+} as const;
+
+export type CreateTransactionRequestPaymentMethod =
+  (typeof CreateTransactionRequestPaymentMethod)[keyof typeof CreateTransactionRequestPaymentMethod];
+
+export const CreateTransactionRequestPaymentMethod = {
+  cash: "cash",
+  bank_transfer: "bank_transfer",
+  momo: "momo",
+  zalo_pay: "zalo_pay",
+} as const;
+
+export interface CreateTransactionRequest {
+  type: CreateTransactionRequestType;
+  category: string;
+  amount: number;
+  description: string;
+  paymentMethod: CreateTransactionRequestPaymentMethod;
+  transactionDate: string;
+}
+
+export interface CategoryTotal {
+  category: string;
+  total: number;
+}
+
+export interface MonthlyData {
+  month: string;
+  income: number;
+  expense: number;
+  profit: number;
+}
+
+export interface AccountingSummary {
+  month: number;
+  year: number;
+  totalIncome: number;
+  totalExpense: number;
+  profit: number;
+  profitPercent: number;
+  incomeByCategory: CategoryTotal[];
+  expenseByCategory: CategoryTotal[];
+  monthlyData: MonthlyData[];
+}
+
+export type StaffMemberRole =
+  (typeof StaffMemberRole)[keyof typeof StaffMemberRole];
+
+export const StaffMemberRole = {
+  admin: "admin",
+  photographer: "photographer",
+  assistant: "assistant",
+  receptionist: "receptionist",
+} as const;
+
+export interface StaffMember {
+  id: number;
+  name: string;
+  phone: string;
+  role: StaffMemberRole;
+  email?: string | null;
+  salary?: number | null;
+  joinDate: string;
+  isActive: boolean;
+  notes?: string | null;
+  createdAt: string;
+}
+
+export type CreateStaffRequestRole =
+  (typeof CreateStaffRequestRole)[keyof typeof CreateStaffRequestRole];
+
+export const CreateStaffRequestRole = {
+  admin: "admin",
+  photographer: "photographer",
+  assistant: "assistant",
+  receptionist: "receptionist",
+} as const;
+
+export interface CreateStaffRequest {
+  name: string;
+  phone: string;
+  role: CreateStaffRequestRole;
+  email?: string | null;
+  salary?: number | null;
+  joinDate: string;
+  isActive: boolean;
+  notes?: string | null;
+}
+
+export interface Settings {
+  studioName: string;
+  phone: string;
+  email?: string | null;
+  address?: string | null;
+  taxCode?: string | null;
+  bankAccount?: string | null;
+  bankName?: string | null;
+  logoUrl?: string | null;
+  workingHours?: string | null;
+  defaultDeposit: number;
 }
 
 export type ListCustomersParams = {
@@ -265,39 +591,50 @@ export type ListCustomersParams = {
 };
 
 export type ListBookingsParams = {
-  status?: ListBookingsStatus;
+  status?: string;
   customerId?: number;
+  date?: string;
 };
-
-export type ListBookingsStatus =
-  (typeof ListBookingsStatus)[keyof typeof ListBookingsStatus];
-
-export const ListBookingsStatus = {
-  pending: "pending",
-  confirmed: "confirmed",
-  in_progress: "in_progress",
-  completed: "completed",
-  cancelled: "cancelled",
-} as const;
 
 export type ListDressesParams = {
   available?: boolean;
+  search?: string;
 };
 
 export type ListRentalsParams = {
-  status?: ListRentalsStatus;
+  status?: string;
 };
-
-export type ListRentalsStatus =
-  (typeof ListRentalsStatus)[keyof typeof ListRentalsStatus];
-
-export const ListRentalsStatus = {
-  rented: "rented",
-  returned: "returned",
-  overdue: "overdue",
-} as const;
 
 export type ListPaymentsParams = {
   bookingId?: number;
   rentalId?: number;
+};
+
+export type ListTasksParams = {
+  status?: string;
+  assigneeId?: number;
+};
+
+export type ListQuotesParams = {
+  customerId?: number;
+  status?: string;
+};
+
+export type ListTransactionsParams = {
+  type?: ListTransactionsType;
+  month?: number;
+  year?: number;
+};
+
+export type ListTransactionsType =
+  (typeof ListTransactionsType)[keyof typeof ListTransactionsType];
+
+export const ListTransactionsType = {
+  income: "income",
+  expense: "expense",
+} as const;
+
+export type GetAccountingSummaryParams = {
+  month?: number;
+  year?: number;
 };

@@ -14,5 +14,6 @@ export interface UpdateBookingRequest {
   status?: UpdateBookingRequestStatus;
   totalAmount?: number;
   depositAmount?: number;
+  assignedStaffId?: number | null;
   notes?: string | null;
 }

@@ -1,0 +1,56 @@
+import { Router, type IRouter } from "express";
+import { db } from "@workspace/db";
+import { settingsTable } from "@workspace/db/schema";
+import { eq } from "drizzle-orm";
+
+const router: IRouter = Router();
+
+const DEFAULT_SETTINGS = {
+  studioName: "Amazing Studio",
+  phone: "0901234567",
+  email: "contact@amazingstudio.vn",
+  address: "123 Đường Lê Lợi, Q1, TP.HCM",
+  taxCode: null,
+  bankAccount: null,
+  bankName: null,
+  logoUrl: null,
+  workingHours: "08:00 - 18:00",
+  defaultDeposit: 30,
+};
+
+async function loadSettings() {
+  const rows = await db.select().from(settingsTable);
+  const map: Record<string, string> = {};
+  for (const r of rows) map[r.key] = r.value;
+
+  return {
+    studioName: map["studioName"] ?? DEFAULT_SETTINGS.studioName,
+    phone: map["phone"] ?? DEFAULT_SETTINGS.phone,
+    email: map["email"] ?? DEFAULT_SETTINGS.email,
+    address: map["address"] ?? DEFAULT_SETTINGS.address,
+    taxCode: map["taxCode"] ?? DEFAULT_SETTINGS.taxCode,
+    bankAccount: map["bankAccount"] ?? DEFAULT_SETTINGS.bankAccount,
+    bankName: map["bankName"] ?? DEFAULT_SETTINGS.bankName,
+    logoUrl: map["logoUrl"] ?? DEFAULT_SETTINGS.logoUrl,
+    workingHours: map["workingHours"] ?? DEFAULT_SETTINGS.workingHours,
+    defaultDeposit: parseFloat(map["defaultDeposit"] ?? String(DEFAULT_SETTINGS.defaultDeposit)),
+  };
+}
+
+router.get("/settings", async (_req, res) => {
+  res.json(await loadSettings());
+});
+
+router.put("/settings", async (req, res) => {
+  const settings = req.body as Record<string, unknown>;
+  for (const [key, value] of Object.entries(settings)) {
+    if (value === null || value === undefined) continue;
+    await db
+      .insert(settingsTable)
+      .values({ key, value: String(value) })
+      .onConflictDoUpdate({ target: settingsTable.key, set: { value: String(value) } });
+  }
+  res.json(await loadSettings());
+});
+
+export default router;

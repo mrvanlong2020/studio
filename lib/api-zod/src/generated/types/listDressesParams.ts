@@ -8,4 +8,5 @@
 
 export type ListDressesParams = {
   available?: boolean;
+  search?: string;
 };

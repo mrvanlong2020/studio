@@ -14,9 +14,6 @@ export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
 
-/**
- * @summary List all customers
- */
 export const ListCustomersQueryParams = zod.object({
   search: zod.coerce.string().optional(),
 });
@@ -28,13 +25,12 @@ export const ListCustomersResponseItem = zod.object({
   email: zod.string().nullish(),
   address: zod.string().nullish(),
   notes: zod.string().nullish(),
+  totalBookings: zod.number(),
+  totalDebt: zod.number(),
   createdAt: zod.date(),
 });
 export const ListCustomersResponse = zod.array(ListCustomersResponseItem);
 
-/**
- * @summary Create a new customer
- */
 export const CreateCustomerBody = zod.object({
   name: zod.string(),
   phone: zod.string(),
@@ -43,9 +39,6 @@ export const CreateCustomerBody = zod.object({
   notes: zod.string().nullish(),
 });
 
-/**
- * @summary Get customer by ID
- */
 export const GetCustomerParams = zod.object({
   id: zod.coerce.number(),
 });
@@ -57,12 +50,11 @@ export const GetCustomerResponse = zod.object({
   email: zod.string().nullish(),
   address: zod.string().nullish(),
   notes: zod.string().nullish(),
+  totalBookings: zod.number(),
+  totalDebt: zod.number(),
   createdAt: zod.date(),
 });
 
-/**
- * @summary Update customer
- */
 export const UpdateCustomerParams = zod.object({
   id: zod.coerce.number(),
 });
@@ -82,24 +74,19 @@ export const UpdateCustomerResponse = zod.object({
   email: zod.string().nullish(),
   address: zod.string().nullish(),
   notes: zod.string().nullish(),
+  totalBookings: zod.number(),
+  totalDebt: zod.number(),
   createdAt: zod.date(),
 });
 
-/**
- * @summary Delete customer
- */
 export const DeleteCustomerParams = zod.object({
   id: zod.coerce.number(),
 });
 
-/**
- * @summary List all bookings
- */
 export const ListBookingsQueryParams = zod.object({
-  status: zod
-    .enum(["pending", "confirmed", "in_progress", "completed", "cancelled"])
-    .optional(),
+  status: zod.coerce.string().optional(),
   customerId: zod.coerce.number().optional(),
+  date: zod.date().optional(),
 });
 
 export const ListBookingsResponseItem = zod.object({
@@ -121,13 +108,12 @@ export const ListBookingsResponseItem = zod.object({
   depositAmount: zod.number(),
   remainingAmount: zod.number(),
   notes: zod.string().nullish(),
+  assignedStaffId: zod.number().nullish(),
+  assignedStaffName: zod.string().nullish(),
   createdAt: zod.date(),
 });
 export const ListBookingsResponse = zod.array(ListBookingsResponseItem);
 
-/**
- * @summary Create a new booking
- */
 export const CreateBookingBody = zod.object({
   customerId: zod.number(),
   shootDate: zod.date(),
@@ -135,12 +121,10 @@ export const CreateBookingBody = zod.object({
   packageType: zod.string(),
   totalAmount: zod.number(),
   depositAmount: zod.number(),
+  assignedStaffId: zod.number().nullish(),
   notes: zod.string().nullish(),
 });
 
-/**
- * @summary Get booking by ID
- */
 export const GetBookingParams = zod.object({
   id: zod.coerce.number(),
 });
@@ -164,12 +148,11 @@ export const GetBookingResponse = zod.object({
   depositAmount: zod.number(),
   remainingAmount: zod.number(),
   notes: zod.string().nullish(),
+  assignedStaffId: zod.number().nullish(),
+  assignedStaffName: zod.string().nullish(),
   createdAt: zod.date(),
 });
 
-/**
- * @summary Update booking
- */
 export const UpdateBookingParams = zod.object({
   id: zod.coerce.number(),
 });
@@ -183,6 +166,7 @@ export const UpdateBookingBody = zod.object({
     .optional(),
   totalAmount: zod.number().optional(),
   depositAmount: zod.number().optional(),
+  assignedStaffId: zod.number().nullish(),
   notes: zod.string().nullish(),
 });
 
@@ -205,21 +189,18 @@ export const UpdateBookingResponse = zod.object({
   depositAmount: zod.number(),
   remainingAmount: zod.number(),
   notes: zod.string().nullish(),
+  assignedStaffId: zod.number().nullish(),
+  assignedStaffName: zod.string().nullish(),
   createdAt: zod.date(),
 });
 
-/**
- * @summary Delete booking
- */
 export const DeleteBookingParams = zod.object({
   id: zod.coerce.number(),
 });
 
-/**
- * @summary List all wedding dresses
- */
 export const ListDressesQueryParams = zod.object({
   available: zod.coerce.boolean().optional(),
+  search: zod.coerce.string().optional(),
 });
 
 export const ListDressesResponseItem = zod.object({
@@ -229,6 +210,7 @@ export const ListDressesResponseItem = zod.object({
   color: zod.string(),
   size: zod.string(),
   style: zod.string().nullish(),
+  category: zod.string().nullish(),
   rentalPrice: zod.number(),
   depositRequired: zod.number(),
   isAvailable: zod.boolean(),
@@ -239,15 +221,13 @@ export const ListDressesResponseItem = zod.object({
 });
 export const ListDressesResponse = zod.array(ListDressesResponseItem);
 
-/**
- * @summary Add a new dress
- */
 export const CreateDressBody = zod.object({
   code: zod.string(),
   name: zod.string(),
   color: zod.string(),
   size: zod.string(),
   style: zod.string().nullish(),
+  category: zod.string().nullish(),
   rentalPrice: zod.number(),
   depositRequired: zod.number(),
   condition: zod.enum(["excellent", "good", "fair", "needs_repair"]),
@@ -255,9 +235,6 @@ export const CreateDressBody = zod.object({
   imageUrl: zod.string().nullish(),
 });
 
-/**
- * @summary Get dress by ID
- */
 export const GetDressParams = zod.object({
   id: zod.coerce.number(),
 });
@@ -269,6 +246,7 @@ export const GetDressResponse = zod.object({
   color: zod.string(),
   size: zod.string(),
   style: zod.string().nullish(),
+  category: zod.string().nullish(),
   rentalPrice: zod.number(),
   depositRequired: zod.number(),
   isAvailable: zod.boolean(),
@@ -278,9 +256,6 @@ export const GetDressResponse = zod.object({
   createdAt: zod.date(),
 });
 
-/**
- * @summary Update dress
- */
 export const UpdateDressParams = zod.object({
   id: zod.coerce.number(),
 });
@@ -291,6 +266,7 @@ export const UpdateDressBody = zod.object({
   color: zod.string(),
   size: zod.string(),
   style: zod.string().nullish(),
+  category: zod.string().nullish(),
   rentalPrice: zod.number(),
   depositRequired: zod.number(),
   condition: zod.enum(["excellent", "good", "fair", "needs_repair"]),
@@ -305,6 +281,7 @@ export const UpdateDressResponse = zod.object({
   color: zod.string(),
   size: zod.string(),
   style: zod.string().nullish(),
+  category: zod.string().nullish(),
   rentalPrice: zod.number(),
   depositRequired: zod.number(),
   isAvailable: zod.boolean(),
@@ -314,18 +291,12 @@ export const UpdateDressResponse = zod.object({
   createdAt: zod.date(),
 });
 
-/**
- * @summary Delete dress
- */
 export const DeleteDressParams = zod.object({
   id: zod.coerce.number(),
 });
 
-/**
- * @summary List all rentals
- */
 export const ListRentalsQueryParams = zod.object({
-  status: zod.enum(["rented", "returned", "overdue"]).optional(),
+  status: zod.coerce.string().optional(),
 });
 
 export const ListRentalsResponseItem = zod.object({
@@ -347,9 +318,6 @@ export const ListRentalsResponseItem = zod.object({
 });
 export const ListRentalsResponse = zod.array(ListRentalsResponseItem);
 
-/**
- * @summary Create a new rental
- */
 export const CreateRentalBody = zod.object({
   customerId: zod.number(),
   dressId: zod.number(),
@@ -360,9 +328,6 @@ export const CreateRentalBody = zod.object({
   notes: zod.string().nullish(),
 });
 
-/**
- * @summary Get rental by ID
- */
 export const GetRentalParams = zod.object({
   id: zod.coerce.number(),
 });
@@ -385,9 +350,6 @@ export const GetRentalResponse = zod.object({
   createdAt: zod.date(),
 });
 
-/**
- * @summary Update rental
- */
 export const UpdateRentalParams = zod.object({
   id: zod.coerce.number(),
 });
@@ -416,9 +378,6 @@ export const UpdateRentalResponse = zod.object({
   createdAt: zod.date(),
 });
 
-/**
- * @summary List all payments
- */
 export const ListPaymentsQueryParams = zod.object({
   bookingId: zod.coerce.number().optional(),
   rentalId: zod.coerce.number().optional(),
@@ -436,9 +395,6 @@ export const ListPaymentsResponseItem = zod.object({
 });
 export const ListPaymentsResponse = zod.array(ListPaymentsResponseItem);
 
-/**
- * @summary Create a payment
- */
 export const CreatePaymentBody = zod.object({
   bookingId: zod.number().nullish(),
   rentalId: zod.number().nullish(),
@@ -448,9 +404,6 @@ export const CreatePaymentBody = zod.object({
   notes: zod.string().nullish(),
 });
 
-/**
- * @summary Get dashboard statistics
- */
 export const GetDashboardStatsResponse = zod.object({
   totalCustomers: zod.number(),
   totalBookings: zod.number(),
@@ -464,6 +417,9 @@ export const GetDashboardStatsResponse = zod.object({
   overdueRentals: zod.number(),
   revenueThisMonth: zod.number(),
   totalRevenue: zod.number(),
+  profitThisMonth: zod.number(),
+  totalExpenseThisMonth: zod.number(),
+  totalIncomeThisMonth: zod.number(),
   upcomingBookings: zod.array(
     zod.object({
       id: zod.number(),
@@ -484,7 +440,404 @@ export const GetDashboardStatsResponse = zod.object({
       depositAmount: zod.number(),
       remainingAmount: zod.number(),
       notes: zod.string().nullish(),
+      assignedStaffId: zod.number().nullish(),
+      assignedStaffName: zod.string().nullish(),
       createdAt: zod.date(),
     }),
   ),
+  pendingTasks: zod.number(),
+  totalDebt: zod.number(),
+});
+
+export const ListTasksQueryParams = zod.object({
+  status: zod.coerce.string().optional(),
+  assigneeId: zod.coerce.number().optional(),
+});
+
+export const ListTasksResponseItem = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  description: zod.string().nullish(),
+  assigneeId: zod.number().nullish(),
+  assigneeName: zod.string().nullish(),
+  bookingId: zod.number().nullish(),
+  priority: zod.enum(["low", "medium", "high", "urgent"]),
+  status: zod.enum(["todo", "in_progress", "done", "cancelled"]),
+  dueDate: zod.date().nullish(),
+  createdAt: zod.date(),
+});
+export const ListTasksResponse = zod.array(ListTasksResponseItem);
+
+export const CreateTaskBody = zod.object({
+  title: zod.string(),
+  description: zod.string().nullish(),
+  assigneeId: zod.number().nullish(),
+  bookingId: zod.number().nullish(),
+  priority: zod.enum(["low", "medium", "high", "urgent"]),
+  dueDate: zod.date().nullish(),
+});
+
+export const UpdateTaskParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateTaskBody = zod.object({
+  title: zod.string().optional(),
+  description: zod.string().nullish(),
+  assigneeId: zod.number().nullish(),
+  priority: zod.enum(["low", "medium", "high", "urgent"]).optional(),
+  status: zod.enum(["todo", "in_progress", "done", "cancelled"]).optional(),
+  dueDate: zod.date().nullish(),
+});
+
+export const UpdateTaskResponse = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  description: zod.string().nullish(),
+  assigneeId: zod.number().nullish(),
+  assigneeName: zod.string().nullish(),
+  bookingId: zod.number().nullish(),
+  priority: zod.enum(["low", "medium", "high", "urgent"]),
+  status: zod.enum(["todo", "in_progress", "done", "cancelled"]),
+  dueDate: zod.date().nullish(),
+  createdAt: zod.date(),
+});
+
+export const DeleteTaskParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListQuotesQueryParams = zod.object({
+  customerId: zod.coerce.number().optional(),
+  status: zod.coerce.string().optional(),
+});
+
+export const ListQuotesResponseItem = zod.object({
+  id: zod.number(),
+  customerId: zod.number(),
+  customerName: zod.string(),
+  customerPhone: zod.string(),
+  title: zod.string(),
+  items: zod.array(
+    zod.object({
+      name: zod.string(),
+      quantity: zod.number(),
+      unitPrice: zod.number(),
+      total: zod.number(),
+    }),
+  ),
+  totalAmount: zod.number(),
+  discount: zod.number(),
+  finalAmount: zod.number(),
+  status: zod.enum(["draft", "sent", "accepted", "rejected"]),
+  validUntil: zod.date().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.date(),
+});
+export const ListQuotesResponse = zod.array(ListQuotesResponseItem);
+
+export const CreateQuoteBody = zod.object({
+  customerId: zod.number(),
+  title: zod.string(),
+  items: zod.array(
+    zod.object({
+      name: zod.string(),
+      quantity: zod.number(),
+      unitPrice: zod.number(),
+      total: zod.number(),
+    }),
+  ),
+  discount: zod.number(),
+  validUntil: zod.date().nullish(),
+  notes: zod.string().nullish(),
+});
+
+export const GetQuoteParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetQuoteResponse = zod.object({
+  id: zod.number(),
+  customerId: zod.number(),
+  customerName: zod.string(),
+  customerPhone: zod.string(),
+  title: zod.string(),
+  items: zod.array(
+    zod.object({
+      name: zod.string(),
+      quantity: zod.number(),
+      unitPrice: zod.number(),
+      total: zod.number(),
+    }),
+  ),
+  totalAmount: zod.number(),
+  discount: zod.number(),
+  finalAmount: zod.number(),
+  status: zod.enum(["draft", "sent", "accepted", "rejected"]),
+  validUntil: zod.date().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.date(),
+});
+
+export const UpdateQuoteParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateQuoteBody = zod.object({
+  title: zod.string().optional(),
+  items: zod
+    .array(
+      zod.object({
+        name: zod.string(),
+        quantity: zod.number(),
+        unitPrice: zod.number(),
+        total: zod.number(),
+      }),
+    )
+    .optional(),
+  discount: zod.number().optional(),
+  status: zod.enum(["draft", "sent", "accepted", "rejected"]).optional(),
+  validUntil: zod.date().nullish(),
+  notes: zod.string().nullish(),
+});
+
+export const UpdateQuoteResponse = zod.object({
+  id: zod.number(),
+  customerId: zod.number(),
+  customerName: zod.string(),
+  customerPhone: zod.string(),
+  title: zod.string(),
+  items: zod.array(
+    zod.object({
+      name: zod.string(),
+      quantity: zod.number(),
+      unitPrice: zod.number(),
+      total: zod.number(),
+    }),
+  ),
+  totalAmount: zod.number(),
+  discount: zod.number(),
+  finalAmount: zod.number(),
+  status: zod.enum(["draft", "sent", "accepted", "rejected"]),
+  validUntil: zod.date().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.date(),
+});
+
+export const DeleteQuoteParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListServicesResponseItem = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  type: zod.enum(["package", "addon"]),
+  price: zod.number(),
+  duration: zod.string().nullish(),
+  includes: zod.array(zod.string()),
+  isActive: zod.boolean(),
+  createdAt: zod.date(),
+});
+export const ListServicesResponse = zod.array(ListServicesResponseItem);
+
+export const CreateServiceBody = zod.object({
+  name: zod.string(),
+  description: zod.string().nullish(),
+  type: zod.enum(["package", "addon"]),
+  price: zod.number(),
+  duration: zod.string().nullish(),
+  includes: zod.array(zod.string()),
+  isActive: zod.boolean(),
+});
+
+export const UpdateServiceParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateServiceBody = zod.object({
+  name: zod.string(),
+  description: zod.string().nullish(),
+  type: zod.enum(["package", "addon"]),
+  price: zod.number(),
+  duration: zod.string().nullish(),
+  includes: zod.array(zod.string()),
+  isActive: zod.boolean(),
+});
+
+export const UpdateServiceResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  type: zod.enum(["package", "addon"]),
+  price: zod.number(),
+  duration: zod.string().nullish(),
+  includes: zod.array(zod.string()),
+  isActive: zod.boolean(),
+  createdAt: zod.date(),
+});
+
+export const DeleteServiceParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListTransactionsQueryParams = zod.object({
+  type: zod.enum(["income", "expense"]).optional(),
+  month: zod.coerce.number().optional(),
+  year: zod.coerce.number().optional(),
+});
+
+export const ListTransactionsResponseItem = zod.object({
+  id: zod.number(),
+  type: zod.enum(["income", "expense"]),
+  category: zod.string(),
+  amount: zod.number(),
+  description: zod.string(),
+  paymentMethod: zod.enum(["cash", "bank_transfer", "momo", "zalo_pay"]),
+  transactionDate: zod.date(),
+  createdAt: zod.date(),
+});
+export const ListTransactionsResponse = zod.array(ListTransactionsResponseItem);
+
+export const CreateTransactionBody = zod.object({
+  type: zod.enum(["income", "expense"]),
+  category: zod.string(),
+  amount: zod.number(),
+  description: zod.string(),
+  paymentMethod: zod.enum(["cash", "bank_transfer", "momo", "zalo_pay"]),
+  transactionDate: zod.date(),
+});
+
+export const DeleteTransactionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetAccountingSummaryQueryParams = zod.object({
+  month: zod.coerce.number().optional(),
+  year: zod.coerce.number().optional(),
+});
+
+export const GetAccountingSummaryResponse = zod.object({
+  month: zod.number(),
+  year: zod.number(),
+  totalIncome: zod.number(),
+  totalExpense: zod.number(),
+  profit: zod.number(),
+  profitPercent: zod.number(),
+  incomeByCategory: zod.array(
+    zod.object({
+      category: zod.string(),
+      total: zod.number(),
+    }),
+  ),
+  expenseByCategory: zod.array(
+    zod.object({
+      category: zod.string(),
+      total: zod.number(),
+    }),
+  ),
+  monthlyData: zod.array(
+    zod.object({
+      month: zod.string(),
+      income: zod.number(),
+      expense: zod.number(),
+      profit: zod.number(),
+    }),
+  ),
+});
+
+export const ListStaffResponseItem = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  phone: zod.string(),
+  role: zod.enum(["admin", "photographer", "assistant", "receptionist"]),
+  email: zod.string().nullish(),
+  salary: zod.number().nullish(),
+  joinDate: zod.date(),
+  isActive: zod.boolean(),
+  notes: zod.string().nullish(),
+  createdAt: zod.date(),
+});
+export const ListStaffResponse = zod.array(ListStaffResponseItem);
+
+export const CreateStaffBody = zod.object({
+  name: zod.string(),
+  phone: zod.string(),
+  role: zod.enum(["admin", "photographer", "assistant", "receptionist"]),
+  email: zod.string().nullish(),
+  salary: zod.number().nullish(),
+  joinDate: zod.date(),
+  isActive: zod.boolean(),
+  notes: zod.string().nullish(),
+});
+
+export const UpdateStaffParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateStaffBody = zod.object({
+  name: zod.string(),
+  phone: zod.string(),
+  role: zod.enum(["admin", "photographer", "assistant", "receptionist"]),
+  email: zod.string().nullish(),
+  salary: zod.number().nullish(),
+  joinDate: zod.date(),
+  isActive: zod.boolean(),
+  notes: zod.string().nullish(),
+});
+
+export const UpdateStaffResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  phone: zod.string(),
+  role: zod.enum(["admin", "photographer", "assistant", "receptionist"]),
+  email: zod.string().nullish(),
+  salary: zod.number().nullish(),
+  joinDate: zod.date(),
+  isActive: zod.boolean(),
+  notes: zod.string().nullish(),
+  createdAt: zod.date(),
+});
+
+export const DeleteStaffParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetSettingsResponse = zod.object({
+  studioName: zod.string(),
+  phone: zod.string(),
+  email: zod.string().nullish(),
+  address: zod.string().nullish(),
+  taxCode: zod.string().nullish(),
+  bankAccount: zod.string().nullish(),
+  bankName: zod.string().nullish(),
+  logoUrl: zod.string().nullish(),
+  workingHours: zod.string().nullish(),
+  defaultDeposit: zod.number(),
+});
+
+export const UpdateSettingsBody = zod.object({
+  studioName: zod.string(),
+  phone: zod.string(),
+  email: zod.string().nullish(),
+  address: zod.string().nullish(),
+  taxCode: zod.string().nullish(),
+  bankAccount: zod.string().nullish(),
+  bankName: zod.string().nullish(),
+  logoUrl: zod.string().nullish(),
+  workingHours: zod.string().nullish(),
+  defaultDeposit: zod.number(),
+});
+
+export const UpdateSettingsResponse = zod.object({
+  studioName: zod.string(),
+  phone: zod.string(),
+  email: zod.string().nullish(),
+  address: zod.string().nullish(),
+  taxCode: zod.string().nullish(),
+  bankAccount: zod.string().nullish(),
+  bankName: zod.string().nullish(),
+  logoUrl: zod.string().nullish(),
+  workingHours: zod.string().nullish(),
+  defaultDeposit: zod.number(),
 });

@@ -13,6 +13,7 @@ export interface CreateDressRequest {
   color: string;
   size: string;
   style?: string | null;
+  category?: string | null;
   rentalPrice: number;
   depositRequired: number;
   condition: CreateDressRequestCondition;

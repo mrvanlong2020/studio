@@ -6,6 +6,12 @@ import dressesRouter from "./dresses";
 import rentalsRouter from "./rentals";
 import paymentsRouter from "./payments";
 import dashboardRouter from "./dashboard";
+import tasksRouter from "./tasks";
+import quotesRouter from "./quotes";
+import servicesRouter from "./services";
+import accountingRouter from "./accounting";
+import staffRouter from "./staff";
+import settingsRouter from "./settings";
 
 const router: IRouter = Router();
 
@@ -16,5 +22,11 @@ router.use(dressesRouter);
 router.use(rentalsRouter);
 router.use(paymentsRouter);
 router.use(dashboardRouter);
+router.use(tasksRouter);
+router.use(quotesRouter);
+router.use(servicesRouter);
+router.use(accountingRouter);
+router.use(staffRouter);
+router.use(settingsRouter);
 
 export default router;

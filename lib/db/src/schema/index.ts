@@ -3,3 +3,7 @@ export * from "./bookings";
 export * from "./dresses";
 export * from "./rentals";
 export * from "./payments";
+export * from "./tasks";
+export * from "./quotes";
+export * from "./services";
+export * from "./accounting";

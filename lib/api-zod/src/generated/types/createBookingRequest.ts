@@ -13,5 +13,6 @@ export interface CreateBookingRequest {
   packageType: string;
   totalAmount: number;
   depositAmount: number;
+  assignedStaffId?: number | null;
   notes?: string | null;
 }

@@ -6,13 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ListBookingsStatus =
-  (typeof ListBookingsStatus)[keyof typeof ListBookingsStatus];
+export type TaskStatus = (typeof TaskStatus)[keyof typeof TaskStatus];
 
-export const ListBookingsStatus = {
-  pending: "pending",
-  confirmed: "confirmed",
+export const TaskStatus = {
+  todo: "todo",
   in_progress: "in_progress",
-  completed: "completed",
+  done: "done",
   cancelled: "cancelled",
 } as const;

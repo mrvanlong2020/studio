@@ -5,9 +5,9 @@
  * Amazing Studio - Wedding Studio Management API
  * OpenAPI spec version: 0.1.0
  */
-import type { ListBookingsStatus } from "./listBookingsStatus";
 
 export type ListBookingsParams = {
-  status?: ListBookingsStatus;
+  status?: string;
   customerId?: number;
+  date?: Date;
 };

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { customersTable } from "@workspace/db/schema";
-import { eq, ilike, or } from "drizzle-orm";
+import { customersTable, bookingsTable, paymentsTable } from "@workspace/db/schema";
+import { eq, ilike, or, sum } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -16,7 +16,25 @@ router.get("/customers", async (req, res) => {
   } else {
     customers = await db.select().from(customersTable).orderBy(customersTable.createdAt);
   }
-  res.json(customers);
+
+  const result = await Promise.all(
+    customers.map(async (c) => {
+      const bookings = await db.select().from(bookingsTable).where(eq(bookingsTable.customerId, c.id));
+      const payments = await db.select().from(paymentsTable);
+      const bookingIds = bookings.map((b) => b.id);
+
+      const totalPaid = payments
+        .filter((p) => p.bookingId && bookingIds.includes(p.bookingId) && p.paymentType !== "refund")
+        .reduce((s, p) => s + parseFloat(p.amount), 0);
+
+      const totalOwed = bookings.reduce((s, b) => s + parseFloat(b.totalAmount), 0);
+      const totalDebt = Math.max(0, totalOwed - totalPaid);
+
+      return { ...c, totalBookings: bookings.length, totalDebt };
+    })
+  );
+
+  res.json(result);
 });
 
 router.post("/customers", async (req, res) => {
@@ -25,14 +43,14 @@ router.post("/customers", async (req, res) => {
     .insert(customersTable)
     .values({ name, phone, email, address, notes })
     .returning();
-  res.status(201).json(customer);
+  res.status(201).json({ ...customer, totalBookings: 0, totalDebt: 0 });
 });
 
 router.get("/customers/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, id));
   if (!customer) return res.status(404).json({ error: "Customer not found" });
-  res.json(customer);
+  res.json({ ...customer, totalBookings: 0, totalDebt: 0 });
 });
 
 router.put("/customers/:id", async (req, res) => {
@@ -44,7 +62,7 @@ router.put("/customers/:id", async (req, res) => {
     .where(eq(customersTable.id, id))
     .returning();
   if (!customer) return res.status(404).json({ error: "Customer not found" });
-  res.json(customer);
+  res.json({ ...customer, totalBookings: 0, totalDebt: 0 });
 });
 
 router.delete("/customers/:id", async (req, res) => {

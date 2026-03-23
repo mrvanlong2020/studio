@@ -20,5 +20,10 @@ export interface DashboardStats {
   overdueRentals: number;
   revenueThisMonth: number;
   totalRevenue: number;
+  profitThisMonth: number;
+  totalExpenseThisMonth: number;
+  totalIncomeThisMonth: number;
   upcomingBookings: Booking[];
+  pendingTasks: number;
+  totalDebt: number;
 }

@@ -20,5 +20,7 @@ export interface Booking {
   depositAmount: number;
   remainingAmount: number;
   notes?: string | null;
+  assignedStaffId?: number | null;
+  assignedStaffName?: string | null;
   createdAt: Date;
 }

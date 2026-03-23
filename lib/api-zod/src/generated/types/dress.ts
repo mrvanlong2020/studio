@@ -14,6 +14,7 @@ export interface Dress {
   color: string;
   size: string;
   style?: string | null;
+  category?: string | null;
   rentalPrice: number;
   depositRequired: number;
   isAvailable: boolean;

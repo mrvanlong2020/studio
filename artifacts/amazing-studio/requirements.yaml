@@ -1,19 +1,22 @@
 packages:
-  "framer-motion": "For elegant page transitions and modal animations"
-  "recharts": "For the dashboard revenue and booking charts"
-  "date-fns": "For Vietnamese date formatting"
-  "react-hook-form": "For complex form state management"
-  "@hookform/resolvers": "For form validation with Zod"
-  "zod": "For client-side form validation"
+  "lucide-react": "Icons matching the UI reference"
+  "recharts": "For the dashboard revenue chart"
+  "date-fns": "For calendar manipulation and date formatting"
+  "date-fns/locale/vi": "Vietnamese locale for date-fns"
+  "framer-motion": "For smooth transitions and layout animations"
+  "clsx": "For conditional class names"
+  "tailwind-merge": "For merging Tailwind classes"
+  "react-hook-form": "For form state management"
+  "react-day-picker": "For date picker components"
 
 images:
   - path: "artifacts/amazing-studio/public/images/logo.png"
-    description: "Elegant, minimalist logo for a wedding studio named 'Amazing Studio'. Monogram AS with soft floral elements in rose gold line art on transparent background."
+    description: "Elegant minimalist logo for a premium Vietnamese wedding studio 'Amazing Studio', soft rose gold and dark grey, clean typography, transparent background"
     aspect_ratio: "1:1"
-  - path: "artifacts/amazing-studio/public/images/auth-bg.png"
-    description: "Soft romantic abstract background, soft bokeh, dusty rose and cream colors, very subtle lighting, suitable for a wedding studio app background."
-    aspect_ratio: "16:9"
+  - path: "artifacts/amazing-studio/public/images/ai-avatar.png"
+    description: "Friendly professional AI assistant avatar for a wedding studio, soft pastel colors, elegant illustration"
+    aspect_ratio: "1:1"
 
 notes:
-  - Expecting standard REST API behavior based on OpenAPI spec provided in context.
-  - Using @workspace/api-client-react for underlying fetch functions, wrapped in local custom hooks for precise cache invalidation.
+  - "Assuming @workspace/api-client-react exports TanStack query hooks directly."
+  - "Applying exact sidebar layout and features from user screenshot."

@@ -1,14 +1,18 @@
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/not-found";
+import { Layout } from "@/components/layout";
 import Dashboard from "@/pages/dashboard";
-import Customers from "@/pages/customers";
-import Bookings from "@/pages/bookings";
-import Dresses from "@/pages/dresses";
-import Rentals from "@/pages/rentals";
-import Payments from "@/pages/payments";
+import CalendarPage from "@/pages/calendar";
+import TasksPage from "@/pages/tasks";
+import CustomersPage from "@/pages/customers";
+import QuotesPage from "@/pages/quotes";
+import WardrobePage from "@/pages/wardrobe";
+import ServicesPage from "@/pages/services";
+import AccountingHrPage from "@/pages/accounting-hr";
+import AiAssistantPage from "@/pages/ai-assistant";
+import SettingsPage from "@/pages/settings";
+import BookingsPage from "@/pages/bookings";
+import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,27 +26,31 @@ const queryClient = new QueryClient({
 
 function Router() {
   return (
-    <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/customers" component={Customers} />
-      <Route path="/bookings" component={Bookings} />
-      <Route path="/dresses" component={Dresses} />
-      <Route path="/rentals" component={Rentals} />
-      <Route path="/payments" component={Payments} />
-      <Route component={NotFound} />
-    </Switch>
+    <Layout>
+      <Switch>
+        <Route path="/" component={Dashboard} />
+        <Route path="/calendar" component={CalendarPage} />
+        <Route path="/tasks" component={TasksPage} />
+        <Route path="/customers" component={CustomersPage} />
+        <Route path="/quotes" component={QuotesPage} />
+        <Route path="/wardrobe" component={WardrobePage} />
+        <Route path="/services" component={ServicesPage} />
+        <Route path="/accounting" component={AccountingHrPage} />
+        <Route path="/ai-assistant" component={AiAssistantPage} />
+        <Route path="/settings" component={SettingsPage} />
+        <Route path="/bookings" component={BookingsPage} />
+        <Route component={NotFound} />
+      </Switch>
+    </Layout>
   );
 }
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
+      <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+        <Router />
+      </WouterRouter>
     </QueryClientProvider>
   );
 }
