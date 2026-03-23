@@ -1,22 +1,33 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Amazing Studio - Wedding Studio Management API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: customers
+    description: Customer management
+  - name: bookings
+    description: Booking management
+  - name: dresses
+    description: Wedding dress rental management
+  - name: rentals
+    description: Dress rental management
+  - name: payments
+    description: Payment management
+  - name: dashboard
+    description: Dashboard statistics
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +35,437 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /customers:
+    get:
+      operationId: listCustomers
+      tags: [customers]
+      summary: List all customers
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of customers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Customer"
+    post:
+      operationId: createCustomer
+      tags: [customers]
+      summary: Create a new customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomerRequest"
+      responses:
+        "201":
+          description: Customer created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+
+  /customers/{id}:
+    get:
+      operationId: getCustomer
+      tags: [customers]
+      summary: Get customer by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+        "404":
+          description: Not found
+    put:
+      operationId: updateCustomer
+      tags: [customers]
+      summary: Update customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomerRequest"
+      responses:
+        "200":
+          description: Updated customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+    delete:
+      operationId: deleteCustomer
+      tags: [customers]
+      summary: Delete customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /bookings:
+    get:
+      operationId: listBookings
+      tags: [bookings]
+      summary: List all bookings
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, confirmed, in_progress, completed, cancelled]
+        - name: customerId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of bookings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Booking"
+    post:
+      operationId: createBooking
+      tags: [bookings]
+      summary: Create a new booking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBookingRequest"
+      responses:
+        "201":
+          description: Booking created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  /bookings/{id}:
+    get:
+      operationId: getBooking
+      tags: [bookings]
+      summary: Get booking by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "404":
+          description: Not found
+    put:
+      operationId: updateBooking
+      tags: [bookings]
+      summary: Update booking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBookingRequest"
+      responses:
+        "200":
+          description: Updated booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+    delete:
+      operationId: deleteBooking
+      tags: [bookings]
+      summary: Delete booking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /dresses:
+    get:
+      operationId: listDresses
+      tags: [dresses]
+      summary: List all wedding dresses
+      parameters:
+        - name: available
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of dresses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Dress"
+    post:
+      operationId: createDress
+      tags: [dresses]
+      summary: Add a new dress
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDressRequest"
+      responses:
+        "201":
+          description: Dress added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dress"
+
+  /dresses/{id}:
+    get:
+      operationId: getDress
+      tags: [dresses]
+      summary: Get dress by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Dress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dress"
+        "404":
+          description: Not found
+    put:
+      operationId: updateDress
+      tags: [dresses]
+      summary: Update dress
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDressRequest"
+      responses:
+        "200":
+          description: Updated dress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dress"
+    delete:
+      operationId: deleteDress
+      tags: [dresses]
+      summary: Delete dress
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /rentals:
+    get:
+      operationId: listRentals
+      tags: [rentals]
+      summary: List all rentals
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [rented, returned, overdue]
+      responses:
+        "200":
+          description: List of rentals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Rental"
+    post:
+      operationId: createRental
+      tags: [rentals]
+      summary: Create a new rental
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRentalRequest"
+      responses:
+        "201":
+          description: Rental created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Rental"
+
+  /rentals/{id}:
+    get:
+      operationId: getRental
+      tags: [rentals]
+      summary: Get rental by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Rental
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Rental"
+        "404":
+          description: Not found
+    put:
+      operationId: updateRental
+      tags: [rentals]
+      summary: Update rental
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRentalRequest"
+      responses:
+        "200":
+          description: Updated rental
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Rental"
+
+  /payments:
+    get:
+      operationId: listPayments
+      tags: [payments]
+      summary: List all payments
+      parameters:
+        - name: bookingId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: rentalId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of payments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Payment"
+    post:
+      operationId: createPayment
+      tags: [payments]
+      summary: Create a payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePaymentRequest"
+      responses:
+        "201":
+          description: Payment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [dashboard]
+      summary: Get dashboard statistics
+      responses:
+        "200":
+          description: Dashboard statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +476,427 @@ components:
       required:
         - status
 
+    Customer:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - phone
+        - createdAt
+
+    CreateCustomerRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required:
+        - name
+        - phone
+
+    Booking:
+      type: object
+      properties:
+        id:
+          type: integer
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        customerPhone:
+          type: string
+        shootDate:
+          type: string
+          format: date
+        shootTime:
+          type: string
+          nullable: true
+        packageType:
+          type: string
+        status:
+          type: string
+          enum: [pending, confirmed, in_progress, completed, cancelled]
+        totalAmount:
+          type: number
+        depositAmount:
+          type: number
+        remainingAmount:
+          type: number
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - customerId
+        - customerName
+        - customerPhone
+        - shootDate
+        - packageType
+        - status
+        - totalAmount
+        - depositAmount
+        - remainingAmount
+        - createdAt
+
+    CreateBookingRequest:
+      type: object
+      properties:
+        customerId:
+          type: integer
+        shootDate:
+          type: string
+          format: date
+        shootTime:
+          type: string
+          nullable: true
+        packageType:
+          type: string
+        totalAmount:
+          type: number
+        depositAmount:
+          type: number
+        notes:
+          type: string
+          nullable: true
+      required:
+        - customerId
+        - shootDate
+        - packageType
+        - totalAmount
+        - depositAmount
+
+    UpdateBookingRequest:
+      type: object
+      properties:
+        shootDate:
+          type: string
+          format: date
+        shootTime:
+          type: string
+          nullable: true
+        packageType:
+          type: string
+        status:
+          type: string
+          enum: [pending, confirmed, in_progress, completed, cancelled]
+        totalAmount:
+          type: number
+        depositAmount:
+          type: number
+        notes:
+          type: string
+          nullable: true
+
+    Dress:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        color:
+          type: string
+        size:
+          type: string
+        style:
+          type: string
+          nullable: true
+        rentalPrice:
+          type: number
+        depositRequired:
+          type: number
+        isAvailable:
+          type: boolean
+        condition:
+          type: string
+          enum: [excellent, good, fair, needs_repair]
+        notes:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - code
+        - name
+        - color
+        - size
+        - rentalPrice
+        - depositRequired
+        - isAvailable
+        - condition
+        - createdAt
+
+    CreateDressRequest:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        color:
+          type: string
+        size:
+          type: string
+        style:
+          type: string
+          nullable: true
+        rentalPrice:
+          type: number
+        depositRequired:
+          type: number
+        condition:
+          type: string
+          enum: [excellent, good, fair, needs_repair]
+        notes:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+      required:
+        - code
+        - name
+        - color
+        - size
+        - rentalPrice
+        - depositRequired
+        - condition
+
+    Rental:
+      type: object
+      properties:
+        id:
+          type: integer
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        customerPhone:
+          type: string
+        dressId:
+          type: integer
+        dressCode:
+          type: string
+        dressName:
+          type: string
+        rentalDate:
+          type: string
+          format: date
+        returnDate:
+          type: string
+          format: date
+        actualReturnDate:
+          type: string
+          format: date
+          nullable: true
+        rentalPrice:
+          type: number
+        depositPaid:
+          type: number
+        status:
+          type: string
+          enum: [rented, returned, overdue]
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - customerId
+        - customerName
+        - customerPhone
+        - dressId
+        - dressCode
+        - dressName
+        - rentalDate
+        - returnDate
+        - rentalPrice
+        - depositPaid
+        - status
+        - createdAt
+
+    CreateRentalRequest:
+      type: object
+      properties:
+        customerId:
+          type: integer
+        dressId:
+          type: integer
+        rentalDate:
+          type: string
+          format: date
+        returnDate:
+          type: string
+          format: date
+        rentalPrice:
+          type: number
+        depositPaid:
+          type: number
+        notes:
+          type: string
+          nullable: true
+      required:
+        - customerId
+        - dressId
+        - rentalDate
+        - returnDate
+        - rentalPrice
+        - depositPaid
+
+    UpdateRentalRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [rented, returned, overdue]
+        actualReturnDate:
+          type: string
+          format: date
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: integer
+        bookingId:
+          type: integer
+          nullable: true
+        rentalId:
+          type: integer
+          nullable: true
+        amount:
+          type: number
+        paymentMethod:
+          type: string
+          enum: [cash, bank_transfer, momo, zalo_pay]
+        paymentType:
+          type: string
+          enum: [deposit, final_payment, rental_fee, refund]
+        notes:
+          type: string
+          nullable: true
+        paidAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - amount
+        - paymentMethod
+        - paymentType
+        - paidAt
+
+    CreatePaymentRequest:
+      type: object
+      properties:
+        bookingId:
+          type: integer
+          nullable: true
+        rentalId:
+          type: integer
+          nullable: true
+        amount:
+          type: number
+        paymentMethod:
+          type: string
+          enum: [cash, bank_transfer, momo, zalo_pay]
+        paymentType:
+          type: string
+          enum: [deposit, final_payment, rental_fee, refund]
+        notes:
+          type: string
+          nullable: true
+      required:
+        - amount
+        - paymentMethod
+        - paymentType
+
+    DashboardStats:
+      type: object
+      properties:
+        totalCustomers:
+          type: integer
+        totalBookings:
+          type: integer
+        bookingsThisMonth:
+          type: integer
+        pendingBookings:
+          type: integer
+        confirmedBookings:
+          type: integer
+        completedBookings:
+          type: integer
+        totalDresses:
+          type: integer
+        availableDresses:
+          type: integer
+        activeRentals:
+          type: integer
+        overdueRentals:
+          type: integer
+        revenueThisMonth:
+          type: number
+        totalRevenue:
+          type: number
+        upcomingBookings:
+          type: array
+          items:
+            $ref: "#/components/schemas/Booking"
+      required:
+        - totalCustomers
+        - totalBookings
+        - bookingsThisMonth
+        - pendingBookings
+        - confirmedBookings
+        - completedBookings
+        - totalDresses
+        - availableDresses
+        - activeRentals
+        - overdueRentals
+        - revenueThisMonth
+        - totalRevenue
+        - upcomingBookings
