@@ -345,16 +345,20 @@ function ShowFormPanel({
             <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
               <User className="w-3.5 h-3.5" /> A. Khách hàng
             </h4>
-            <PhoneAutocomplete value={phone} onChange={v => { setPhone(v); setCustomerId(null); }} onSelect={handleSelectCustomer} />
+            {/* Tên trước, SĐT sau */}
             <Input className="h-10" placeholder="Tên khách hàng *" value={customerName} onChange={e => setCustomerName(e.target.value)} />
+            <PhoneAutocomplete value={phone} onChange={v => { setPhone(v); setCustomerId(null); }} onSelect={handleSelectCustomer} />
             {customerId && (
               <div className="flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2.5 py-1.5 rounded-lg">
                 <Check className="w-3.5 h-3.5" /> Khách cũ đã tìm thấy (ID #{customerId})
               </div>
             )}
-            <button type="button" onClick={() => setShowExtra(!showExtra)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-              <Plus className="w-3 h-3" />{showExtra ? "Ẩn" : "Thêm"} Facebook / Zalo
-              <ChevronDown className={`w-3 h-3 transition-transform ${showExtra ? "rotate-180" : ""}`} />
+            {/* + Mở rộng FB / Zalo */}
+            <button type="button" onClick={() => setShowExtra(!showExtra)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground py-0.5">
+              <span className={`w-4 h-4 rounded-full border border-current flex items-center justify-center transition-transform ${showExtra ? "rotate-45" : ""}`}>
+                <Plus className="w-2.5 h-2.5" />
+              </span>
+              {showExtra ? "Ẩn Facebook / Zalo" : "Thêm Facebook / Zalo"}
             </button>
             {showExtra && (
               <div className="grid grid-cols-2 gap-2">
@@ -369,10 +373,14 @@ function ShowFormPanel({
             <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5" /> B. Lịch chụp
             </h4>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-[1fr_auto_1fr] gap-2">
               <div>
                 <label className="text-[10px] text-muted-foreground mb-1 block">Ngày chụp *</label>
                 <Input type="date" className="h-9 text-sm" value={shootDate} onChange={e => handleShootDateChange(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><Clock className="w-3 h-3" /> Giờ bắt đầu</label>
+                <Input type="time" className="h-9 text-sm w-28" value={timeStart} onChange={e => setTimeStart(e.target.value)} />
               </div>
               <div>
                 <label className="text-[10px] text-muted-foreground mb-1 block">Trạng thái</label>
@@ -385,27 +393,17 @@ function ShowFormPanel({
                 </select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><Clock className="w-3 h-3" /> Bắt đầu</label>
-                <Input type="time" className="h-9 text-sm" value={timeStart} onChange={e => setTimeStart(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><Clock className="w-3 h-3" /> Kết thúc</label>
-                <Input type="time" className="h-9 text-sm" value={timeEnd} onChange={e => setTimeEnd(e.target.value)} />
-              </div>
-            </div>
             <div className="relative">
               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input className="pl-9 h-9 text-sm" placeholder="Địa điểm (tuỳ chọn)" value={location} onChange={e => setLocation(e.target.value)} />
             </div>
           </section>
 
-          {/* C. Dịch vụ */}
+          {/* C. Dịch vụ / Job chụp */}
           <section className="space-y-2">
             <div className="flex items-center justify-between">
               <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Package2 className="w-3.5 h-3.5" /> C. Dịch vụ ({lines.length})
+                <Package2 className="w-3.5 h-3.5" /> C. Dịch vụ / Job chụp ({lines.length})
               </h4>
               <button
                 onClick={() => setLines(p => [...p, { tempId: genId(), serviceName: "", serviceId: null, price: 0, photoId: null, photoName: "", makeupId: null, makeupName: "" }])}
@@ -480,7 +478,7 @@ function MonthDayCell({
   const isSat = date.getDay() === 6;
   const isLunarNew = lunar.day === 1;
   const isRam = lunar.day === 15;
-  const MAX_VISIBLE = 4;
+  const MAX_VISIBLE = 3;
 
   return (
     <div
@@ -490,7 +488,7 @@ function MonthDayCell({
         isSelected ? "bg-primary/5" : isToday(date) ? "bg-orange-50/40 dark:bg-orange-950/10" : "hover:bg-muted/30",
         isOtherMonth ? "opacity-30" : "",
       ].join(" ")}
-      style={{ minHeight: "clamp(90px, 14vh, 160px)" }}
+      style={{ minHeight: "clamp(110px, 16vh, 180px)" }}
       onClick={() => onDayClick(date)}
     >
       {/* Day number row */}
@@ -517,7 +515,7 @@ function MonthDayCell({
         </div>
       </div>
 
-      {/* Event chips */}
+      {/* Event chips — giờ · tên · job · photo · makeup */}
       <div className="flex-1 px-1 pb-1 space-y-0.5 overflow-hidden">
         {bookings
           .slice()
@@ -525,14 +523,36 @@ function MonthDayCell({
           .slice(0, MAX_VISIBLE)
           .map(b => {
             const st = STATUS[b.status as keyof typeof STATUS] ?? STATUS.pending;
-            const photo = b.items?.[0]?.photoName?.split(" ").pop() ?? "";
+            const item = b.items?.[0];
+            const photoShort = item?.photoName?.split(" ").pop() ?? "";
+            const makeupShort = item?.makeupName?.split(" ").pop() ?? "";
+            const jobShort = item?.serviceName
+              ? item.serviceName.length > 12 ? item.serviceName.slice(0, 11) + "…" : item.serviceName
+              : b.packageType?.split("(")[0].trim().slice(0, 12) ?? "";
+            const hourStr = b.shootTime ? b.shootTime.slice(0, 5).replace(":00", "h") : "";
             return (
               <button
                 key={b.id}
                 onClick={e => { e.stopPropagation(); onEventClick(b); }}
-                className={`w-full text-left text-[9px] sm:text-[10px] rounded-sm px-1.5 py-0.5 truncate font-semibold ${st.bar} hover:opacity-80 transition-opacity`}
+                className={`w-full text-left rounded-sm px-1.5 py-0.5 font-semibold ${st.bar} hover:opacity-80 transition-opacity`}
               >
-                {b.shootTime?.slice(0, 5)} {b.customerName}{photo ? ` · ${photo}` : ""}
+                {/* Dòng 1: giờ + tên */}
+                <div className="flex items-center gap-1 text-[9px] sm:text-[10px] truncate leading-tight">
+                  <span className="font-bold flex-shrink-0">{hourStr}</span>
+                  <span className="truncate">{b.customerName}</span>
+                </div>
+                {/* Dòng 2: job chụp */}
+                {jobShort && (
+                  <div className="text-[8px] sm:text-[9px] truncate leading-tight opacity-90">{jobShort}</div>
+                )}
+                {/* Dòng 3: photo + makeup (nếu có) */}
+                {(photoShort || makeupShort) && (
+                  <div className="text-[8px] sm:text-[9px] truncate leading-tight opacity-80">
+                    {photoShort && <span>P:{photoShort}</span>}
+                    {photoShort && makeupShort && <span> · </span>}
+                    {makeupShort && <span>M:{makeupShort}</span>}
+                  </div>
+                )}
               </button>
             );
           })}

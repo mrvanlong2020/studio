@@ -1,0 +1,145 @@
+Hãy chỉnh lại form tạo show và cách hiển thị lịch trong app studio theo đúng thứ tự và cách nhìn sau:
+
+==================================================
+1. SẮP XẾP LẠI FORM TẠO SHOW
+==================================================
+
+Trong form tạo show, hãy đổi thứ tự phần khách hàng thành:
+
+1. Tên khách hàng
+2. Số điện thoại
+3. Một nút dấu cộng để xổ thêm thông tin phụ
+
+Khi bấm dấu cộng thì mới hiện ra:
+- Link Facebook
+- Link Zalo
+
+Yêu cầu:
+- Mặc định chỉ hiện:
+  + Tên khách hàng
+  + Số điện thoại
+- Facebook và Zalo phải được ẩn gọn bên trong nút dấu cộng
+- Giao diện phải sạch, gọn, dễ nhập nhanh
+
+==================================================
+2. ẨN BỚT CÁC TRƯỜNG KHÔNG CẦN THIẾT TRONG FORM
+==================================================
+
+Tôi muốn ẩn bớt các trường sau trong form:
+- Giờ kết thúc
+- Các phần rườm rà không cần thiết ở màn hình đầu
+
+Logic mới:
+- Khi tôi bấm vào một khung giờ trên lịch thì giờ bắt đầu phải tự nhận luôn
+- Không cần hiện rườm rà quá nhiều ô giờ trên form
+- Giờ bắt đầu phải lấy từ ô giờ tôi vừa bấm trên lịch
+- Nếu cần giờ kết thúc thì cho tự tính mặc định theo thời lượng hoặc để ẩn trong phần nâng cao
+
+==================================================
+3. HIỂN THỊ THÔNG TIN QUAN TRỌNG NGAY NGOÀI LỊCH THÁNG
+==================================================
+
+Ở giao diện lịch tháng, trong mỗi ô lịch / mỗi event,
+tôi muốn hiển thị trực tiếp các thông tin sau theo thứ tự:
+
+1. Số giờ
+2. Tên khách hàng
+3. Job chụp / dịch vụ chính
+4. Ai làm photo
+5. Ai làm makeup
+
+Ví dụ cách hiển thị ngoài lịch tháng:
+- 7h | Ngọc Anh | Chụp studio | Photo: Trung | Makeup: Hoa
+- 14h | Huỳnh Như | Rước dâu | Photo: Tiến | Makeup: Châu
+
+Yêu cầu:
+- Phải ưu tiên hiển thị số giờ đầu tiên
+- Sau đó tới tên khách hàng
+- Sau đó tới job chụp
+- Sau đó tới photo và makeup
+- Nhìn vào lịch tháng là phải hiểu ngay show nào, khách nào, ai làm
+
+==================================================
+4. CÁCH HIỂN THỊ EVENT TRÊN LỊCH THÁNG
+==================================================
+
+Hãy đổi format hiển thị event trên lịch tháng thành kiểu ngắn gọn, dễ nhìn:
+
+Dòng 1:
+[Giờ] [Tên khách]
+
+Dòng 2:
+[Job chụp]
+
+Dòng 3:
+[P: tên photo] [M: tên makeup]
+
+Ví dụ:
+07:00 Ngọc Anh
+Chụp studio
+P: Trung | M: Hoa
+
+Hoặc nếu ô nhỏ thì rút gọn:
+07h Ngọc Anh
+Studio
+Trung | Hoa
+
+==================================================
+5. TỰ ĐỘNG LẤY GIỜ TỪ LỊCH
+==================================================
+
+Khi tôi bấm vào một ô giờ bất kỳ trong màn hình lịch ngày 24h:
+- Form tạo show phải tự lấy giờ đó làm giờ bắt đầu
+- Không cần bắt tôi nhập lại giờ bắt đầu thủ công
+- Giờ đó cũng phải được hiển thị ngoài lịch tháng
+
+Ví dụ:
+- Tôi bấm 20:00
+=> form tự điền giờ bắt đầu là 20:00
+=> event ngoài lịch tháng phải hiện 20:00 ở đầu
+
+==================================================
+6. FORM DỊCH VỤ
+==================================================
+
+Phần dịch vụ vẫn giữ cấu trúc:
+- Dịch vụ
+- Photo
+- Makeup
+- Giá
+
+Nhưng hãy đổi chữ cho đúng nghiệp vụ studio, dễ hiểu hơn:
+
+- Dịch vụ / Job chụp
+- Photo
+- Makeup
+- Giá
+
+==================================================
+7. MỤC TIÊU GIAO DIỆN
+==================================================
+
+Tôi muốn giao diện:
+- gọn
+- dễ nhìn
+- nhìn ngoài lịch tháng là hiểu ngay
+- không phải bấm vào mới biết khách nào, giờ nào, ai làm
+- ưu tiên thông tin vận hành thực tế
+
+==================================================
+8. YÊU CẦU QUAN TRỌNG
+==================================================
+
+- Tên khách hàng phải nằm trên số điện thoại trong form
+- Facebook và Zalo phải ẩn trong nút dấu cộng
+- Giờ bắt đầu phải lấy tự động từ lịch
+- Giờ kết thúc nên ẩn hoặc để phần nâng cao
+- Lịch tháng phải hiện rõ:
+  + giờ
+  + tên khách
+  + job chụp
+  + photo
+  + makeup
+- Không làm kiểu demo
+- Phải tối ưu cho điện thoại
+- Mục tiêu là nhìn phát biết show nào của ai và ai phụ trách
