@@ -7,3 +7,6 @@ export * from "./tasks";
 export * from "./quotes";
 export * from "./services";
 export * from "./accounting";
+export * from "./expenses";
+export * from "./contracts";
+export * from "./payrolls";

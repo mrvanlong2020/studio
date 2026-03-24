@@ -1,81 +1,579 @@
-import { useState } from "react";
-import { useListBookings } from "@workspace/api-client-react";
+import { useState, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatVND, formatDate } from "@/lib/utils";
-import { Card, CardContent, Badge, Button } from "@/components/ui";
-import { Plus, Camera, Phone, MapPin, Clock } from "lucide-react";
+import { Button, Input, Select, Textarea, Badge, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui";
+import {
+  Plus, Search, Phone, MapPin, Clock, Package2, ChevronRight, X, CheckCircle2,
+  CreditCard, AlertCircle, FileText, Users, DollarSign, Receipt, ListChecks,
+  Trash2, Edit2, Printer, Download
+} from "lucide-react";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const fetchJson = (url: string, opts?: RequestInit) =>
+  fetch(`${BASE}${url}`, { headers: { "Content-Type": "application/json" }, ...opts }).then(r => r.json());
+
+const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
+  pending: { label: "Chờ xác nhận", color: "text-yellow-700", bg: "bg-yellow-100 border-yellow-200" },
+  confirmed: { label: "Đã xác nhận", color: "text-blue-700", bg: "bg-blue-100 border-blue-200" },
+  in_progress: { label: "Đang thực hiện", color: "text-purple-700", bg: "bg-purple-100 border-purple-200" },
+  completed: { label: "Hoàn thành", color: "text-green-700", bg: "bg-green-100 border-green-200" },
+  cancelled: { label: "Đã hủy", color: "text-red-700", bg: "bg-red-100 border-red-200" },
+};
+
+const SERVICE_CAT: Record<string, string> = {
+  wedding: "Chụp cưới", beauty: "Chụp beauty", family: "Chụp gia đình",
+  fashion: "Chụp thời trang", event: "Sự kiện", other: "Khác",
+};
+
+const PAYMENT_METHOD: Record<string, string> = {
+  cash: "Tiền mặt", transfer: "Chuyển khoản", other: "Khác",
+};
+
+const PAYMENT_TYPE: Record<string, string> = {
+  deposit: "Tiền cọc", partial: "Thanh toán một phần", payment: "Thanh toán", full: "Thanh toán đủ",
+};
+
+type Booking = {
+  id: number; orderCode: string; customerId: number; customerName: string; customerPhone: string;
+  shootDate: string; shootTime?: string; serviceCategory: string; packageType: string; location?: string;
+  status: string; items: { name: string; qty: number; unitPrice: number; total: number }[];
+  totalAmount: number; depositAmount: number; paidAmount: number; discountAmount: number; remainingAmount: number;
+  totalExpenses: number; grossProfit: number; internalNotes?: string; notes?: string;
+  payments: Payment[]; expenses: Expense[]; tasks: Task[];
+  assignedStaff: number[]; createdAt: string;
+};
+
+type Payment = {
+  id: number; amount: number; paymentMethod: string; paymentType: string; notes?: string; paidAt: string;
+};
+
+type Expense = {
+  id: number; category: string; amount: number; description: string; type: string; expenseDate: string; paymentMethod: string;
+};
+
+type Task = {
+  id: number; title: string; status: string; priority: string; dueDate?: string; assigneeName?: string; category: string;
+};
+
+type SimpleBooking = {
+  id: number; orderCode: string; customerName: string; customerPhone: string; shootDate: string; shootTime?: string;
+  serviceCategory: string; packageType: string; status: string; totalAmount: number; paidAmount: number; remainingAmount: number; createdAt: string;
+};
 
 export default function BookingsPage() {
-  const { data: bookings = [], isLoading } = useListBookings({});
+  const qc = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showPayForm, setShowPayForm] = useState(false);
+  const [activeTab, setActiveTab] = useState<"info" | "payment" | "expense" | "task">("info");
+  const [payForm, setPayForm] = useState({ amount: "", paymentMethod: "transfer", paymentType: "payment", notes: "" });
+
+  const { data: bookings = [], isLoading } = useQuery<SimpleBooking[]>({
+    queryKey: ["bookings"],
+    queryFn: () => fetchJson("/api/bookings"),
+  });
+
+  const { data: customers = [] } = useQuery<{ id: number; name: string; phone: string }[]>({
+    queryKey: ["customers-light"],
+    queryFn: () => fetchJson("/api/customers"),
+  });
+
+  const { data: detail, isLoading: detailLoading } = useQuery<Booking>({
+    queryKey: ["booking", selectedId],
+    queryFn: () => fetchJson(`/api/bookings/${selectedId}`),
+    enabled: !!selectedId,
+  });
+
+  const addPayment = useMutation({
+    mutationFn: (data: Record<string, unknown>) => fetchJson("/api/payments", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["booking", selectedId] }); qc.invalidateQueries({ queryKey: ["bookings"] }); setShowPayForm(false); setPayForm({ amount: "", paymentMethod: "transfer", paymentType: "payment", notes: "" }); },
+  });
+
+  const deletePayment = useMutation({
+    mutationFn: (id: number) => fetch(`${BASE}/api/payments/${id}`, { method: "DELETE" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["booking", selectedId] }); qc.invalidateQueries({ queryKey: ["bookings"] }); },
+  });
+
+  const updateStatus = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) => fetchJson(`/api/bookings/${id}`, { method: "PUT", body: JSON.stringify({ status }) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["booking", selectedId] }); qc.invalidateQueries({ queryKey: ["bookings"] }); },
+  });
+
+  const deleteBooking = useMutation({
+    mutationFn: (id: number) => fetch(`${BASE}/api/bookings/${id}`, { method: "DELETE" }),
+    onSuccess: () => { setSelectedId(null); qc.invalidateQueries({ queryKey: ["bookings"] }); },
+  });
+
+  const filtered = bookings.filter(b => {
+    const matchSearch = !search || b.customerName.toLowerCase().includes(search.toLowerCase()) || b.orderCode?.toLowerCase().includes(search.toLowerCase()) || b.customerPhone.includes(search);
+    const matchStatus = !statusFilter || b.status === statusFilter;
+    return matchSearch && matchStatus;
+  });
+
+  const totals = {
+    total: bookings.reduce((s, b) => s + b.totalAmount, 0),
+    paid: bookings.reduce((s, b) => s + b.paidAmount, 0),
+    remaining: bookings.reduce((s, b) => s + b.remainingAmount, 0),
+    count: bookings.length,
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Quản lý Lịch chụp</h1>
-          <p className="text-muted-foreground mt-1">Danh sách tất cả hợp đồng và booking</p>
+          <h1 className="text-2xl font-bold">Quản lý Đơn hàng</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Tạo đơn, theo dõi tiến độ và thu tiền tất cả trong một màn hình</p>
         </div>
-        <Button className="gap-2"><Plus className="w-4 h-4"/> Tạo Booking mới</Button>
+        <Button onClick={() => setShowCreateForm(true)} className="gap-2">
+          <Plus className="w-4 h-4" /> Tạo đơn mới
+        </Button>
       </div>
 
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm whitespace-nowrap">
-            <thead className="bg-muted/50 text-muted-foreground uppercase text-xs font-semibold">
-              <tr>
-                <th className="px-6 py-4">Khách hàng</th>
-                <th className="px-6 py-4">Gói dịch vụ</th>
-                <th className="px-6 py-4">Ngày chụp</th>
-                <th className="px-6 py-4 text-right">Tổng tiền</th>
-                <th className="px-6 py-4 text-right">Còn lại</th>
-                <th className="px-6 py-4 text-center">Trạng thái</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {isLoading ? (
-                <tr><td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">Đang tải...</td></tr>
-              ) : bookings.length === 0 ? (
-                <tr><td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">Chưa có lịch chụp nào</td></tr>
-              ) : (
-                bookings.map(b => (
-                  <tr key={b.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-6 py-4">
-                      <p className="font-semibold text-foreground">{b.customerName}</p>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5"><Phone className="w-3 h-3"/> {b.customerPhone}</p>
-                    </td>
-                    <td className="px-6 py-4 font-medium text-primary">
-                      {b.packageType}
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="font-medium">{formatDate(b.shootDate)}</p>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5"><Clock className="w-3 h-3"/> {b.shootTime || "--:--"}</p>
-                    </td>
-                    <td className="px-6 py-4 text-right font-medium">
-                      {formatVND(b.totalAmount)}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <span className={`font-bold ${b.remainingAmount > 0 ? 'text-destructive' : 'text-emerald-600'}`}>
-                        {formatVND(b.remainingAmount)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <Badge variant={
-                        b.status === 'completed' ? 'success' : 
-                        b.status === 'confirmed' ? 'default' : 
-                        b.status === 'in_progress' ? 'warning' : 'secondary'
-                      }>
-                        {b.status === 'completed' ? 'Hoàn thành' : 
-                         b.status === 'confirmed' ? 'Đã xác nhận' : 
-                         b.status === 'in_progress' ? 'Đang chụp' : 
-                         b.status === 'cancelled' ? 'Đã hủy' : 'Chờ xác nhận'}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { label: "Tổng đơn", value: totals.count, sub: "đơn hàng", color: "text-blue-600", bg: "bg-blue-50" },
+          { label: "Tổng doanh thu", value: formatVND(totals.total), sub: "dự kiến", color: "text-green-600", bg: "bg-green-50" },
+          { label: "Đã thu", value: formatVND(totals.paid), sub: "thực tế", color: "text-primary", bg: "bg-primary/5" },
+          { label: "Còn công nợ", value: formatVND(totals.remaining), sub: "chưa thu", color: "text-red-600", bg: "bg-red-50" },
+        ].map(c => (
+          <div key={c.label} className={`rounded-xl border p-3 ${c.bg}`}>
+            <p className="text-xs text-muted-foreground">{c.label}</p>
+            <p className={`text-lg font-bold ${c.color}`}>{c.value}</p>
+            <p className="text-xs text-muted-foreground">{c.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex gap-4">
+        {/* List */}
+        <div className={`flex-1 ${selectedId ? "hidden lg:flex lg:flex-col" : "flex flex-col"} min-w-0`}>
+          {/* Filters */}
+          <div className="flex gap-2 mb-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input className="pl-9" placeholder="Tìm khách, mã đơn, SĐT..." value={search} onChange={e => setSearch(e.target.value)} />
+            </div>
+            <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-40">
+              <option value="">Tất cả</option>
+              {Object.entries(STATUS_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            </Select>
+          </div>
+
+          {isLoading ? (
+            <div className="flex-1 flex items-center justify-center py-20 text-muted-foreground">Đang tải...</div>
+          ) : filtered.length === 0 ? (
+            <div className="flex-1 flex items-center justify-center py-20 text-muted-foreground">Không có đơn hàng</div>
+          ) : (
+            <div className="space-y-2 overflow-y-auto">
+              {filtered.map(b => {
+                const s = STATUS_MAP[b.status] ?? STATUS_MAP.pending;
+                const pct = b.totalAmount > 0 ? (b.paidAmount / b.totalAmount) * 100 : 0;
+                return (
+                  <div
+                    key={b.id}
+                    onClick={() => { setSelectedId(b.id); setActiveTab("info"); }}
+                    className={`rounded-xl border p-4 cursor-pointer transition-all hover:shadow-md ${selectedId === b.id ? "border-primary bg-primary/5 shadow-sm" : "bg-card hover:border-primary/40"}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-sm">{b.customerName}</span>
+                          <span className="text-xs text-muted-foreground">{b.orderCode}</span>
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${s.bg}`}>{s.label}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1 flex-wrap">
+                          <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{b.customerPhone}</span>
+                          <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatDate(b.shootDate)} {b.shootTime?.slice(0, 5)}</span>
+                          <span className="flex items-center gap-1"><Package2 className="w-3 h-3" />{b.packageType}</span>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="font-bold text-sm text-primary">{formatVND(b.totalAmount)}</p>
+                        {b.remainingAmount > 0 && <p className="text-[10px] text-red-600 font-medium">Còn: {formatVND(b.remainingAmount)}</p>}
+                        {b.remainingAmount === 0 && <p className="text-[10px] text-green-600 font-medium">Đã thanh toán đủ</p>}
+                      </div>
+                    </div>
+                    <div className="mt-2">
+                      <div className="flex justify-between text-[10px] text-muted-foreground mb-0.5">
+                        <span>Đã thu: {formatVND(b.paidAmount)}</span>
+                        <span>{Math.round(pct)}%</span>
+                      </div>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
-      </Card>
+
+        {/* Detail Panel */}
+        {selectedId && (
+          <div className="w-full lg:w-[55%] xl:w-[60%] flex-shrink-0">
+            <div className="bg-card rounded-2xl border shadow-sm overflow-hidden h-full">
+              {detailLoading || !detail ? (
+                <div className="flex items-center justify-center h-64 text-muted-foreground">Đang tải chi tiết...</div>
+              ) : (
+                <>
+                  {/* Order Header */}
+                  <div className="px-5 py-4 border-b bg-gradient-to-r from-primary/5 to-card">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h2 className="font-bold text-lg">{detail.customerName}</h2>
+                          <span className="text-sm text-muted-foreground">{detail.orderCode}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
+                          <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{detail.customerPhone}</span>
+                          <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{formatDate(detail.shootDate)} {detail.shootTime?.slice(0, 5)}</span>
+                          {detail.location && <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{detail.location}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Select value={detail.status} onChange={e => updateStatus.mutate({ id: detail.id, status: e.target.value })} className="text-xs h-8 py-1">
+                          {Object.entries(STATUS_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                        </Select>
+                        <button onClick={() => setSelectedId(null)} className="lg:hidden p-1.5 hover:bg-muted rounded-lg">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Financial Summary */}
+                    <div className="grid grid-cols-3 gap-2 mt-3">
+                      {[
+                        { label: "Tổng đơn", value: formatVND(detail.totalAmount), color: "text-foreground" },
+                        { label: "Đã thu", value: formatVND(detail.paidAmount), color: "text-green-600" },
+                        { label: "Còn nợ", value: formatVND(detail.remainingAmount), color: detail.remainingAmount > 0 ? "text-red-600" : "text-green-600" },
+                      ].map(f => (
+                        <div key={f.label} className="bg-background rounded-lg p-2 text-center border">
+                          <p className="text-[10px] text-muted-foreground">{f.label}</p>
+                          <p className={`text-sm font-bold ${f.color}`}>{f.value}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Progress bar */}
+                    <div className="mt-2">
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min((detail.paidAmount / detail.totalAmount) * 100, 100)}%` }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tabs */}
+                  <div className="flex border-b text-sm overflow-x-auto">
+                    {(["info", "payment", "expense", "task"] as const).map(tab => (
+                      <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab)}
+                        className={`px-4 py-2.5 font-medium whitespace-nowrap border-b-2 transition-colors flex items-center gap-1.5
+                          ${activeTab === tab ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                      >
+                        {tab === "info" && <><FileText className="w-3.5 h-3.5" />Thông tin</>}
+                        {tab === "payment" && <><CreditCard className="w-3.5 h-3.5" />Thu tiền{detail.payments.length > 0 && <span className="text-[10px] bg-primary/15 text-primary rounded-full px-1.5">{detail.payments.length}</span>}</>}
+                        {tab === "expense" && <><Receipt className="w-3.5 h-3.5" />Chi phí</>}
+                        {tab === "task" && <><ListChecks className="w-3.5 h-3.5" />Công việc{detail.tasks.length > 0 && <span className="text-[10px] bg-muted text-muted-foreground rounded-full px-1.5">{detail.tasks.length}</span>}</>}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Tab Content */}
+                  <div className="overflow-y-auto max-h-[calc(100vh-420px)] p-4 space-y-4">
+                    {/* INFO TAB */}
+                    {activeTab === "info" && (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div><p className="text-muted-foreground text-xs">Loại dịch vụ</p><p className="font-medium">{SERVICE_CAT[detail.serviceCategory] ?? detail.serviceCategory}</p></div>
+                          <div><p className="text-muted-foreground text-xs">Gói</p><p className="font-medium">{detail.packageType}</p></div>
+                          {detail.discountAmount > 0 && <div><p className="text-muted-foreground text-xs">Giảm giá</p><p className="font-medium text-green-600">-{formatVND(detail.discountAmount)}</p></div>}
+                          <div><p className="text-muted-foreground text-xs">Chi phí show</p><p className="font-medium text-red-600">{formatVND(detail.totalExpenses)}</p></div>
+                          <div><p className="text-muted-foreground text-xs">Lợi nhuận gộp</p><p className={`font-bold ${detail.grossProfit >= 0 ? "text-green-600" : "text-red-600"}`}>{formatVND(detail.grossProfit)}</p></div>
+                        </div>
+
+                        {detail.items.length > 0 && (
+                          <div>
+                            <h4 className="font-semibold text-sm mb-2">Danh sách dịch vụ</h4>
+                            <div className="rounded-xl border overflow-hidden">
+                              <table className="w-full text-sm">
+                                <thead className="bg-muted/50 text-xs text-muted-foreground">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left">Dịch vụ</th>
+                                    <th className="px-3 py-2 text-center">SL</th>
+                                    <th className="px-3 py-2 text-right">Đơn giá</th>
+                                    <th className="px-3 py-2 text-right">Thành tiền</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border">
+                                  {detail.items.map((item, i) => (
+                                    <tr key={i}>
+                                      <td className="px-3 py-2 font-medium">{item.name}</td>
+                                      <td className="px-3 py-2 text-center text-muted-foreground">{item.qty}</td>
+                                      <td className="px-3 py-2 text-right text-muted-foreground">{formatVND(item.unitPrice)}</td>
+                                      <td className="px-3 py-2 text-right font-semibold text-primary">{formatVND(item.total)}</td>
+                                    </tr>
+                                  ))}
+                                  <tr className="bg-muted/30 font-bold">
+                                    <td colSpan={3} className="px-3 py-2 text-right">Tổng cộng</td>
+                                    <td className="px-3 py-2 text-right text-primary">{formatVND(detail.totalAmount)}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                        {detail.notes && (
+                          <div className="p-3 bg-muted/30 rounded-xl text-sm">
+                            <p className="font-semibold text-xs text-muted-foreground mb-1">Ghi chú khách hàng</p>
+                            <p>{detail.notes}</p>
+                          </div>
+                        )}
+                        {detail.internalNotes && (
+                          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-sm">
+                            <p className="font-semibold text-xs text-yellow-700 mb-1">⚠ Ghi chú nội bộ</p>
+                            <p className="text-yellow-800">{detail.internalNotes}</p>
+                          </div>
+                        )}
+
+                        <div className="flex gap-2 pt-2 border-t">
+                          <Button variant="destructive" size="sm" className="gap-1.5" onClick={() => { if (confirm("Xóa đơn hàng này?")) deleteBooking.mutate(detail.id); }}>
+                            <Trash2 className="w-3.5 h-3.5" /> Xóa đơn
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* PAYMENT TAB */}
+                    {activeTab === "payment" && (
+                      <div className="space-y-4">
+                        {/* Add payment button */}
+                        {!showPayForm ? (
+                          <Button onClick={() => setShowPayForm(true)} className="w-full gap-2">
+                            <Plus className="w-4 h-4" /> Ghi nhận thanh toán
+                          </Button>
+                        ) : (
+                          <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+                            <h4 className="font-semibold text-sm">Ghi nhận thanh toán mới</h4>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-xs font-medium text-muted-foreground">Số tiền</label>
+                                <Input type="number" placeholder="0" value={payForm.amount} onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))} />
+                              </div>
+                              <div>
+                                <label className="text-xs font-medium text-muted-foreground">Loại thanh toán</label>
+                                <Select value={payForm.paymentType} onChange={e => setPayForm(f => ({ ...f, paymentType: e.target.value }))}>
+                                  {Object.entries(PAYMENT_TYPE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                                </Select>
+                              </div>
+                              <div>
+                                <label className="text-xs font-medium text-muted-foreground">Phương thức</label>
+                                <Select value={payForm.paymentMethod} onChange={e => setPayForm(f => ({ ...f, paymentMethod: e.target.value }))}>
+                                  {Object.entries(PAYMENT_METHOD).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                                </Select>
+                              </div>
+                              <div>
+                                <label className="text-xs font-medium text-muted-foreground">Ghi chú</label>
+                                <Input placeholder="Ghi chú..." value={payForm.notes} onChange={e => setPayForm(f => ({ ...f, notes: e.target.value }))} />
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button onClick={() => addPayment.mutate({ bookingId: detail.id, amount: parseFloat(payForm.amount), paymentMethod: payForm.paymentMethod, paymentType: payForm.paymentType, notes: payForm.notes })} disabled={!payForm.amount || addPayment.isPending}>
+                                {addPayment.isPending ? "Đang lưu..." : "Xác nhận thu tiền"}
+                              </Button>
+                              <Button variant="outline" onClick={() => setShowPayForm(false)}>Hủy</Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Payment history */}
+                        <div>
+                          <h4 className="font-semibold text-sm mb-2">Lịch sử thanh toán ({detail.payments.length})</h4>
+                          {detail.payments.length === 0 ? (
+                            <div className="text-center py-6 text-muted-foreground text-sm">Chưa có khoản thanh toán nào</div>
+                          ) : (
+                            <div className="space-y-2">
+                              {detail.payments.map(p => (
+                                <div key={p.id} className="flex items-center justify-between p-3 rounded-xl border bg-card">
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <CheckCircle2 className="w-4 h-4 text-green-500" />
+                                      <span className="font-bold text-green-700">{formatVND(p.amount)}</span>
+                                      <span className="text-xs text-muted-foreground">{PAYMENT_TYPE[p.paymentType] ?? p.paymentType}</span>
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mt-0.5 ml-6">
+                                      {PAYMENT_METHOD[p.paymentMethod] ?? p.paymentMethod} · {formatDate(p.paidAt)}
+                                      {p.notes && ` · ${p.notes}`}
+                                    </div>
+                                  </div>
+                                  <button onClick={() => { if (confirm("Xóa khoản thanh toán này?")) deletePayment.mutate(p.id); }} className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Debt summary */}
+                        <div className="rounded-xl border p-3 bg-muted/20">
+                          <div className="space-y-1.5 text-sm">
+                            <div className="flex justify-between"><span className="text-muted-foreground">Tổng đơn hàng</span><span className="font-semibold">{formatVND(detail.totalAmount)}</span></div>
+                            {detail.discountAmount > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Giảm giá</span><span className="text-green-600">-{formatVND(detail.discountAmount)}</span></div>}
+                            <div className="flex justify-between"><span className="text-muted-foreground">Đã thanh toán</span><span className="text-green-600 font-semibold">{formatVND(detail.paidAmount)}</span></div>
+                            <div className="flex justify-between border-t pt-1.5"><span className="font-bold">Còn lại</span><span className={`font-bold text-base ${detail.remainingAmount > 0 ? "text-red-600" : "text-green-600"}`}>{formatVND(detail.remainingAmount)}</span></div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* EXPENSE TAB */}
+                    {activeTab === "expense" && (
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <h4 className="font-semibold text-sm">Chi phí của show này</h4>
+                          <span className="text-sm font-bold text-red-600">{formatVND(detail.totalExpenses)}</span>
+                        </div>
+                        {detail.expenses.length === 0 ? (
+                          <div className="text-center py-6 text-muted-foreground text-sm">Chưa có khoản chi phí nào</div>
+                        ) : (
+                          <div className="space-y-2">
+                            {detail.expenses.map(e => (
+                              <div key={e.id} className="flex items-center justify-between p-3 rounded-xl border bg-card">
+                                <div>
+                                  <p className="font-medium text-sm">{e.description}</p>
+                                  <p className="text-xs text-muted-foreground">{e.category} · {formatDate(e.expenseDate)}</p>
+                                </div>
+                                <span className="font-bold text-red-600">{formatVND(e.amount)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="rounded-xl border p-3 bg-muted/20 text-sm">
+                          <div className="flex justify-between mb-1"><span className="text-muted-foreground">Doanh thu show</span><span className="font-semibold">{formatVND(detail.totalAmount)}</span></div>
+                          <div className="flex justify-between mb-1"><span className="text-muted-foreground">Chi phí show</span><span className="text-red-600 font-semibold">-{formatVND(detail.totalExpenses)}</span></div>
+                          <div className="flex justify-between border-t pt-1"><span className="font-bold">Lợi nhuận gộp</span><span className={`font-bold ${detail.grossProfit >= 0 ? "text-green-600" : "text-red-600"}`}>{formatVND(detail.grossProfit)}</span></div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* TASK TAB */}
+                    {activeTab === "task" && (
+                      <div className="space-y-2">
+                        {detail.tasks.length === 0 ? (
+                          <div className="text-center py-6 text-muted-foreground text-sm">Chưa có công việc nào</div>
+                        ) : (
+                          detail.tasks.map(t => {
+                            const prio = t.priority === "high" ? "bg-red-100 text-red-700" : t.priority === "medium" ? "bg-yellow-100 text-yellow-700" : "bg-gray-100 text-gray-700";
+                            const stat = t.status === "done" ? "text-green-600" : t.status === "in_progress" ? "text-blue-600" : "text-muted-foreground";
+                            return (
+                              <div key={t.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card">
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-sm">{t.title}</p>
+                                  <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground flex-wrap">
+                                    {t.assigneeName && <span className="flex items-center gap-1"><Users className="w-3 h-3" />{t.assigneeName}</span>}
+                                    {t.dueDate && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatDate(t.dueDate)}</span>}
+                                  </div>
+                                </div>
+                                <div className="flex flex-col items-end gap-1">
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${prio}`}>{t.priority === "high" ? "Cao" : t.priority === "medium" ? "TB" : "Thấp"}</span>
+                                  <span className={`text-[10px] font-medium ${stat}`}>{t.status === "done" ? "✓ Xong" : t.status === "in_progress" ? "⬤ Đang làm" : "○ Chưa làm"}</span>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Create Booking Modal */}
+      <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Tạo đơn hàng mới</DialogTitle>
+          </DialogHeader>
+          <CreateBookingForm
+            customers={customers}
+            onSuccess={() => { setShowCreateForm(false); qc.invalidateQueries({ queryKey: ["bookings"] }); }}
+            onCancel={() => setShowCreateForm(false)}
+          />
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function CreateBookingForm({ customers, onSuccess, onCancel }: {
+  customers: { id: number; name: string; phone: string }[];
+  onSuccess: () => void;
+  onCancel: () => void;
+}) {
+  const [form, setForm] = useState({
+    customerId: "", shootDate: "", shootTime: "08:00", serviceCategory: "wedding",
+    packageType: "", location: "", totalAmount: "", depositAmount: "", discountAmount: "0", notes: "",
+  });
+  const [loading, setLoading] = useState(false);
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+  const handleSubmit = async () => {
+    if (!form.customerId || !form.shootDate || !form.packageType || !form.totalAmount) return alert("Vui lòng điền đầy đủ thông tin bắt buộc");
+    setLoading(true);
+    try {
+      await fetch(`${BASE}/api/bookings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, customerId: parseInt(form.customerId), totalAmount: parseFloat(form.totalAmount), depositAmount: parseFloat(form.depositAmount || "0"), discountAmount: parseFloat(form.discountAmount || "0") }),
+      });
+      onSuccess();
+    } catch (e) { alert("Lỗi tạo đơn hàng"); } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="space-y-3 max-h-[70vh] overflow-y-auto">
+      <div>
+        <label className="text-xs font-medium text-muted-foreground">Khách hàng *</label>
+        <Select value={form.customerId} onChange={e => setForm(f => ({ ...f, customerId: e.target.value }))}>
+          <option value="">-- Chọn khách hàng --</option>
+          {customers.map(c => <option key={c.id} value={c.id}>{c.name} - {c.phone}</option>)}
+        </Select>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><label className="text-xs font-medium text-muted-foreground">Ngày chụp *</label><Input type="date" value={form.shootDate} onChange={e => setForm(f => ({ ...f, shootDate: e.target.value }))} /></div>
+        <div><label className="text-xs font-medium text-muted-foreground">Giờ chụp</label><Input type="time" value={form.shootTime} onChange={e => setForm(f => ({ ...f, shootTime: e.target.value }))} /></div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-medium text-muted-foreground">Loại dịch vụ *</label>
+          <Select value={form.serviceCategory} onChange={e => setForm(f => ({ ...f, serviceCategory: e.target.value }))}>
+            {Object.entries(SERVICE_CAT).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </Select>
+        </div>
+        <div><label className="text-xs font-medium text-muted-foreground">Tên gói *</label><Input placeholder="VD: Gói VIP Cưới" value={form.packageType} onChange={e => setForm(f => ({ ...f, packageType: e.target.value }))} /></div>
+      </div>
+      <div><label className="text-xs font-medium text-muted-foreground">Địa điểm</label><Input placeholder="Địa điểm chụp..." value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} /></div>
+      <div className="grid grid-cols-3 gap-3">
+        <div><label className="text-xs font-medium text-muted-foreground">Tổng tiền *</label><Input type="number" placeholder="0" value={form.totalAmount} onChange={e => setForm(f => ({ ...f, totalAmount: e.target.value }))} /></div>
+        <div><label className="text-xs font-medium text-muted-foreground">Tiền cọc</label><Input type="number" placeholder="0" value={form.depositAmount} onChange={e => setForm(f => ({ ...f, depositAmount: e.target.value }))} /></div>
+        <div><label className="text-xs font-medium text-muted-foreground">Giảm giá</label><Input type="number" placeholder="0" value={form.discountAmount} onChange={e => setForm(f => ({ ...f, discountAmount: e.target.value }))} /></div>
+      </div>
+      <div><label className="text-xs font-medium text-muted-foreground">Ghi chú</label><Textarea rows={2} placeholder="Ghi chú thêm..." value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} /></div>
+      <div className="flex gap-2 pt-2">
+        <Button onClick={handleSubmit} disabled={loading} className="flex-1">{loading ? "Đang tạo..." : "Tạo đơn hàng"}</Button>
+        <Button variant="outline" onClick={onCancel}>Hủy</Button>
+      </div>
     </div>
   );
 }

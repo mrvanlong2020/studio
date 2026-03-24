@@ -3,21 +3,25 @@ import { Link, useLocation } from "wouter";
 import { 
   LayoutDashboard, CalendarDays, CheckSquare, Users, 
   FileText, Shirt, Package, Calculator, Bot, Settings, 
-  Moon, LogOut, Bell, Wallet, UserPlus, Menu 
+  Moon, LogOut, Bell, Wallet, UserPlus, Menu,
+  ClipboardList, Receipt, ScrollText, TrendingUp
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", label: "Tổng quan", icon: LayoutDashboard },
-  { href: "/calendar", label: "Lịch", icon: CalendarDays },
+  { href: "/calendar", label: "Lịch chụp", icon: CalendarDays },
+  { href: "/bookings", label: "Đơn hàng", icon: ClipboardList },
   { href: "/tasks", label: "Giao việc", icon: CheckSquare },
   { href: "/customers", label: "Khách Hàng", icon: Users },
   { href: "/quotes", label: "Báo giá", icon: FileText },
+  { href: "/contracts", label: "Hợp đồng", icon: ScrollText },
   { href: "/wardrobe", label: "Kho trang phục", icon: Shirt },
   { href: "/services", label: "Dịch vụ & Gói", icon: Package },
   { href: "/accounting", label: "Kế toán & Nhân sự", icon: Calculator },
+  { href: "/reports", label: "Báo cáo", icon: TrendingUp },
   { href: "/ai-assistant", label: "Trợ lý AI", icon: Bot },
-  { href: "/settings", label: "Cài đặt hệ thống", icon: Settings },
+  { href: "/settings", label: "Cài đặt", icon: Settings },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {

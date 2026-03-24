@@ -14,12 +14,15 @@ router.get("/tasks", async (req, res) => {
       id: tasksTable.id,
       title: tasksTable.title,
       description: tasksTable.description,
+      category: tasksTable.category,
       assigneeId: tasksTable.assigneeId,
       assigneeName: staffTable.name,
       bookingId: tasksTable.bookingId,
       priority: tasksTable.priority,
       status: tasksTable.status,
       dueDate: tasksTable.dueDate,
+      completedAt: tasksTable.completedAt,
+      notes: tasksTable.notes,
       createdAt: tasksTable.createdAt,
     })
     .from(tasksTable)
@@ -34,10 +37,10 @@ router.get("/tasks", async (req, res) => {
 });
 
 router.post("/tasks", async (req, res) => {
-  const { title, description, assigneeId, bookingId, priority, dueDate } = req.body;
+  const { title, description, category, assigneeId, bookingId, priority, dueDate, notes } = req.body;
   const [task] = await db
     .insert(tasksTable)
-    .values({ title, description, assigneeId, bookingId, priority, dueDate, status: "todo" })
+    .values({ title, description, category: category || "other", assigneeId, bookingId, priority: priority || "medium", dueDate, notes, status: "todo" })
     .returning();
 
   let assigneeName = null;

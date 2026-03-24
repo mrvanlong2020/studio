@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { paymentsTable } from "@workspace/db/schema";
+import { paymentsTable, bookingsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -34,7 +34,26 @@ router.post("/payments", async (req, res) => {
       notes,
     })
     .returning();
+
+  if (bookingId) {
+    const allPayments = await db.select().from(paymentsTable).where(eq(paymentsTable.bookingId, bookingId));
+    const totalPaid = allPayments.reduce((s, p) => s + parseFloat(p.amount), 0);
+    await db.update(bookingsTable).set({ paidAmount: String(totalPaid) }).where(eq(bookingsTable.id, bookingId));
+  }
+
   res.status(201).json({ ...payment, amount: parseFloat(payment.amount) });
+});
+
+router.delete("/payments/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id));
+  await db.delete(paymentsTable).where(eq(paymentsTable.id, id));
+  if (payment?.bookingId) {
+    const remaining = await db.select().from(paymentsTable).where(eq(paymentsTable.bookingId, payment.bookingId));
+    const totalPaid = remaining.reduce((s, p) => s + parseFloat(p.amount), 0);
+    await db.update(bookingsTable).set({ paidAmount: String(totalPaid) }).where(eq(bookingsTable.id, payment.bookingId));
+  }
+  res.status(204).send();
 });
 
 export default router;

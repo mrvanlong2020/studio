@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, date } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, date, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
@@ -10,7 +10,10 @@ export const staffTable = pgTable("staff", {
   phone: text("phone").notNull(),
   role: text("role").notNull().default("assistant"),
   email: text("email"),
+  avatar: text("avatar"),
   salary: text("salary"),
+  salaryType: text("salary_type").notNull().default("fixed"),
+  commissionRate: numeric("commission_rate", { precision: 5, scale: 2 }).notNull().default("0"),
   joinDate: date("join_date").notNull(),
   isActive: integer("is_active").notNull().default(1),
   notes: text("notes"),
@@ -21,11 +24,14 @@ export const tasksTable = pgTable("tasks", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   description: text("description"),
+  category: text("category").notNull().default("other"),
   assigneeId: integer("assignee_id").references(() => staffTable.id),
   bookingId: integer("booking_id").references(() => bookingsTable.id),
   priority: text("priority").notNull().default("medium"),
   status: text("status").notNull().default("todo"),
   dueDate: date("due_date"),
+  completedAt: timestamp("completed_at"),
+  notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -12,6 +12,9 @@ import servicesRouter from "./services";
 import accountingRouter from "./accounting";
 import staffRouter from "./staff";
 import settingsRouter from "./settings";
+import expensesRouter from "./expenses";
+import contractsRouter from "./contracts";
+import payrollsRouter from "./payrolls";
 
 const router: IRouter = Router();
 
@@ -28,5 +31,8 @@ router.use(servicesRouter);
 router.use(accountingRouter);
 router.use(staffRouter);
 router.use(settingsRouter);
+router.use(expensesRouter);
+router.use(contractsRouter);
+router.use(payrollsRouter);
 
 export default router;

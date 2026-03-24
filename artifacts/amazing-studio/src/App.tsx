@@ -12,6 +12,8 @@ import AccountingHrPage from "@/pages/accounting-hr";
 import AiAssistantPage from "@/pages/ai-assistant";
 import SettingsPage from "@/pages/settings";
 import BookingsPage from "@/pages/bookings";
+import ContractsPage from "@/pages/contracts";
+import ReportsPage from "@/pages/reports";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -39,6 +41,8 @@ function Router() {
         <Route path="/ai-assistant" component={AiAssistantPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route path="/bookings" component={BookingsPage} />
+        <Route path="/contracts" component={ContractsPage} />
+        <Route path="/reports" component={ReportsPage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

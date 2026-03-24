@@ -1,9 +1,29 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { bookingsTable, customersTable } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { bookingsTable, customersTable, paymentsTable, expensesTable, tasksTable, staffTable } from "@workspace/db/schema";
+import { eq, and, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
+
+const fmt = async (b: typeof bookingsTable.$inferSelect & { customerName: string; customerPhone: string }) => {
+  const payments = await db.select().from(paymentsTable).where(eq(paymentsTable.bookingId, b.id));
+  const paidAmount = payments.reduce((s, p) => s + parseFloat(p.amount), 0);
+  const totalAmount = parseFloat(b.totalAmount);
+  const depositAmount = parseFloat(b.depositAmount);
+  const expenses = await db.select().from(expensesTable).where(eq(expensesTable.bookingId, b.id));
+  const totalExpenses = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  return {
+    ...b,
+    totalAmount,
+    depositAmount,
+    paidAmount,
+    discountAmount: parseFloat(b.discountAmount ?? "0"),
+    remainingAmount: Math.max(0, totalAmount - paidAmount),
+    totalExpenses,
+    grossProfit: totalAmount - totalExpenses,
+    payments: payments.map(p => ({ ...p, amount: parseFloat(p.amount) })),
+  };
+};
 
 router.get("/bookings", async (req, res) => {
   const status = req.query.status as string | undefined;
@@ -12,15 +32,23 @@ router.get("/bookings", async (req, res) => {
   const rows = await db
     .select({
       id: bookingsTable.id,
+      orderCode: bookingsTable.orderCode,
       customerId: bookingsTable.customerId,
       customerName: customersTable.name,
       customerPhone: customersTable.phone,
       shootDate: bookingsTable.shootDate,
       shootTime: bookingsTable.shootTime,
+      serviceCategory: bookingsTable.serviceCategory,
       packageType: bookingsTable.packageType,
+      location: bookingsTable.location,
       status: bookingsTable.status,
+      items: bookingsTable.items,
       totalAmount: bookingsTable.totalAmount,
       depositAmount: bookingsTable.depositAmount,
+      paidAmount: bookingsTable.paidAmount,
+      discountAmount: bookingsTable.discountAmount,
+      assignedStaff: bookingsTable.assignedStaff,
+      internalNotes: bookingsTable.internalNotes,
       notes: bookingsTable.notes,
       createdAt: bookingsTable.createdAt,
     })
@@ -32,35 +60,64 @@ router.get("/bookings", async (req, res) => {
         customerId ? eq(bookingsTable.customerId, customerId) : undefined
       )
     )
-    .orderBy(bookingsTable.shootDate);
+    .orderBy(desc(bookingsTable.shootDate));
 
-  const bookings = rows.map((b) => ({
-    ...b,
-    totalAmount: parseFloat(b.totalAmount),
-    depositAmount: parseFloat(b.depositAmount),
-    remainingAmount: parseFloat(b.totalAmount) - parseFloat(b.depositAmount),
-  }));
+  const allPayments = await db.select().from(paymentsTable);
+
+  const bookings = rows.map((b) => {
+    const bPayments = allPayments.filter(p => p.bookingId === b.id);
+    const paidAmount = bPayments.reduce((s, p) => s + parseFloat(p.amount), 0);
+    const totalAmount = parseFloat(b.totalAmount);
+    return {
+      ...b,
+      totalAmount,
+      depositAmount: parseFloat(b.depositAmount),
+      paidAmount,
+      discountAmount: parseFloat(b.discountAmount ?? "0"),
+      remainingAmount: Math.max(0, totalAmount - paidAmount),
+    };
+  });
 
   res.json(bookings);
 });
 
 router.post("/bookings", async (req, res) => {
-  const { customerId, shootDate, shootTime, packageType, totalAmount, depositAmount, notes } = req.body;
+  const { customerId, shootDate, shootTime, serviceCategory, packageType, location, totalAmount, depositAmount, discountAmount, items, notes, internalNotes, assignedStaff } = req.body;
+  const count = await db.select().from(bookingsTable);
+  const orderCode = `DH${String(count.length + 1).padStart(4, "0")}`;
   const [booking] = await db
     .insert(bookingsTable)
     .values({
+      orderCode,
       customerId,
       shootDate,
       shootTime,
+      serviceCategory: serviceCategory || "wedding",
       packageType,
+      location,
       totalAmount: String(totalAmount),
-      depositAmount: String(depositAmount),
+      depositAmount: String(depositAmount || 0),
+      discountAmount: String(discountAmount || 0),
+      paidAmount: String(depositAmount || 0),
+      items: items || [],
       notes,
+      internalNotes,
+      assignedStaff: assignedStaff || [],
       status: "pending",
     })
     .returning();
 
   const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, customerId));
+
+  if (depositAmount && parseFloat(String(depositAmount)) > 0) {
+    await db.insert(paymentsTable).values({
+      bookingId: booking.id,
+      amount: String(depositAmount),
+      paymentMethod: "cash",
+      paymentType: "deposit",
+      notes: "Tiền cọc ban đầu",
+    });
+  }
 
   res.status(201).json({
     ...booking,
@@ -68,7 +125,9 @@ router.post("/bookings", async (req, res) => {
     customerPhone: customer.phone,
     totalAmount: parseFloat(booking.totalAmount),
     depositAmount: parseFloat(booking.depositAmount),
-    remainingAmount: parseFloat(booking.totalAmount) - parseFloat(booking.depositAmount),
+    paidAmount: parseFloat(booking.paidAmount),
+    discountAmount: parseFloat(booking.discountAmount ?? "0"),
+    remainingAmount: Math.max(0, parseFloat(booking.totalAmount) - parseFloat(booking.paidAmount)),
   });
 });
 
@@ -77,15 +136,23 @@ router.get("/bookings/:id", async (req, res) => {
   const [row] = await db
     .select({
       id: bookingsTable.id,
+      orderCode: bookingsTable.orderCode,
       customerId: bookingsTable.customerId,
       customerName: customersTable.name,
       customerPhone: customersTable.phone,
       shootDate: bookingsTable.shootDate,
       shootTime: bookingsTable.shootTime,
+      serviceCategory: bookingsTable.serviceCategory,
       packageType: bookingsTable.packageType,
+      location: bookingsTable.location,
       status: bookingsTable.status,
+      items: bookingsTable.items,
       totalAmount: bookingsTable.totalAmount,
       depositAmount: bookingsTable.depositAmount,
+      paidAmount: bookingsTable.paidAmount,
+      discountAmount: bookingsTable.discountAmount,
+      assignedStaff: bookingsTable.assignedStaff,
+      internalNotes: bookingsTable.internalNotes,
       notes: bookingsTable.notes,
       createdAt: bookingsTable.createdAt,
     })
@@ -93,37 +160,70 @@ router.get("/bookings/:id", async (req, res) => {
     .innerJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
     .where(eq(bookingsTable.id, id));
 
-  if (!row) return res.status(404).json({ error: "Booking not found" });
+  if (!row) return res.status(404).json({ error: "Không tìm thấy đơn hàng" });
+
+  const payments = await db.select().from(paymentsTable).where(eq(paymentsTable.bookingId, id));
+  const expenses = await db.select().from(expensesTable).where(eq(expensesTable.bookingId, id));
+  const tasks = await db
+    .select({
+      id: tasksTable.id, title: tasksTable.title, category: tasksTable.category,
+      status: tasksTable.status, priority: tasksTable.priority, dueDate: tasksTable.dueDate,
+      assigneeId: tasksTable.assigneeId, assigneeName: staffTable.name,
+    })
+    .from(tasksTable)
+    .leftJoin(staffTable, eq(tasksTable.assigneeId, staffTable.id))
+    .where(eq(tasksTable.bookingId, id));
+
+  const paidAmount = payments.reduce((s, p) => s + parseFloat(p.amount), 0);
+  const totalAmount = parseFloat(row.totalAmount);
+  const totalExpenses = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+
   res.json({
     ...row,
-    totalAmount: parseFloat(row.totalAmount),
+    totalAmount,
     depositAmount: parseFloat(row.depositAmount),
-    remainingAmount: parseFloat(row.totalAmount) - parseFloat(row.depositAmount),
+    paidAmount,
+    discountAmount: parseFloat(row.discountAmount ?? "0"),
+    remainingAmount: Math.max(0, totalAmount - paidAmount),
+    totalExpenses,
+    grossProfit: totalAmount - totalExpenses,
+    payments: payments.map(p => ({ ...p, amount: parseFloat(p.amount) })),
+    expenses: expenses.map(e => ({ ...e, amount: parseFloat(e.amount) })),
+    tasks,
   });
 });
 
 router.put("/bookings/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  const { shootDate, shootTime, packageType, status, totalAmount, depositAmount, notes } = req.body;
+  const { shootDate, shootTime, serviceCategory, packageType, location, status, totalAmount, depositAmount, discountAmount, items, notes, internalNotes, assignedStaff } = req.body;
 
   const updateData: Record<string, unknown> = {};
   if (shootDate !== undefined) updateData.shootDate = shootDate;
   if (shootTime !== undefined) updateData.shootTime = shootTime;
+  if (serviceCategory !== undefined) updateData.serviceCategory = serviceCategory;
   if (packageType !== undefined) updateData.packageType = packageType;
+  if (location !== undefined) updateData.location = location;
   if (status !== undefined) updateData.status = status;
   if (totalAmount !== undefined) updateData.totalAmount = String(totalAmount);
   if (depositAmount !== undefined) updateData.depositAmount = String(depositAmount);
+  if (discountAmount !== undefined) updateData.discountAmount = String(discountAmount);
+  if (items !== undefined) updateData.items = items;
   if (notes !== undefined) updateData.notes = notes;
+  if (internalNotes !== undefined) updateData.internalNotes = internalNotes;
+  if (assignedStaff !== undefined) updateData.assignedStaff = assignedStaff;
 
-  const [booking] = await db
-    .update(bookingsTable)
-    .set(updateData)
-    .where(eq(bookingsTable.id, id))
-    .returning();
+  if (Object.keys(updateData).length > 0) {
+    const payments = await db.select().from(paymentsTable).where(eq(paymentsTable.bookingId, id));
+    const paidAmount = payments.reduce((s, p) => s + parseFloat(p.amount), 0);
+    updateData.paidAmount = String(paidAmount);
+  }
 
-  if (!booking) return res.status(404).json({ error: "Booking not found" });
+  const [booking] = await db.update(bookingsTable).set(updateData).where(eq(bookingsTable.id, id)).returning();
+  if (!booking) return res.status(404).json({ error: "Không tìm thấy đơn hàng" });
 
   const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, booking.customerId));
+  const payments = await db.select().from(paymentsTable).where(eq(paymentsTable.bookingId, id));
+  const paidAmount = payments.reduce((s, p) => s + parseFloat(p.amount), 0);
 
   res.json({
     ...booking,
@@ -131,7 +231,9 @@ router.put("/bookings/:id", async (req, res) => {
     customerPhone: customer.phone,
     totalAmount: parseFloat(booking.totalAmount),
     depositAmount: parseFloat(booking.depositAmount),
-    remainingAmount: parseFloat(booking.totalAmount) - parseFloat(booking.depositAmount),
+    paidAmount,
+    discountAmount: parseFloat(booking.discountAmount ?? "0"),
+    remainingAmount: Math.max(0, parseFloat(booking.totalAmount) - paidAmount),
   });
 });
 

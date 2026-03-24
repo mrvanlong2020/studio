@@ -1,0 +1,401 @@
+Hãy xây cho tôi một web app quản lý vận hành studio chụp ảnh chuyên nghiệp bằng tiếng Việt, giao diện tối giản, dễ nhìn, dùng được trên điện thoại và máy tính. App này dành cho studio chụp cưới, beauty, fashion, gia đình và sự kiện.
+
+MỤC TIÊU APP
+Tôi cần một hệ thống quản lý toàn bộ quy trình của studio từ khách hàng -> báo giá -> tạo đơn -> thu tiền -> ký hợp đồng -> giao việc -> theo dõi chi phí -> tính lương nhân viên -> thống kê doanh thu/lợi nhuận -> báo cáo tháng.
+
+YÊU CẦU QUAN TRỌNG
+1. Bảng tạo đơn hàng và bảng thu tiền phải nằm CHUNG trong cùng 1 màn hình quản lý đơn hàng, không tách rời.
+2. Trong hồ sơ khách hàng phải có:
+   - Avatar
+   - Họ tên
+   - Số điện thoại
+   - Facebook link
+   - Ghi chú
+   - Nguồn khách (Facebook, TikTok, giới thiệu, khách cũ, khác)
+3. Sau khi báo giá xong phải có nút tạo hợp đồng ngay từ báo giá hoặc đơn hàng.
+4. Phải có dashboard biểu đồ doanh thu, chi phí, lợi nhuận theo tháng.
+5. Phải có thống kê công nợ khách hàng.
+6. Phải có phân quyền user: Chủ studio / Quản lý / Sale / Kế toán / Photographer / Editor / Makeup.
+7. Thiết kế app theo kiểu quản trị thật sự để dùng lâu dài, không làm demo sơ sài.
+
+CÔNG NGHỆ
+- Frontend: React + TypeScript + Tailwind
+- Backend: Node.js + Express hoặc Next.js API routes
+- Database: PostgreSQL hoặc Supabase
+- Auth: đăng nhập bằng email + mật khẩu
+- Charts: dùng thư viện biểu đồ đẹp, dễ đọc
+- Hỗ trợ upload hình avatar khách hàng và file hợp đồng PDF
+- Giao diện responsive, ưu tiên mobile first
+
+CÁC MODULE CHÍNH
+
+A. DASHBOARD TỔNG QUAN
+Hiển thị:
+- Doanh thu tháng hiện tại
+- Chi phí tháng hiện tại
+- Lợi nhuận tháng hiện tại
+- Số đơn mới
+- Số đơn đã cọc
+- Số đơn còn công nợ
+- Số show đang thực hiện
+- Số show đã hoàn thành
+- Doanh thu theo tháng (biểu đồ cột)
+- Tỷ lệ nguồn khách (biểu đồ tròn)
+- Top dịch vụ bán nhiều nhất
+- Top nhân viên tạo ra doanh thu
+- Danh sách các đơn sắp chụp
+- Danh sách khách còn nợ
+
+B. QUẢN LÝ KHÁCH HÀNG (CRM)
+Mỗi khách hàng có:
+- Mã khách hàng tự sinh
+- Avatar
+- Họ tên
+- Giới tính (tuỳ chọn)
+- Số điện thoại
+- Facebook link
+- Zalo (tuỳ chọn)
+- Địa chỉ (tuỳ chọn)
+- Nguồn khách
+- Ngày tạo khách
+- Ghi chú
+- Tags phân loại: khách mới / khách cũ / khách VIP / khách tiềm năng / khách đã chốt / khách chưa chốt
+
+Chức năng:
+- Tạo / sửa / xoá khách hàng
+- Tìm kiếm khách hàng theo tên, số điện thoại, Facebook
+- Xem lịch sử đơn hàng của khách
+- Xem tổng số tiền khách đã thanh toán
+- Gắn ghi chú nội bộ
+- Upload avatar
+
+C. BÁO GIÁ
+Cho phép tạo báo giá chuyên nghiệp theo từng gói dịch vụ:
+- Tên báo giá
+- Chọn khách hàng
+- Ngày báo giá
+- Hạn hiệu lực
+- Danh sách dịch vụ
+- Giá từng dịch vụ
+- Giảm giá
+- Phụ thu
+- Tổng tiền
+- Ghi chú
+- Trạng thái: nháp / đã gửi / khách đồng ý / khách từ chối / chuyển thành đơn
+
+Phải có:
+- Tạo báo giá từ mẫu có sẵn
+- In / xuất PDF báo giá
+- Nút “Chuyển thành đơn hàng”
+- Nút “Tạo hợp đồng từ báo giá”
+
+D. QUẢN LÝ DỊCH VỤ / BẢNG GIÁ
+Tạo module quản lý dịch vụ:
+- Chụp studio
+- Chụp ngày cưới
+- Chụp beauty
+- Chụp gia đình
+- Chụp ngoại cảnh
+- Thuê váy
+- Makeup
+- Album
+- Ảnh cổng
+- In ảnh
+- Quay phim
+- Phụ phí di chuyển
+- Phụ phí giờ thêm
+- Phụ phí chỉnh sửa thêm
+
+Mỗi dịch vụ có:
+- Tên dịch vụ
+- Mã dịch vụ
+- Nhóm dịch vụ
+- Giá bán
+- Giá vốn mặc định
+- Mô tả
+- Trạng thái hoạt động
+
+E. ĐƠN HÀNG / SHOW
+Đây là module quan trọng nhất.
+Mỗi đơn hàng phải có:
+- Mã đơn hàng tự sinh
+- Khách hàng
+- Ngày tạo đơn
+- Ngày chụp / ngày diễn ra show
+- Loại dịch vụ
+- Trạng thái đơn: mới / đã cọc / đang thực hiện / hoàn thành / huỷ
+- Danh sách dịch vụ trong đơn
+- Tổng tiền
+- Tiền cọc
+- Đã thanh toán
+- Còn nợ
+- Chi phí phát sinh
+- Lợi nhuận gộp tạm tính
+- Ghi chú nội bộ
+
+YÊU CẦU ĐẶC BIỆT:
+Trên cùng 1 màn hình chi tiết đơn hàng phải có:
+1. Thông tin đơn hàng
+2. Danh sách dịch vụ
+3. Thu tiền / lịch sử thanh toán
+4. Công nợ còn lại
+5. Chi phí của show
+6. Phân công nhân sự
+7. Timeline công việc
+8. File hợp đồng
+9. Nút in phiếu / xuất PDF
+
+Tức là KHÔNG tách riêng đơn hàng và thu tiền.
+
+F. THU TIỀN / CÔNG NỢ
+Trong module đơn hàng phải có phần thu tiền:
+- Ghi nhận cọc
+- Ghi nhận thanh toán nhiều lần
+- Chọn phương thức thanh toán: tiền mặt / chuyển khoản / khác
+- Ngày thanh toán
+- Số tiền
+- Người thu
+- Ghi chú
+- Tự động cập nhật còn nợ
+
+Phải có:
+- Lịch sử thanh toán theo từng đơn
+- Tổng công nợ toàn studio
+- Danh sách đơn quá hạn chưa thanh toán
+- Phiếu thu PDF
+
+G. CHI PHÍ / THU CHI
+Có module quản lý thu chi riêng nhưng liên kết với đơn hàng.
+Chi phí gồm 2 loại:
+1. Chi phí theo đơn/show:
+   - Makeup thuê ngoài
+   - Photographer thuê ngoài
+   - Editor thuê ngoài
+   - Di chuyển
+   - Ăn uống
+   - In ấn
+   - Đạo cụ
+   - Thuê váy / phụ kiện
+   - Khác
+2. Chi phí vận hành chung:
+   - Tiền thuê mặt bằng
+   - Điện nước
+   - Lương cứng
+   - Quảng cáo
+   - Mua thiết bị
+   - Khấu hao
+   - Internet
+   - Khác
+
+Mỗi khoản chi phải có:
+- Ngày
+- Loại chi
+- Số tiền
+- Liên kết đơn hàng nếu có
+- Người nhập
+- Ghi chú
+- Đính kèm hình hoá đơn (tuỳ chọn)
+
+Cần có:
+- Báo cáo thu chi theo ngày / tháng / năm
+- Lợi nhuận ròng = doanh thu - chi phí show - chi phí vận hành
+- Bộ lọc theo thời gian
+
+H. GIAO VIỆC / TASK
+Tạo hệ thống giao việc theo từng đơn hàng:
+- Chụp
+- Chỉnh ảnh
+- Thiết kế album
+- In ảnh
+- Giao ảnh
+- Chuẩn bị váy
+- Makeup
+- Gọi xác nhận lịch
+
+Mỗi task có:
+- Tên việc
+- Thuộc đơn hàng nào
+- Người phụ trách
+- Hạn hoàn thành
+- Mức độ ưu tiên
+- Trạng thái: chưa làm / đang làm / chờ duyệt / hoàn thành / trễ hạn
+- Ghi chú
+
+Cần có:
+- Bảng Kanban
+- Bảng danh sách
+- Lọc theo nhân viên
+- Lọc theo show
+- Cảnh báo quá hạn
+
+I. NHÂN VIÊN / CHẤM CÔNG / TÍNH LƯƠNG
+Quản lý nhân viên gồm:
+- Ảnh đại diện
+- Họ tên
+- Chức vụ
+- Số điện thoại
+- Mức lương cứng
+- Hình thức tính lương
+- Hoa hồng (nếu có)
+- Ngày vào làm
+- Trạng thái làm việc
+
+Các kiểu tính lương cần hỗ trợ:
+1. Lương cứng tháng
+2. Lương theo ngày
+3. Lương theo show
+4. Lương theo task
+5. Hoa hồng theo doanh số
+6. Phụ cấp
+
+Phải có:
+- Tạo bảng lương tháng
+- Tự động cộng lương từ show / task / commission
+- Trừ tạm ứng
+- Thưởng / phạt
+- Xuất phiếu lương
+- Báo cáo chi phí nhân sự theo tháng
+
+Ví dụ:
+- Photographer có thể được tính theo show
+- Editor có thể tính theo số job
+- Sale có thể có lương cứng + % doanh thu chốt được
+
+J. HỢP ĐỒNG
+Tạo module hợp đồng:
+- Tạo hợp đồng từ báo giá hoặc đơn hàng
+- Có mẫu hợp đồng sẵn để merge dữ liệu tự động
+- Tự điền thông tin khách hàng, dịch vụ, ngày chụp, số tiền, cọc, công nợ
+- Có ô chữ ký khách hàng và chữ ký đại diện studio
+- Cho phép xuất PDF
+
+Mẫu hợp đồng cần bao gồm:
+- Thông tin studio
+- Thông tin khách hàng
+- Nội dung dịch vụ
+- Tổng tiền
+- Thanh toán
+- Quy định đổi lịch / huỷ lịch
+- Quy định bàn giao hình ảnh
+- Quy định phát sinh
+- Điều khoản đồng ý
+
+K. BÁO CÁO / THỐNG KÊ
+Tạo trang báo cáo gồm:
+- Doanh thu theo tháng
+- Lợi nhuận theo tháng
+- Chi phí theo tháng
+- Doanh thu theo dịch vụ
+- Doanh thu theo nguồn khách
+- Doanh thu theo nhân viên sale
+- Tỷ lệ chốt đơn
+- Tổng số đơn theo trạng thái
+- Công nợ phải thu
+- Chi phí nhân sự
+- Top khách hàng quay lại
+- Biểu đồ trực quan
+
+L. PHÂN QUYỀN
+Chủ studio:
+- Xem và sửa tất cả
+Quản lý:
+- Xem dashboard, đơn hàng, khách hàng, task, báo cáo
+Sale:
+- Quản lý khách hàng, báo giá, đơn hàng của mình
+Kế toán:
+- Xem thu chi, công nợ, bảng lương
+Photographer / Editor / Makeup:
+- Chỉ xem task và show được phân công
+
+M. TÌM KIẾM / LỌC
+Phải có thanh tìm kiếm toàn cục cho:
+- Khách hàng
+- Đơn hàng
+- Số điện thoại
+- Facebook link
+- Mã đơn
+- Task
+
+N. MẪU DỮ LIỆU DEMO
+Khởi tạo sẵn dữ liệu mẫu:
+- 10 khách hàng
+- 15 đơn hàng
+- 5 nhân viên
+- 20 task
+- 10 giao dịch thu tiền
+- 10 khoản chi
+để tôi test ngay sau khi chạy
+
+O. UI/UX
+- Tối giản, sang, dễ dùng, không rối
+- Dùng tiếng Việt toàn bộ
+- Sidebar rõ ràng
+- Màu sắc chuyên nghiệp
+- Ưu tiên thao tác nhanh
+- Các form nhập liệu phải dễ nhìn trên điện thoại
+
+P. CẤU TRÚC DATABASE
+Hãy tự thiết kế database chuẩn hoá gồm các bảng:
+- users
+- roles
+- customers
+- services
+- quotations
+- quotation_items
+- orders
+- order_items
+- payments
+- expenses
+- tasks
+- employees
+- payrolls
+- payroll_items
+- contracts
+- activity_logs
+
+Q. LOGIC TÍNH TOÁN QUAN TRỌNG
+- Doanh thu = tổng tiền đơn hàng đã xác nhận
+- Thu thực tế = tổng các khoản payment đã nhận
+- Còn nợ = tổng tiền đơn - tổng payment
+- Lợi nhuận gộp show = doanh thu show - chi phí show
+- Lợi nhuận ròng tháng = tổng thu - tổng chi show - tổng chi vận hành - lương
+- Tự động cập nhật số liệu dashboard khi thêm/sửa/xoá giao dịch
+
+R. YÊU CẦU KỸ THUẬT
+- Viết code sạch, có cấu trúc
+- Có migration database
+- Có seed data
+- Có validation form
+- Có thông báo lỗi rõ ràng
+- Có xác nhận trước khi xoá
+- Có file README hướng dẫn cài đặt
+- Có script chạy local
+- Tạo luôn dữ liệu mẫu
+
+S. KẾT QUẢ CUỐI
+Sau khi hoàn tất, hãy:
+1. Tạo toàn bộ source code
+2. Tạo database schema
+3. Tạo dữ liệu mẫu
+4. Build các trang chính
+5. Kết nối dữ liệu thật
+6. Cho tôi test được ngay
+7. Viết README hướng dẫn dùng
+8. Nếu chưa làm xong hết 1 lần thì ưu tiên hoàn thành theo thứ tự:
+   - khách hàng
+   - dịch vụ
+   - báo giá
+   - đơn hàng + thu tiền chung 1 màn hình
+   - chi phí
+   - task
+   - dashboard
+   - nhân viên + bảng lương
+   - hợp đồng
+   - báo cáo
+
+Lưu ý:
+- Không làm kiểu demo tĩnh.
+- Phải làm CRUD thật.
+- Phải có dữ liệu thật đi qua database.
+- Mọi số liệu phải liên kết với nhau.
+- Tập trung làm module đơn hàng + thu tiền thật tốt vì đó là phần tôi dùng nhiều nhất.
