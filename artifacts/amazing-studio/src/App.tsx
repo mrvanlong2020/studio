@@ -8,6 +8,7 @@ import CustomersPage from "@/pages/customers";
 import QuotesPage from "@/pages/quotes";
 import WardrobePage from "@/pages/wardrobe";
 import ServicesPage from "@/pages/services";
+import ServiceDetailPage from "@/pages/service-detail";
 import PricingPage from "@/pages/pricing";
 import AccountingHrPage from "@/pages/accounting-hr";
 import AiAssistantPage from "@/pages/ai-assistant";
@@ -38,6 +39,7 @@ function Router() {
         <Route path="/quotes" component={QuotesPage} />
         <Route path="/wardrobe" component={WardrobePage} />
         <Route path="/pricing" component={PricingPage} />
+        <Route path="/services/:id" component={ServiceDetailPage} />
         <Route path="/services" component={ServicesPage} />
         <Route path="/accounting" component={AccountingHrPage} />
         <Route path="/ai-assistant" component={AiAssistantPage} />
