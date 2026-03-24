@@ -1,0 +1,217 @@
+Hãy chỉnh lại toàn bộ module lịch trong app theo đúng cách sử dụng giống Google Calendar trên điện thoại.
+
+MỤC TIÊU:
+Tôi muốn lịch dùng y như Google Lịch:
+- dễ nhìn
+- full màn hình
+- ô lịch dài hơn để thấy được nhiều show hơn
+- thao tác 3 bước giống Google Calendar:
+  1. xem tháng
+  2. bấm vào ngày
+  3. bấm vào giờ để tạo show / tạo đơn khách hàng
+
+==================================================
+1. GIAO DIỆN LỊCH THÁNG
+==================================================
+
+- Lịch tháng phải full tràn màn hình, tận dụng tối đa chiều ngang và chiều dọc
+- Các ô ngày phải cao hơn hiện tại để hiển thị được nhiều event hơn
+- Không để khung lịch nhỏ hoặc bị co lại như hiện tại
+- Tăng chiều cao từng ô ngày để có thể xem được nhiều lịch trong 1 ô
+- Event trong ô phải hiển thị gọn, dễ đọc, nhiều dòng hơn
+- Phong cách hiển thị phải giống Google Calendar mobile:
+  - sạch
+  - rõ
+  - tối giản
+  - dễ bấm
+
+Yêu cầu:
+- ô ngày nào có nhiều lịch thì hiển thị được nhiều event hơn
+- nếu vượt quá thì có dấu ...
+- bấm vào ngày thì chuyển sang màn hình xem ngày của đúng ngày đó
+
+==================================================
+2. KHI NHẤP VÀO MỘT NGÀY
+==================================================
+
+Khi tôi nhấp vào một ngày bất kỳ trong lịch tháng:
+- mở ra cửa sổ thứ 2 hoặc màn hình thứ 2
+- màn hình này là chế độ xem NGÀY giống Google Calendar
+- phải hiển thị timeline 24 giờ đầy đủ
+
+Ví dụ:
+00:00
+01:00
+02:00
+...
+23:00
+
+Yêu cầu:
+- hiển thị full 24h
+- kéo lên xuống mượt
+- các event nằm đúng theo khung giờ
+- giống giao diện Google Calendar ở chế độ xem ngày
+- có thể quay lại màn hình tháng dễ dàng
+- tiêu đề phải hiện đúng ngày đang xem
+
+==================================================
+3. KHI NHẤP VÀO MỘT GIỜ BẤT KỲ
+==================================================
+
+Khi tôi đang ở màn hình xem ngày (24h),
+nếu tôi nhấp vào một giờ bất kỳ, ví dụ 07:00 hoặc 14:00:
+
+- mở ra cửa sổ thứ 3
+- đây là cửa sổ tạo show / tạo đơn khách hàng
+- phải tự động lấy đúng:
+  + ngày đang xem
+  + giờ vừa bấm
+
+Ví dụ:
+đang ở ngày 12/03/2026
+bấm vào 07:00
+=> form phải tự điền:
+- ngày: 12/03/2026
+- giờ bắt đầu: 07:00
+
+==================================================
+4. CỬA SỔ THỨ 3 = FORM TẠO SHOW / ĐƠN KHÁCH HÀNG
+==================================================
+
+Cửa sổ thứ 3 này là phần quan trọng nhất.
+
+Tôi muốn dùng nó để tạo đơn khách hàng ngay tại lịch.
+
+Form gồm:
+
+A. THÔNG TIN KHÁCH HÀNG
+- tên khách hàng
+- số điện thoại
+- avatar khách hàng
+- nút dấu + để mở thêm:
+  + link Facebook
+  + link Zalo
+
+Yêu cầu:
+- nếu nhập số điện thoại đã có thì gợi ý khách cũ
+- nếu chưa có thì tự tạo khách mới
+
+B. THÔNG TIN LỊCH
+- ngày
+- giờ bắt đầu
+- giờ kết thúc
+- địa điểm
+- trạng thái
+
+C. DỊCH VỤ
+Cho phép thêm nhiều dòng dịch vụ
+
+Mỗi dòng gồm:
+- dịch vụ
+- photo
+- makeup
+- giá
+
+Cấu trúc mỗi dòng:
+[ Dịch vụ ] [ Photo ] [ Makeup ] [ Giá ]
+
+Ví dụ:
+- Chụp cổng | Trung | Hoa | 3.000.000
+- Chụp studio | Minh | Châu | 2.500.000
+
+Yêu cầu:
+- có thể thêm dòng
+- có thể xoá dòng
+- chọn dịch vụ từ danh mục có sẵn
+- giá tự đổ theo dịch vụ nhưng cho phép sửa tay
+
+D. THANH TOÁN
+- tổng giá tiền
+- số tiền đã thanh toán
+- số tiền còn lại
+
+Cho phép nhập:
+- cọc đợt 1
+- thanh toán đợt 2
+- thanh toán đợt 3
+
+Nhưng giao diện chính chỉ cần hiện:
+- tổng
+- đã thanh toán
+- còn lại
+
+==================================================
+5. FLOW PHẢI GIỐNG GOOGLE CALENDAR
+==================================================
+
+Tôi muốn flow sử dụng giống Google Calendar:
+
+Bước 1:
+Xem lịch tháng
+
+Bước 2:
+Bấm vào ngày bất kỳ
+=> chuyển sang xem ngày 24h
+
+Bước 3:
+Bấm vào một khung giờ bất kỳ
+=> mở form tạo show / tạo đơn khách hàng
+
+Bước 4:
+Lưu xong
+=> event hiện lại đúng trong lịch ngày và lịch tháng
+
+==================================================
+6. KHI BẤM VÀO EVENT CÓ SẴN
+==================================================
+
+Nếu tôi bấm vào một event đã có sẵn:
+- mở chi tiết show
+- cho xem và sửa:
+  + khách hàng
+  + dịch vụ
+  + photo
+  + makeup
+  + thanh toán
+  + ghi chú
+
+==================================================
+7. YÊU CẦU GIAO DIỆN
+==================================================
+
+- giao diện phải giống trải nghiệm Google Calendar mobile
+- lịch tháng full tràn màn hình
+- ô ngày cao hơn để xem nhiều lịch hơn
+- lịch ngày có timeline 24h
+- tạo show bằng cách bấm vào giờ
+- form mở ra mượt, dễ thao tác
+- tối ưu cho điện thoại
+- không làm kiểu demo
+
+==================================================
+8. YÊU CẦU KỸ THUẬT
+==================================================
+
+- dữ liệu lưu database thật
+- đồng bộ đúng ngày, đúng giờ
+- không bị lệch ngày giữa màn hình tháng, màn hình ngày và form tạo show
+- khi bấm ngày nào thì mọi nơi đều đúng ngày đó
+- khi bấm giờ nào thì form lấy đúng giờ đó
+- event tạo xong phải hiển thị lại đúng vị trí trên lịch
+
+==================================================
+9. MỤC TIÊU CUỐI
+==================================================
+
+Biến module lịch thành hệ thống sử dụng giống Google Calendar nhưng dành cho studio:
+
+- xem tháng
+- bấm ngày
+- xem lịch 24h
+- bấm giờ
+- tạo đơn khách hàng
+- thêm dịch vụ
+- phân công photo / makeup
+- nhập thanh toán
+
+Tất cả phải trực quan, nhanh, dễ dùng và đúng nghiệp vụ studio.
