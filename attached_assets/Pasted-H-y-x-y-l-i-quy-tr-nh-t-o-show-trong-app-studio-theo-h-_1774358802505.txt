@@ -1,0 +1,168 @@
+Hãy xây lại quy trình tạo show trong app studio theo hướng tối ưu thao tác, giống Google Calendar nhưng phục vụ vận hành studio chụp ảnh.
+
+MỤC TIÊU:
+Tôi muốn bấm trực tiếp vào lịch để tạo luôn:
+- khách hàng - số dt 
+- đơn hàng
+- dịch vụ
+- phân công nhân sự
+- thanh toán
+ xuát in hợp đồng cho khách ki tên hoặc tao mã qr ký tên
+Tất cả trong 1 form duy nhất, không chuyển nhiều màn hình.
+
+---------------------------------------
+
+QUY TRÌNH HOẠT ĐỘNG:
+
+1. Khi tôi bấm vào một khung giờ trên lịch
+→ mở form tạo show nhanh (popup hoặc panel bên phải)
+
+---------------------------------------
+
+A. THÔNG TIN LỊCH
+- Ngày
+- Giờ bắt đầu
+- Giờ kết thúc
+- Địa điểm (có thể nhập nhanh)
+
+---------------------------------------
+
+B. KHÁCH HÀNG
+- Tên khách hàng
+- Số điện thoại
+- Avatar khách hàng (upload hình hoặc lấy từ link)
+- Nút dấu + để mở thêm:
+  + Link Facebook
+  + Link Zalo
+
+YÊU CẦU:
+- Nếu nhập số điện thoại đã tồn tại → tự gợi ý khách cũ
+- Nếu chưa có → tự tạo khách mới
+- Lưu avatar + link Facebook + Zalo vào hồ sơ khách
+
+---------------------------------------
+
+C. TẠO ĐƠN HÀNG (NẰM NGAY BÊN DƯỚI)
+
+Cho phép nhập nhiều dòng dịch vụ (mặc định 3–5 dòng)
+
+Mỗi dòng gồm:
+- Dịch vụ (dropdown chọn từ danh mục)
+- Photo (người chụp chính)
+- Makeup (người trang điểm, có thể để trống)
+- Giá
+
+Cấu trúc mỗi dòng:
+[ Dịch vụ ] – [ Photo ] – [ Makeup ] – [ Giá ]
+
+Ví dụ:
+- Chụp cổng | Trung | Hoa | 3.000.000
+- Chụp tiệc nhà gái | Tiến | (trống) | 3.000.000
+- Chụp rước dâu | Trung | Hoa | 4.500.000
+
+YÊU CẦU:
+- Khi chọn dịch vụ → tự điền giá mặc định
+- Cho phép sửa giá thủ công
+- Cho phép thêm / xoá dòng dịch vụ
+- Không dùng từ “backup”, phải dùng “makeup” đúng nghiệp vụ
+
+---------------------------------------
+
+D. TỔNG TIỀN & THANH TOÁN
+
+Hiển thị cuối form:
+
+- Tổng giá tiền (auto cộng từ các dịch vụ)
+- Số tiền đã thanh toán
+- Số tiền còn lại
+
+Ví dụ:
+Tổng: 12.500.000
+Đã thanh toán: 1.500.000
+Còn lại: 11.000.000
+
+Phần thanh toán cho phép nhập nhanh:
+- Cọc đợt 1
+- Thanh toán đợt 2
+- Thanh toán đợt 3
+
+Nhưng giao diện chính chỉ hiển thị:
+- tổng
+- đã thanh toán
+- còn lại
+
+---------------------------------------
+
+E. KHI BẤM LƯU
+
+Hệ thống phải tự động:
+- tạo event trên lịch
+- tạo hoặc cập nhật khách hàng
+- tạo đơn hàng
+- tạo danh sách dịch vụ (order items)
+- lưu phân công photo + makeup cho từng dịch vụ
+- lưu tổng tiền
+- lưu số tiền đã thanh toán
+- tính và lưu công nợ
+
+---------------------------------------
+
+F. HIỂN THỊ TRÊN LỊCH
+
+Mỗi event phải hiển thị ngắn gọn:
+- giờ
+- tên khách
+- loại dịch vụ chính
+- photo chính
+- trạng thái thanh toán
+
+Ví dụ:
+07:00 – Huỳnh Như – Rước dâu – Trung – còn nợ 6tr
+
+---------------------------------------
+
+G. KHI BẤM VÀO EVENT
+
+Mở lại form chi tiết để:
+- sửa khách hàng
+- sửa dịch vụ
+- đổi nhân sự
+- cập nhật thanh toán
+
+---------------------------------------
+
+H. GIAO DIỆN
+
+- Tối giản, dễ dùng, giống Google Calendar
+- Tạo nhanh, không rườm rà
+- Dùng tốt trên điện thoại
+- Form chia hợp lý:
+  trái = khách + dịch vụ
+  phải = nhân sự + thanh toán
+
+---------------------------------------
+
+I. YÊU CẦU QUAN TRỌNG
+
+- Không làm UI demo
+- Phải bấm được, sửa được, lưu được
+- Dữ liệu lưu database thật
+- Liên kết với:
+  customers
+  orders
+  order_items
+  payments
+  employees
+
+---------------------------------------
+
+MỤC TIÊU CUỐI:
+
+Biến lịch thành trung tâm vận hành studio:
+- đặt lịch
+- tạo khách
+- tạo đơn
+- giao việc
+- theo dõi tiền
+
+tất cả trong một chỗ, thao tác nhanh nhất có thể.
