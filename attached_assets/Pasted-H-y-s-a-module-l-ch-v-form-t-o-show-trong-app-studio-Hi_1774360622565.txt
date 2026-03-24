@@ -1,0 +1,85 @@
+Hãy sửa module lịch và form tạo show trong app studio.
+
+Hiện tại đang bị lỗi:
+- Tôi bấm vào ngày 12 trên lịch
+- Nhưng trong form tạo show có chỗ hiện ngày 12, có chỗ lại hiện ngày 24
+- Như vậy là dữ liệu ngày đang không đồng bộ
+
+TÔI MUỐN SỬA NHƯ SAU:
+
+1. ĐỒNG BỘ NGÀY ĐANG CHỌN
+Khi tôi bấm vào một ngày bất kỳ trên lịch, ví dụ ngày 12:
+- tiêu đề form tạo show phải hiện đúng ngày 12
+- trường “Ngày” trong form cũng phải là ngày 12
+- dữ liệu lưu event cũng phải là ngày 12
+- tất cả chỗ liên quan đến ngày phải dùng cùng 1 nguồn dữ liệu
+- không được xảy ra tình trạng chỗ thì ngày 12, chỗ thì ngày 24
+
+Yêu cầu kỹ thuật:
+- dùng 1 selectedDate duy nhất
+- khi click ô lịch nào thì selectedDate cập nhật ngay
+- form tạo show, tiêu đề, input ngày và dữ liệu submit đều lấy từ selectedDate
+- nếu đổi ngày trong input form thì lịch và selectedDate cũng phải cập nhật lại theo
+- không để mỗi component tự giữ ngày riêng nữa
+
+2. GIAO DIỆN PHẢI GIỐNG GOOGLE CALENDAR HƠN
+Tôi muốn giao diện lịch có cảm giác giống Google Calendar:
+- bố cục sạch, thoáng, dễ nhìn
+- xem theo tháng / tuần / ngày
+- ô ngày rõ ràng
+- event nằm gọn trong ô
+- màu event dễ phân biệt
+- có cảm giác hiện đại, tối giản
+- thao tác mượt trên điện thoại
+
+3. HÀNH VI GIỐNG GOOGLE CALENDAR
+- bấm vào ô ngày nào thì ngày đó được chọn rõ ràng
+- bấm vào event thì mở chi tiết show
+- bấm vào ô trống thì mở form tạo show nhanh
+- form tạo show phải mở đúng ngày vừa bấm
+- có thể đóng mở nhanh như Google Calendar
+
+4. FORM TẠO SHOW
+Form tạo show phải tiếp tục giữ logic studio như hiện tại, gồm:
+A. Khách hàng
+- tên khách hàng
+- số điện thoại
+- avatar
+- link Facebook
+- link Zalo
+
+B. Lịch chụp
+- ngày
+- giờ bắt đầu
+- giờ kết thúc
+- địa điểm
+- trạng thái
+
+C. Dịch vụ
+Mỗi dòng gồm:
+- dịch vụ
+- photo
+- makeup
+- giá
+
+D. Tiền
+- tổng giá tiền
+- số tiền đã thanh toán
+- số tiền còn lại
+
+5. YÊU CẦU QUAN TRỌNG
+- sửa triệt để lỗi lệch ngày
+- không làm kiểu vá tạm
+- phải đồng bộ từ state đến UI đến submit data
+- giao diện lịch phải giống trải nghiệm Google Calendar hơn
+- vẫn giữ logic quản lý studio trong form
+
+6. KIỂM TRA SAU KHI SỬA
+Hãy tự test các trường hợp sau:
+- bấm ngày 12 thì mọi chỗ đều là ngày 12
+- bấm ngày 24 thì mọi chỗ đều là ngày 24
+- đổi ngày trong form thì dữ liệu cũng cập nhật đúng
+- tạo event xong event hiện đúng ngày đã chọn
+- không còn lỗi ngày bị lệch giữa lịch và form
+
+Tôi cần app dùng thật, nên phải sửa đúng logic chứ không chỉ sửa giao diện.
