@@ -1,0 +1,117 @@
+Hãy tạo cho tôi module “Danh mục bảng giá” trong app quản lý studio.
+
+Mục tiêu:
+Tôi không muốn lưu bảng giá dưới dạng ảnh tĩnh. Tôi muốn lưu bảng giá thành dữ liệu thật để có thể dùng cho báo giá, đơn hàng, hợp đồng, thu tiền và thống kê.
+
+Yêu cầu module gồm:
+
+1. NHÓM DỊCH VỤ
+Các nhóm dịch vụ gồm:
+- Album studio
+- Chụp ngày cưới
+- Combo ngày cưới
+- Trọn gói đám cưới
+- Beauty
+- Gia đình
+- Quay phim cưới
+- Thuê lễ / váy / vest / áo dài
+- In ảnh / ép gỗ / mica
+- Phụ phí / nâng cấp
+
+Mỗi nhóm có:
+- id
+- tên nhóm
+- mô tả
+- trạng thái hoạt động
+
+2. GÓI DỊCH VỤ
+Mỗi gói dịch vụ có:
+- mã gói
+- tên gói
+- thuộc nhóm nào
+- giá bán
+- giá vốn mặc định
+- mô tả ngắn
+- ghi chú
+- trạng thái hoạt động
+
+3. CHI TIẾT GÓI
+Mỗi gói có nhiều hạng mục chi tiết:
+- gói nào
+- tên hạng mục
+- số lượng
+- đơn vị
+- ghi chú
+- thứ tự hiển thị
+
+Ví dụ:
+Gói Album Studio Basic gồm:
+- 2 sare
+- 2 vest
+- bao trang điểm
+- album 25x35cm 20 trang in lụa
+- 2 hình cổng 60x90cm in lụa ép gỗ
+- tặng toàn bộ file gốc
+- tặng 10 hình 13x18
+
+4. PHỤ PHÍ / NÂNG CẤP
+Tạo bảng phụ phí riêng gồm:
+- tên phụ phí
+- nhóm phụ phí
+- giá
+- đơn vị tính: lần / buổi / bàn / tấm / km / người
+- mô tả
+- bật/tắt hoạt động
+
+Ví dụ:
+- Nâng cấp album ngọc trai +500000 / lần
+- Tiệc chiều tối +2000000 / buổi
+- Tiệc trên 40 bàn +500000 / lần
+- Chỉnh & bóp dáng 20 tấm +300000 / lần
+- Makeup chú rể +500000 / lần
+
+5. TÍNH NĂNG
+- CRUD đầy đủ cho nhóm dịch vụ, gói dịch vụ, chi tiết gói, phụ phí
+- Chọn gói dịch vụ khi tạo báo giá
+- Tự động đổ các hạng mục chi tiết vào báo giá
+- Có thể thêm/xoá sửa từng hạng mục khi báo giá
+- Có thể chọn thêm phụ phí / nâng cấp vào đơn hàng
+- Có nút “Tạo đơn hàng từ bảng giá”
+- Có nút “Tạo báo giá từ gói”
+- Có bộ lọc tìm kiếm theo tên gói, nhóm dịch vụ, trạng thái
+- Có dữ liệu mẫu sẵn để test
+
+6. DỮ LIỆU MẪU BAN ĐẦU
+Hãy nhập sẵn các gói sau:
+
+Album studio:
+- Basic 6500000
+- Normal 7500000
+- Luxury 9500000
+
+Chụp ngày cưới:
+- Basic 3000000
+- Premium 4500000
+- Luxury 7000000
+
+Combo ngày cưới có makeup:
+- Silver 6000000
+- Gold 9000000
+- Diamond 11000000
+- Luxury 13000000
+
+Combo ngày cưới không book makeup:
+- Silver 4500000
+- Gold 5900000
+- Diamond 7900000
+- Luxury 9900000
+
+Trọn gói đám cưới 2 ngày:
+- Trọn gói 13000000
+
+7. YÊU CẦU QUAN TRỌNG
+- Không lưu bảng giá dạng ảnh
+- Phải lưu vào database thật
+- Phải liên kết được với báo giá, đơn hàng và hợp đồng
+- Giao diện tiếng Việt
+- Dễ dùng trên điện thoại

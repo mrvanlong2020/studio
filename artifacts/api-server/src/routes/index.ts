@@ -15,6 +15,7 @@ import settingsRouter from "./settings";
 import expensesRouter from "./expenses";
 import contractsRouter from "./contracts";
 import payrollsRouter from "./payrolls";
+import pricingRouter from "./pricing";
 
 const router: IRouter = Router();
 
@@ -34,5 +35,6 @@ router.use(settingsRouter);
 router.use(expensesRouter);
 router.use(contractsRouter);
 router.use(payrollsRouter);
+router.use(pricingRouter);
 
 export default router;

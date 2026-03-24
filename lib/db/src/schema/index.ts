@@ -10,3 +10,4 @@ export * from "./accounting";
 export * from "./expenses";
 export * from "./contracts";
 export * from "./payrolls";
+export * from "./pricing";

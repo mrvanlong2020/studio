@@ -15,6 +15,7 @@ A wedding photography studio and wedding dress rental management system for "Ama
 - **Váy cưới (Dresses)**: Wedding dress inventory management
 - **Cho thuê váy (Rentals)**: Dress rental management with return tracking
 - **Thanh toán (Payments)**: Payment tracking (cash, bank transfer, MoMo, ZaloPay)
+- **Bảng giá (Pricing)**: Full pricing catalog — service groups, packages with detailed items, surcharges CRUD; 4 DB tables: service_groups, service_packages, package_items, surcharges; seed data with 11 groups, 15 packages, 10 surcharges
 
 ## Stack
 
