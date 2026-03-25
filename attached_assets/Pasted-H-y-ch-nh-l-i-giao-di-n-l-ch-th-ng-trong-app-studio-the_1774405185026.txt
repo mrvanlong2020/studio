@@ -1,0 +1,134 @@
+Hãy chỉnh lại giao diện lịch tháng trong app studio theo hướng ưu tiên vận hành thực tế, không ưu tiên khoảng trắng đẹp.
+
+VẤN ĐỀ HIỆN TẠI:
+- Event trong ô lịch tháng đang quá ngắn
+- Chỉ thấy được số giờ hoặc bị cắt mất tên khách
+- Không thấy rõ ai chụp
+- Ô ngày quá thấp nên không đủ chỗ để hiển thị nhiều thông tin
+- Nhìn ngoài lịch tháng chưa đủ để biết show nào của ai và ai phụ trách
+
+TÔI MUỐN SỬA NHƯ SAU:
+
+==================================================
+1. TĂNG CHIỀU CAO Ô NGÀY TRONG LỊCH THÁNG
+==================================================
+
+- Tăng chiều cao của mỗi ô ngày trong lịch tháng
+- Mục tiêu là mỗi ô ngày phải nhìn được ít nhất 3 slot / 3 event trong ngày đó
+- Nếu ngày nào có hơn 3 event thì mới hiện thêm dấu ...
+- Không làm ô quá thấp như hiện tại
+
+Yêu cầu:
+- chiều cao ô ngày lớn hơn rõ rệt so với hiện tại
+- ưu tiên hiển thị nhiều lịch hơn
+- có thể kéo dài toàn bộ lịch tháng xuống theo chiều dọc để đủ chỗ xem
+
+==================================================
+2. MỖI SLOT PHẢI HIỂN THỊ RÕ THÔNG TIN QUAN TRỌNG
+==================================================
+
+Trong mỗi event / slot ở lịch tháng, tôi muốn ưu tiên hiện theo thứ tự:
+
+1. Giờ
+2. Tên khách hàng
+3. Ai chụp (photo chính)
+4. Nếu còn chỗ thì hiện thêm job chụp
+
+Ví dụ format chuẩn:
+
+Cách 1:
+07h Ngọc Anh
+P: Trung
+
+Cách 2:
+07h Ngọc Anh
+Studio
+P: Trung
+
+Cách 3 nếu đủ 3 dòng:
+07h Ngọc Anh
+Chụp studio
+P: Trung
+
+Yêu cầu:
+- không chỉ hiện mỗi số giờ
+- phải nhìn thấy tên khách hàng
+- phải nhìn thấy ai chụp
+- nếu có makeup thì có thể hiện thêm ở dạng rút gọn:
+  P: Trung | M: Hoa
+
+==================================================
+3. ƯU TIÊN THÔNG TIN VẬN HÀNH THAY VÌ TRANG TRÍ
+==================================================
+
+- Giảm khoảng trắng thừa trong mỗi ô ngày
+- Tăng diện tích hiển thị cho event
+- Event card phải gọn nhưng chứa được nhiều thông tin hơn
+- Chấp nhận ô lịch nhìn dày hơn, miễn dễ quản lý show
+
+==================================================
+4. THIẾT KẾ LỊCH THÁNG KIỂU “DÀI HƠN”
+==================================================
+
+Tôi muốn phần lịch tháng kéo dài hơn theo chiều dọc để dễ xem,
+tức là:
+- toàn bộ tháng vẫn hiển thị đủ khoảng 30 ngày
+- nhưng mỗi hàng tuần phải cao hơn hiện tại
+- để nhìn được ít nhất 3 event/ngày
+- không bị ép ngắn như bây giờ
+
+==================================================
+5. LOGIC HIỂN THỊ EVENT
+==================================================
+
+Với mỗi event ở lịch tháng, hãy dùng logic hiển thị sau:
+
+Ưu tiên 1:
+- giờ bắt đầu
+
+Ưu tiên 2:
+- tên khách hàng
+
+Ưu tiên 3:
+- photo chính
+
+Ưu tiên 4:
+- job chụp hoặc makeup nếu còn chỗ
+
+Nếu text dài quá:
+- cắt gọn thông minh
+- nhưng vẫn phải giữ được tên khách
+- không được để chỉ còn mỗi giờ và dấu ...
+
+Ví dụ:
+ĐÚNG:
+07h Ngọc Anh
+P: Trung
+
+SAI:
+07h N...
+...
+
+==================================================
+6. MÀU SẮC EVENT
+==================================================
+
+Vẫn giữ màu phân loại event, nhưng nội dung trong event phải dễ đọc:
+- chữ rõ
+- tương phản tốt
+- không bị nhỏ quá
+- không bị dồn quá sát mép
+
+==================================================
+7. MỤC TIÊU CUỐI
+==================================================
+
+Khi nhìn lịch tháng, tôi muốn thấy ngay:
+- giờ nào có show
+- khách nào
+- ai chụp
+
+ít nhất phải xem được 3 slot trong 1 ngày mà không cần bấm vào mới biết.
+
+Đây là app vận hành studio, nên phải ưu tiên khả năng nhìn lịch nhanh và điều phối nhân sự nhanh.
+Không làm kiểu đẹp nhưng thiếu thông tin.

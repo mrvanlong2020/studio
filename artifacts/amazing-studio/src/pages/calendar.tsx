@@ -473,7 +473,7 @@ function MonthDayCell({
   date: Date; bookings: Booking[]; isSelected: boolean; isOtherMonth?: boolean;
   onDayClick: (d: Date) => void; onEventClick: (b: Booking) => void;
 }) {
-  const { lunar, tietKhi, solarHoliday, lunarHoliday } = useMemo(() => getLunarInfo(date), [date]);
+  const { lunar, solarHoliday, lunarHoliday } = useMemo(() => getLunarInfo(date), [date]);
   const isSun = date.getDay() === 0;
   const isSat = date.getDay() === 6;
   const isLunarNew = lunar.day === 1;
@@ -485,38 +485,38 @@ function MonthDayCell({
       className={[
         "group relative flex flex-col border-r border-b border-border/50 cursor-pointer select-none overflow-hidden",
         "transition-colors duration-100",
-        isSelected ? "bg-primary/5" : isToday(date) ? "bg-orange-50/40 dark:bg-orange-950/10" : "hover:bg-muted/30",
-        isOtherMonth ? "opacity-30" : "",
+        isSelected ? "bg-primary/5" : isToday(date) ? "bg-orange-50/30 dark:bg-orange-950/10" : "hover:bg-muted/20",
+        isOtherMonth ? "opacity-25" : "",
       ].join(" ")}
-      style={{ minHeight: "clamp(110px, 16vh, 180px)" }}
+      style={{ minHeight: "clamp(130px, calc((100vh - 260px) / 6), 220px)" }}
       onClick={() => onDayClick(date)}
     >
-      {/* Day number row */}
-      <div className="flex items-start justify-between px-1.5 pt-1.5 pb-0.5">
-        <div className="flex flex-col items-center">
+      {/* Day header — compact */}
+      <div className="flex items-center justify-between px-1.5 pt-1 pb-0.5 flex-shrink-0">
+        <div className="flex items-center gap-1">
           <span className={[
-            "text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full leading-none",
+            "text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full leading-none flex-shrink-0",
             isToday(date) ? "bg-primary text-primary-foreground" : isSun ? "text-red-500" : isSat ? "text-blue-600" : "text-foreground",
-            isSelected && !isToday(date) ? "ring-2 ring-primary ring-offset-1" : "",
+            isSelected && !isToday(date) ? "ring-2 ring-primary" : "",
           ].join(" ")}>
             {date.getDate()}
           </span>
           <span className={[
-            "text-[8px] leading-none mt-0.5 font-medium",
-            lunarHoliday ? "text-red-500" : isLunarNew ? "text-primary" : isRam ? "text-amber-600" : "text-muted-foreground/70",
+            "text-[8px] font-medium leading-none",
+            lunarHoliday ? "text-red-500" : isLunarNew ? "text-primary" : isRam ? "text-amber-600" : "text-muted-foreground/60",
           ].join(" ")}>
-            {isLunarNew ? `1/${lunar.month}` : isRam ? "Rằm" : lunar.day}
+            {isLunarNew ? `AL 1/${lunar.month}` : isRam ? "Rằm" : `AL${lunar.day}`}
           </span>
         </div>
-        {/* Tiết khí / holiday badge */}
-        <div className="flex flex-col items-end gap-0.5">
-          {tietKhi && <span className="text-[7px] text-orange-500 leading-none hidden sm:block truncate max-w-[40px]">{tietKhi}</span>}
-          {(solarHoliday || lunarHoliday) && <span className="text-[7px] text-red-500 font-semibold leading-none truncate max-w-[40px] hidden sm:block">{(solarHoliday || lunarHoliday)?.slice(0, 8)}</span>}
-        </div>
+        {(solarHoliday || lunarHoliday) && (
+          <span className="text-[7px] text-red-500 font-semibold leading-none truncate max-w-[36px] hidden sm:block">
+            {(solarHoliday || lunarHoliday)?.slice(0, 7)}
+          </span>
+        )}
       </div>
 
-      {/* Event chips — giờ · tên · job · photo · makeup */}
-      <div className="flex-1 px-1 pb-1 space-y-0.5 overflow-hidden">
+      {/* Event chips — ưu tiên: giờ → tên → photo → job */}
+      <div className="flex-1 px-1 pb-1 space-y-[3px] overflow-hidden">
         {bookings
           .slice()
           .sort((a, b) => (a.shootTime ?? "").localeCompare(b.shootTime ?? ""))
@@ -524,40 +524,48 @@ function MonthDayCell({
           .map(b => {
             const st = STATUS[b.status as keyof typeof STATUS] ?? STATUS.pending;
             const item = b.items?.[0];
-            const photoShort = item?.photoName?.split(" ").pop() ?? "";
-            const makeupShort = item?.makeupName?.split(" ").pop() ?? "";
-            const jobShort = item?.serviceName
-              ? item.serviceName.length > 12 ? item.serviceName.slice(0, 11) + "…" : item.serviceName
-              : b.packageType?.split("(")[0].trim().slice(0, 12) ?? "";
-            const hourStr = b.shootTime ? b.shootTime.slice(0, 5).replace(":00", "h") : "";
+            // Photo: lấy họ/tên cuối cùng (rút gọn)
+            const photoLast = item?.photoName?.split(" ").pop() ?? "";
+            const makeupLast = item?.makeupName?.split(" ").pop() ?? "";
+            // Job: rút gọn nếu dài
+            const jobText = (item?.serviceName || b.packageType?.split("(")[0].trim() || "").slice(0, 14);
+            // Giờ: "07h" hoặc "07:30"
+            const hourStr = b.shootTime
+              ? b.shootTime.endsWith(":00") ? b.shootTime.slice(0, 2) + "h" : b.shootTime.slice(0, 5)
+              : "";
+
             return (
               <button
                 key={b.id}
                 onClick={e => { e.stopPropagation(); onEventClick(b); }}
-                className={`w-full text-left rounded-sm px-1.5 py-0.5 font-semibold ${st.bar} hover:opacity-80 transition-opacity`}
+                className={`w-full text-left rounded px-1.5 py-[3px] ${st.bar} hover:brightness-95 transition-all`}
               >
-                {/* Dòng 1: giờ + tên */}
-                <div className="flex items-center gap-1 text-[9px] sm:text-[10px] truncate leading-tight">
-                  <span className="font-bold flex-shrink-0">{hourStr}</span>
-                  <span className="truncate">{b.customerName}</span>
+                {/* Dòng 1 (bắt buộc): Giờ + Tên khách */}
+                <div className="flex items-baseline gap-1 leading-tight">
+                  <span className="text-[10px] font-black flex-shrink-0">{hourStr}</span>
+                  <span className="text-[10px] font-semibold truncate">{b.customerName}</span>
                 </div>
-                {/* Dòng 2: job chụp */}
-                {jobShort && (
-                  <div className="text-[8px] sm:text-[9px] truncate leading-tight opacity-90">{jobShort}</div>
-                )}
-                {/* Dòng 3: photo + makeup (nếu có) */}
-                {(photoShort || makeupShort) && (
-                  <div className="text-[8px] sm:text-[9px] truncate leading-tight opacity-80">
-                    {photoShort && <span>P:{photoShort}</span>}
-                    {photoShort && makeupShort && <span> · </span>}
-                    {makeupShort && <span>M:{makeupShort}</span>}
+                {/* Dòng 2 (ưu tiên cao): Photo chính */}
+                {photoLast && (
+                  <div className="text-[9px] leading-tight font-medium opacity-90">
+                    P: {photoLast}{makeupLast ? ` · M: ${makeupLast}` : ""}
                   </div>
+                )}
+                {/* Dòng 3 (nếu không có photo, hiện job): Job chụp */}
+                {!photoLast && jobText && (
+                  <div className="text-[9px] leading-tight opacity-85 truncate">{jobText}</div>
+                )}
+                {/* Dòng 3 bonus: job sau photo nếu vừa chỗ */}
+                {photoLast && jobText && (
+                  <div className="text-[8px] leading-tight opacity-75 truncate hidden sm:block">{jobText}</div>
                 )}
               </button>
             );
           })}
         {bookings.length > MAX_VISIBLE && (
-          <div className="text-[9px] text-muted-foreground pl-1 font-medium">+{bookings.length - MAX_VISIBLE} nữa</div>
+          <div className="text-[9px] text-muted-foreground pl-1">
+            +{bookings.length - MAX_VISIBLE} show nữa
+          </div>
         )}
       </div>
     </div>
