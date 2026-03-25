@@ -14,7 +14,9 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 type PackageItem = { id?: number; name: string; quantity: string; unit: string; notes: string; sortOrder: number };
 type ServicePackage = {
   id: number; groupId: number | null; code: string; name: string;
-  price: number; costPrice: number; description: string; notes: string;
+  price: number; costPrice: number;
+  printCost: number; operatingCost: number; salePercent: number;
+  description: string; notes: string;
   isActive: boolean; sortOrder: number; items: PackageItem[];
 };
 type ServiceGroup = { id: number; name: string; description: string; isActive: boolean; sortOrder: number };
@@ -271,8 +273,16 @@ export default function PricingPage() {
                               {!pkg.isActive && <span className="text-[10px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground">Ẩn</span>}
                             </div>
                             <p className="text-xl font-bold text-primary mb-1">{formatVND(pkg.price)}</p>
-                            {pkg.costPrice > 0 && (
-                              <p className="text-xs text-muted-foreground">Giá vốn: {formatVNDShort(pkg.costPrice)}</p>
+                            {/* Chi phí cố định */}
+                            {(pkg.printCost > 0 || pkg.operatingCost > 0 || pkg.salePercent > 0) && (
+                              <div className="mt-1.5 space-y-0.5 text-[11px] text-muted-foreground">
+                                {pkg.printCost > 0 && <p>🖨️ In ấn: {formatVNDShort(pkg.printCost)}</p>}
+                                {pkg.operatingCost > 0 && <p>⚡ Vận hành: {formatVNDShort(pkg.operatingCost)}</p>}
+                                {pkg.salePercent > 0 && <p>💼 Sale: {pkg.salePercent}% ≈ {formatVNDShort(Math.round(pkg.price * pkg.salePercent / 100))}</p>}
+                                <p className="text-green-600 font-semibold">
+                                  📊 Lợi nhuận (chưa trừ nhân sự): {formatVNDShort(pkg.price - pkg.printCost - pkg.operatingCost - Math.round(pkg.price * pkg.salePercent / 100))}
+                                </p>
+                              </div>
                             )}
                             {pkg.items.length > 0 && (
                               <p className="text-xs text-muted-foreground mt-1.5">{pkg.items.length} hạng mục</p>
@@ -414,22 +424,37 @@ export default function PricingPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-5 space-y-5">
-            {/* Price info */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-4 bg-primary/5 rounded-xl border border-primary/10">
-                <p className="text-xs text-muted-foreground mb-1">Giá bán</p>
-                <p className="text-2xl font-bold text-primary">{formatVND(selectedPkg.price)}</p>
-              </div>
-              <div className="p-4 bg-muted/40 rounded-xl">
-                <p className="text-xs text-muted-foreground mb-1">Giá vốn</p>
-                <p className="text-xl font-bold">{formatVND(selectedPkg.costPrice)}</p>
-                {selectedPkg.price > 0 && selectedPkg.costPrice > 0 && (
-                  <p className="text-xs text-emerald-600 mt-0.5">
-                    Lợi nhuận: {Math.round((1 - selectedPkg.costPrice / selectedPkg.price) * 100)}%
-                  </p>
-                )}
-              </div>
+            {/* Price info + cost breakdown */}
+            <div className="p-4 bg-primary/5 rounded-xl border border-primary/10">
+              <p className="text-xs text-muted-foreground mb-1">Giá bán</p>
+              <p className="text-2xl font-bold text-primary">{formatVND(selectedPkg.price)}</p>
             </div>
+            {(selectedPkg.printCost > 0 || selectedPkg.operatingCost > 0 || selectedPkg.salePercent > 0) && (() => {
+              const saleAmt = Math.round(selectedPkg.price * selectedPkg.salePercent / 100);
+              const fixedCost = selectedPkg.printCost + selectedPkg.operatingCost + saleAmt;
+              const profitBeforeStaff = selectedPkg.price - fixedCost;
+              return (
+                <div className="p-4 bg-muted/30 rounded-xl border border-border space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Chi phí cố định</p>
+                  <div className="space-y-1 text-sm">
+                    {selectedPkg.printCost > 0 && (
+                      <div className="flex justify-between"><span className="text-muted-foreground">🖨️ In ấn</span><span>{formatVND(selectedPkg.printCost)}</span></div>
+                    )}
+                    {selectedPkg.operatingCost > 0 && (
+                      <div className="flex justify-between"><span className="text-muted-foreground">⚡ Vận hành</span><span>{formatVND(selectedPkg.operatingCost)}</span></div>
+                    )}
+                    {selectedPkg.salePercent > 0 && (
+                      <div className="flex justify-between"><span className="text-muted-foreground">💼 Sale ({selectedPkg.salePercent}%)</span><span>≈ {formatVND(saleAmt)}</span></div>
+                    )}
+                  </div>
+                  <div className="border-t border-border pt-2 flex justify-between text-sm font-semibold">
+                    <span className="text-muted-foreground">Còn lại (chưa trừ nhân sự)</span>
+                    <span className={profitBeforeStaff >= 0 ? "text-green-600" : "text-destructive"}>{formatVND(profitBeforeStaff)}</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground italic">* Chi phí nhiếp ảnh & trang điểm tính theo bảng giá riêng của từng nhân sự</p>
+                </div>
+              );
+            })()}
 
             {selectedPkg.description && (
               <div>
@@ -548,6 +573,9 @@ function PackageModal({
     name: pkg?.name ?? "",
     price: pkg?.price?.toString() ?? "",
     costPrice: pkg?.costPrice?.toString() ?? "",
+    printCost: pkg?.printCost?.toString() ?? "",
+    operatingCost: pkg?.operatingCost?.toString() ?? "",
+    salePercent: pkg?.salePercent?.toString() ?? "",
     description: pkg?.description ?? "",
     notes: pkg?.notes ?? "",
     isActive: pkg?.isActive ?? true,
@@ -574,6 +602,9 @@ function PackageModal({
         groupId: form.groupId ? parseInt(form.groupId) : null,
         price: parseFloat(form.price) || 0,
         costPrice: parseFloat(form.costPrice) || 0,
+        printCost: parseFloat(form.printCost) || 0,
+        operatingCost: parseFloat(form.operatingCost) || 0,
+        salePercent: parseFloat(form.salePercent) || 0,
         items: items.filter(it => it.name.trim()).map((it, i) => ({ ...it, sortOrder: i })),
       };
       const url = pkg ? `${BASE}/api/service-packages/${pkg.id}` : `${BASE}/api/service-packages`;
@@ -630,27 +661,51 @@ function PackageModal({
             <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Nhập tên gói dịch vụ" className="h-9 text-sm" />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Giá bán (đ)</label>
-              <Input
-                type="number"
-                value={form.price}
-                onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
-                placeholder="0"
-                className="h-9 text-sm"
-              />
+          {/* Giá bán */}
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1.5">💰 Giá bán (đ) <span className="text-destructive">*</span></label>
+            <Input type="number" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} placeholder="0" className="h-9 text-sm" />
+          </div>
+
+          {/* Chi phí cố định */}
+          <div className="p-3 bg-muted/30 rounded-xl border border-border space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Chi phí cố định (tự động tính)</p>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] text-muted-foreground mb-1">🖨️ In ấn (đ)</label>
+                <Input type="number" value={form.printCost} onChange={e => setForm(f => ({ ...f, printCost: e.target.value }))} placeholder="0" className="h-8 text-sm" />
+              </div>
+              <div>
+                <label className="block text-[11px] text-muted-foreground mb-1">⚡ Vận hành (đ)</label>
+                <Input type="number" value={form.operatingCost} onChange={e => setForm(f => ({ ...f, operatingCost: e.target.value }))} placeholder="0" className="h-8 text-sm" />
+              </div>
+              <div>
+                <label className="block text-[11px] text-muted-foreground mb-1">💼 Sale (%)</label>
+                <Input type="number" value={form.salePercent} onChange={e => setForm(f => ({ ...f, salePercent: e.target.value }))} placeholder="10" className="h-8 text-sm" />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Giá vốn (đ)</label>
-              <Input
-                type="number"
-                value={form.costPrice}
-                onChange={e => setForm(f => ({ ...f, costPrice: e.target.value }))}
-                placeholder="0"
-                className="h-9 text-sm"
-              />
-            </div>
+            {/* Live preview */}
+            {(() => {
+              const p = parseFloat(form.price) || 0;
+              const pc = parseFloat(form.printCost) || 0;
+              const oc = parseFloat(form.operatingCost) || 0;
+              const sp = parseFloat(form.salePercent) || 0;
+              const saleAmt = Math.round(p * sp / 100);
+              const remaining = p - pc - oc - saleAmt;
+              if (p <= 0) return null;
+              return (
+                <div className="text-xs bg-background rounded-lg px-3 py-2 space-y-0.5 border border-border">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Sale {sp}%</span><span>≈ {remaining < 0 ? '-' : ''}{Math.abs(saleAmt).toLocaleString("vi-VN")}đ</span>
+                  </div>
+                  <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1">
+                    <span>Còn lại (chưa trừ nhân sự)</span>
+                    <span className={remaining >= 0 ? "text-green-600" : "text-destructive"}>{remaining.toLocaleString("vi-VN")}đ</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground italic">* Trừ thêm chi phí nhân sự khi tạo lịch</p>
+                </div>
+              );
+            })()}
           </div>
 
           <div>

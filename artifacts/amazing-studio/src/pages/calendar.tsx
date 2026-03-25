@@ -35,9 +35,9 @@ type Customer = {
 type Staff = { id: number; name: string; role: string; roles: string[]; isActive: boolean; staffType?: string };
 type ServiceSplit = { role: string; amount: number; rateType: "fixed" | "percent" };
 type Service = { id: number; name: string; price: number; category: string; code: string; splits?: ServiceSplit[] };
-type ServiceOption = { key: string; name: string; price: number; splits?: ServiceSplit[] };
+type ServiceOption = { key: string; name: string; price: number; splits?: ServiceSplit[]; printCost?: number; operatingCost?: number; salePercent?: number };
 type OrderLine = {
-  tempId: string; serviceName: string; serviceId: number | null; price: number;
+  tempId: string; serviceName: string; serviceId: number | null; serviceKey: string; price: number;
   photoId: number | null; photoName: string; photoTask: string;
   makeupId: number | null; makeupName: string; makeupTask: string;
 };
@@ -130,13 +130,14 @@ function OrderLineRow({ line, photographers, makeupArtists, services, onChange, 
 }) {
   const [useCustom, setUseCustom] = useState(!line.serviceId && !!line.serviceName);
 
-  // Find the selected service to show splits preview
-  const selectedSvc = line.serviceId
-    ? services.find(s => s.key === `svc-${line.serviceId}`)
-    : null;
+  // Find the selected service/package to show preview (use serviceKey to support both svc- and pkg- prefixes)
+  const selectedSvc = line.serviceKey ? services.find(s => s.key === line.serviceKey) : null;
   const splits = selectedSvc?.splits || [];
   const photoSplit = splits.find(sp => sp.role === "photographer");
   const makeupSplit = splits.find(sp => sp.role === "makeup");
+  const isPkg = selectedSvc?.key?.startsWith("pkg-");
+  const pkgSaleAmt = isPkg ? Math.round(line.price * (selectedSvc?.salePercent || 0) / 100) : 0;
+  const pkgFixedCost = isPkg ? ((selectedSvc?.printCost || 0) + (selectedSvc?.operatingCost || 0) + pkgSaleAmt) : 0;
 
   function calcSplit(sp: ServiceSplit | undefined): number {
     if (!sp) return 0;
@@ -148,13 +149,13 @@ function OrderLineRow({ line, photographers, makeupArtists, services, onChange, 
       <div className="flex gap-1.5 items-center">
         <select
           className="flex-1 h-9 border border-input rounded-lg px-2 text-sm bg-background"
-          value={line.serviceId != null ? `svc-${line.serviceId}` : useCustom ? "_custom" : ""}
+          value={line.serviceKey && line.serviceKey !== "" ? line.serviceKey : useCustom ? "_custom" : ""}
           onChange={e => {
-            if (e.target.value === "_custom") { setUseCustom(true); onChange({ ...line, serviceId: null, serviceName: "" }); return; }
+            if (e.target.value === "_custom") { setUseCustom(true); onChange({ ...line, serviceId: null, serviceKey: "", serviceName: "" }); return; }
             setUseCustom(false);
             const svc = services.find(s => s.key === e.target.value);
             const idNum = e.target.value.startsWith("svc-") ? parseInt(e.target.value.replace("svc-", "")) : null;
-            onChange({ ...line, serviceId: idNum, serviceName: svc?.name ?? "", price: svc ? svc.price : line.price });
+            onChange({ ...line, serviceId: idNum, serviceKey: e.target.value, serviceName: svc?.name ?? "", price: svc ? svc.price : line.price });
           }}
         >
           <option value="">— Chọn dịch vụ —</option>
@@ -249,6 +250,27 @@ function OrderLineRow({ line, photographers, makeupArtists, services, onChange, 
           </div>
         )}
       </div>
+
+      {/* Package fixed cost breakdown */}
+      {isPkg && line.price > 0 && selectedSvc && (
+        <div className="text-[11px] bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 space-y-0.5">
+          <p className="font-semibold text-amber-800 mb-1">Chi phí cố định</p>
+          {(selectedSvc.printCost || 0) > 0 && (
+            <div className="flex justify-between text-amber-700"><span>🖨️ In ấn</span><span>{fmtVND(selectedSvc.printCost || 0)}</span></div>
+          )}
+          {(selectedSvc.operatingCost || 0) > 0 && (
+            <div className="flex justify-between text-amber-700"><span>⚡ Vận hành</span><span>{fmtVND(selectedSvc.operatingCost || 0)}</span></div>
+          )}
+          {(selectedSvc.salePercent || 0) > 0 && (
+            <div className="flex justify-between text-amber-700"><span>💼 Sale {selectedSvc.salePercent}%</span><span>≈ {fmtVND(pkgSaleAmt)}</span></div>
+          )}
+          <div className="flex justify-between font-semibold text-green-700 border-t border-amber-200 pt-1 mt-1">
+            <span>Còn lại (chưa trừ nhân sự)</span>
+            <span>{fmtVND(line.price - pkgFixedCost)}</span>
+          </div>
+          <p className="text-[9px] text-amber-600 italic">* Chi phí photo & makeup tính từ bảng giá nhân sự</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -298,8 +320,8 @@ function ShowFormPanel({
   };
 
   const [lines, setLines] = useState<OrderLine[]>(() => {
-    if (booking?.items?.length) return booking.items.map(i => ({ photoTask: "", makeupTask: "", ...i, tempId: genId() }));
-    return [{ tempId: genId(), serviceName: "", serviceId: null, price: 0, photoId: null, photoName: "", photoTask: "", makeupId: null, makeupName: "", makeupTask: "" }];
+    if (booking?.items?.length) return booking.items.map(i => ({ photoTask: "", makeupTask: "", serviceKey: "", ...i, tempId: genId() }));
+    return [{ tempId: genId(), serviceName: "", serviceId: null, serviceKey: "", price: 0, photoId: null, photoName: "", photoTask: "", makeupId: null, makeupName: "", makeupTask: "" }];
   });
 
   const [deposit, setDeposit] = useState(booking?.depositAmount?.toString() ?? "0");
@@ -309,7 +331,7 @@ function ShowFormPanel({
 
   const { data: allStaff = [] } = useQuery<Staff[]>({ queryKey: ["staff"], queryFn: () => fetch(`${BASE}/api/staff`).then(r => r.json()) });
   const { data: services = [] } = useQuery<Service[]>({ queryKey: ["services"], queryFn: () => fetch(`${BASE}/api/services`).then(r => r.json()) });
-  const { data: pricingPackages = [] } = useQuery<{ id: number; name: string; price: number }[]>({ queryKey: ["service-packages"], queryFn: () => fetch(`${BASE}/api/service-packages`).then(r => r.json()) });
+  const { data: pricingPackages = [] } = useQuery<{ id: number; name: string; price: number; printCost: number; operatingCost: number; salePercent: number }[]>({ queryKey: ["service-packages"], queryFn: () => fetch(`${BASE}/api/service-packages`).then(r => r.json()) });
 
   // Support both old single-role and new multi-role staff
   const hasRole = (s: Staff, role: string) => s.roles?.includes(role) || s.role === role;
@@ -330,7 +352,7 @@ function ShowFormPanel({
   const [photoshopTask, setPhotoshopTask] = useState<string>(() => String(getAssignedObj().photoshopTask ?? "mac_dinh"));
   const allServices: ServiceOption[] = [
     ...services.map(s => ({ key: `svc-${s.id}`, name: s.name, price: s.price, splits: s.splits || [] })),
-    ...pricingPackages.map(p => ({ key: `pkg-${p.id}`, name: p.name, price: p.price, splits: [] })),
+    ...pricingPackages.map(p => ({ key: `pkg-${p.id}`, name: p.name, price: p.price, splits: [], printCost: p.printCost || 0, operatingCost: p.operatingCost || 0, salePercent: p.salePercent || 0 })),
   ];
 
   const totalAmount = lines.reduce((s, l) => s + (l.price || 0), 0);
@@ -570,7 +592,7 @@ function ShowFormPanel({
                 <span className="normal-case text-[10px] font-normal text-muted-foreground/60">(tuỳ chọn)</span>
               </h4>
               <button
-                onClick={() => setLines(p => [...p, { tempId: genId(), serviceName: "", serviceId: null, price: 0, photoId: null, photoName: "", photoTask: "", makeupId: null, makeupName: "", makeupTask: "" }])}
+                onClick={() => setLines(p => [...p, { tempId: genId(), serviceName: "", serviceId: null, serviceKey: "", price: 0, photoId: null, photoName: "", photoTask: "", makeupId: null, makeupName: "", makeupTask: "" }])}
                 className="flex items-center gap-1 text-xs text-primary hover:underline font-medium"
               >
                 <Plus className="w-3 h-3" /> Thêm dòng
