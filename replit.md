@@ -16,6 +16,11 @@ A wedding photography studio and wedding dress rental management system for "Ama
 - **Cho thuê váy (Rentals)**: Dress rental management with return tracking
 - **Thanh toán (Payments)**: Payment tracking (cash, bank transfer, MoMo, ZaloPay)
 - **Bảng giá (Pricing)**: Full pricing catalog — service groups, packages with detailed items, surcharges CRUD; 4 DB tables: service_groups, service_packages, package_items, surcharges; seed data with 11 groups, 15 packages, 10 surcharges
+- **Nhân sự & Lương (Staff & Payroll)** `/staff`: Full HR system with multi-role staff (sale/photographer/makeup/photoshop/marketing), salary rates by service×role, individual overrides, auto job earnings computation on booking completion, monthly earnings dashboard
+  - DB: `staff.roles` (jsonb array), `staff_salary_rates`, `staff_salary_overrides`, `staff_job_earnings`, `staff_kpi_config`
+  - API: `/api/salary-rates`, `/api/salary-overrides`, `/api/job-earnings`, `/api/job-earnings/compute/:id`
+  - Auto-compute: When booking → "completed" status, earns for each assigned staff member auto-generated
+  - Calendar form: Booking-level sale/photoshop selectors added; `assignedStaff` stored as object `{photographer, makeup, sale, photoshop}`
 
 ## Stack
 

@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useGetAccountingSummary, useListStaff, useListTransactions } from "@workspace/api-client-react";
 import { formatVND, formatDate } from "@/lib/utils";
 import { Button, Input, Select, Textarea, Dialog, DialogContent, DialogHeader, DialogTitle, Badge, Tabs, TabsList, TabsTrigger, TabsContent, Card, CardContent } from "@/components/ui";
-import { Plus, TrendingUp, TrendingDown, DollarSign, Briefcase, Receipt, Users, Wallet, Trash2, Edit, User } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, DollarSign, Briefcase, Receipt, Users, Wallet, Trash2, Edit, User, ExternalLink } from "lucide-react";
+import { Link } from "wouter";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const fetchJson = (url: string, opts?: RequestInit) =>
@@ -82,11 +83,16 @@ export default function AccountingHrPage() {
         </div>
       </div>
 
+      <div className="flex items-center justify-end mb-2">
+        <Link href="/staff" className="flex items-center gap-1.5 text-sm text-primary hover:underline font-medium">
+          <ExternalLink className="w-3.5 h-3.5" />Quản lý Nhân sự & Lương
+        </Link>
+      </div>
+
       <Tabs defaultValue="accounting" className="w-full">
         <TabsList className="mb-4">
           <TabsTrigger value="accounting">Kế toán</TabsTrigger>
           <TabsTrigger value="expenses">Chi phí</TabsTrigger>
-          <TabsTrigger value="hr">Nhân sự</TabsTrigger>
           <TabsTrigger value="payroll">Bảng lương</TabsTrigger>
         </TabsList>
 
@@ -236,59 +242,6 @@ export default function AccountingHrPage() {
                 ))}
               </tbody>
             </table>
-          </div>
-        </TabsContent>
-
-        {/* HR TAB */}
-        <TabsContent value="hr" className="space-y-4">
-          <div className="rounded-xl border overflow-hidden">
-            <div className="p-4 border-b flex justify-between items-center">
-              <h3 className="font-bold">Danh sách nhân sự ({staff.length})</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-muted-foreground text-xs uppercase font-semibold">
-                  <tr>
-                    <th className="px-4 py-3 text-left">Nhân viên</th>
-                    <th className="px-4 py-3 text-left">Chức vụ</th>
-                    <th className="px-4 py-3 text-left">Loại lương</th>
-                    <th className="px-4 py-3 text-left">Ngày vào làm</th>
-                    <th className="px-4 py-3 text-right">Mức lương</th>
-                    <th className="px-4 py-3 text-center">Trạng thái</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {staff.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-muted-foreground">Chưa có nhân viên</td></tr>}
-                  {staff.map((s: any) => (
-                    <tr key={s.id} className="hover:bg-muted/30">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
-                            {s.name.charAt(0)}
-                          </div>
-                          <div>
-                            <p className="font-medium">{s.name}</p>
-                            <p className="text-xs text-muted-foreground">{s.phone}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge variant="secondary">{ROLE_LABELS[s.role] ?? s.role}</Badge>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">
-                        {s.salaryType === "fixed" ? "Cố định" : s.salaryType === "hourly" ? "Theo giờ" : "Hoa hồng"}
-                        {s.commissionRate && ` (${s.commissionRate}%)`}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">{formatDate(s.joinDate)}</td>
-                      <td className="px-4 py-3 text-right font-medium">{formatVND(s.salary)}</td>
-                      <td className="px-4 py-3 text-center">
-                        {s.isActive ? <Badge variant="success">Đang làm</Badge> : <Badge variant="destructive">Đã nghỉ</Badge>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           </div>
         </TabsContent>
 

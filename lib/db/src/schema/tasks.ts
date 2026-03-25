@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, date, numeric } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, date, numeric, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
@@ -9,9 +9,11 @@ export const staffTable = pgTable("staff", {
   name: text("name").notNull(),
   phone: text("phone").notNull(),
   role: text("role").notNull().default("assistant"),
+  roles: jsonb("roles").notNull().default([]),
   email: text("email"),
   avatar: text("avatar"),
   salary: text("salary"),
+  baseSalaryAmount: numeric("base_salary_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   salaryType: text("salary_type").notNull().default("fixed"),
   commissionRate: numeric("commission_rate", { precision: 5, scale: 2 }).notNull().default("0"),
   joinDate: date("join_date").notNull(),

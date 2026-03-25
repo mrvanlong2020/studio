@@ -32,7 +32,7 @@ type Customer = {
   id: number; name: string; phone: string; email?: string;
   facebook?: string; zalo?: string; avatar?: string; customCode?: string; totalDebt?: number;
 };
-type Staff = { id: number; name: string; role: string; isActive: boolean };
+type Staff = { id: number; name: string; role: string; roles: string[]; isActive: boolean };
 type Service = { id: number; name: string; price: number; category: string; code: string };
 type ServiceOption = { key: string; name: string; price: number };
 type OrderLine = {
@@ -232,8 +232,21 @@ function ShowFormPanel({
   const { data: services = [] } = useQuery<Service[]>({ queryKey: ["services"], queryFn: () => fetch(`${BASE}/api/services`).then(r => r.json()) });
   const { data: pricingPackages = [] } = useQuery<{ id: number; name: string; price: number }[]>({ queryKey: ["service-packages"], queryFn: () => fetch(`${BASE}/api/service-packages`).then(r => r.json()) });
 
-  const photographers = allStaff.filter(s => s.role === "photographer" && s.isActive);
-  const makeupArtists = allStaff.filter(s => s.role === "makeup" && s.isActive);
+  // Support both old single-role and new multi-role staff
+  const hasRole = (s: Staff, role: string) => s.roles?.includes(role) || s.role === role;
+  const photographers = allStaff.filter(s => s.isActive && hasRole(s, "photographer"));
+  const makeupArtists = allStaff.filter(s => s.isActive && hasRole(s, "makeup"));
+  const saleStaff = allStaff.filter(s => s.isActive && hasRole(s, "sale"));
+  const photoshopStaff = allStaff.filter(s => s.isActive && hasRole(s, "photoshop"));
+
+  // Booking-level role assignments
+  const getAssignedObj = () => {
+    const as = booking?.assignedStaff;
+    if (as && !Array.isArray(as) && typeof as === "object") return as as Record<string, number>;
+    return {};
+  };
+  const [saleId, setSaleId] = useState<number | null>(() => getAssignedObj().sale ?? null);
+  const [photoshopId, setPhotoshopId] = useState<number | null>(() => getAssignedObj().photoshop ?? null);
   const allServices: ServiceOption[] = [
     ...services.map(s => ({ key: `svc-${s.id}`, name: s.name, price: s.price })),
     ...pricingPackages.map(p => ({ key: `pkg-${p.id}`, name: p.name, price: p.price })),
@@ -302,10 +315,14 @@ function ShowFormPanel({
       const finalTotal = hasServices ? totalAmount : 0;
       const finalDeposit = hasServices ? depositNum : 0;
 
-      const assignedStaff = Array.from(new Set([
-        ...validLines.filter(l => l.photoId).map(l => l.photoId!),
-        ...validLines.filter(l => l.makeupId).map(l => l.makeupId!),
-      ]));
+      // Build role-keyed assignedStaff object for payroll auto-compute
+      const assignedStaff: Record<string, number> = {};
+      const firstPhotoId = validLines.find(l => l.photoId)?.photoId;
+      const firstMakeupId = validLines.find(l => l.makeupId)?.makeupId;
+      if (firstPhotoId) assignedStaff.photographer = firstPhotoId;
+      if (firstMakeupId) assignedStaff.makeup = firstMakeupId;
+      if (saleId) assignedStaff.sale = saleId;
+      if (photoshopId) assignedStaff.photoshop = photoshopId;
 
       const body = {
         customerId: cid, shootDate, shootTime: timeStart,
@@ -491,10 +508,47 @@ function ShowFormPanel({
             </div>
           </section>
 
-          {/* D. Tiền */}
+          {/* D. Phân công nhân sự (booking-level) */}
+          {(saleStaff.length > 0 || photoshopStaff.length > 0) && (
+            <section className="space-y-2">
+              <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5" /> D. Phân công (Sale / Photoshop)
+              </h4>
+              <div className="grid grid-cols-2 gap-2">
+                {saleStaff.length > 0 && (
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-1 block">💼 Người sale</label>
+                    <select
+                      className="w-full h-8 border border-input rounded-lg px-2 text-xs bg-background"
+                      value={saleId ?? ""}
+                      onChange={e => setSaleId(e.target.value ? parseInt(e.target.value) : null)}
+                    >
+                      <option value="">-- Chưa chọn --</option>
+                      {saleStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
+                )}
+                {photoshopStaff.length > 0 && (
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-1 block">🖥️ Người photoshop</label>
+                    <select
+                      className="w-full h-8 border border-input rounded-lg px-2 text-xs bg-background"
+                      value={photoshopId ?? ""}
+                      onChange={e => setPhotoshopId(e.target.value ? parseInt(e.target.value) : null)}
+                    >
+                      <option value="">-- Chưa chọn --</option>
+                      {photoshopStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* E. Tiền */}
           <section className="space-y-2">
             <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <CreditCard className="w-3.5 h-3.5" /> D. Thanh toán
+              <CreditCard className="w-3.5 h-3.5" /> E. Thanh toán
             </h4>
             <div className="bg-muted/40 rounded-xl p-3 space-y-2.5 border border-border/50">
               <div className="flex justify-between items-center">

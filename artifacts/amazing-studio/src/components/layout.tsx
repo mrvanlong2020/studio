@@ -4,7 +4,7 @@ import {
   LayoutDashboard, CalendarDays, CheckSquare, Users, 
   FileText, Shirt, Package, Calculator, Bot, Settings, 
   Moon, LogOut, Bell, Wallet, UserPlus, Menu,
-  ClipboardList, Receipt, ScrollText, TrendingUp, LayoutList
+  ClipboardList, Receipt, ScrollText, TrendingUp, LayoutList, UserCog,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +19,8 @@ const navItems = [
   { href: "/wardrobe", label: "Kho trang phục", icon: Shirt },
   { href: "/pricing", label: "Bảng giá", icon: LayoutList },
   { href: "/services", label: "Dịch vụ & Gói", icon: Package },
-  { href: "/accounting", label: "Kế toán & Nhân sự", icon: Calculator },
+  { href: "/staff", label: "Nhân sự & Lương", icon: UserCog },
+  { href: "/accounting", label: "Kế toán", icon: Calculator },
   { href: "/reports", label: "Báo cáo", icon: TrendingUp },
   { href: "/ai-assistant", label: "Trợ lý AI", icon: Bot },
   { href: "/settings", label: "Cài đặt", icon: Settings },

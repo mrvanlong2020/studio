@@ -11,6 +11,7 @@ import ServicesPage from "@/pages/services";
 import ServiceDetailPage from "@/pages/service-detail";
 import PricingPage from "@/pages/pricing";
 import AccountingHrPage from "@/pages/accounting-hr";
+import StaffPage from "@/pages/staff";
 import AiAssistantPage from "@/pages/ai-assistant";
 import SettingsPage from "@/pages/settings";
 import BookingsPage from "@/pages/bookings";
@@ -41,6 +42,7 @@ function Router() {
         <Route path="/pricing" component={PricingPage} />
         <Route path="/services/:id" component={ServiceDetailPage} />
         <Route path="/services" component={ServicesPage} />
+        <Route path="/staff" component={StaffPage} />
         <Route path="/accounting" component={AccountingHrPage} />
         <Route path="/ai-assistant" component={AiAssistantPage} />
         <Route path="/settings" component={SettingsPage} />

@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { bookingsTable, customersTable, paymentsTable, expensesTable, tasksTable, staffTable } from "@workspace/db/schema";
 import { eq, and, desc } from "drizzle-orm";
+import { computeBookingEarnings } from "./job-earnings";
 
 const router: IRouter = Router();
 
@@ -218,8 +219,17 @@ router.put("/bookings/:id", async (req, res) => {
     updateData.paidAmount = String(paidAmount);
   }
 
+  // Get old status before update
+  const [oldBooking] = await db.select({ status: bookingsTable.status }).from(bookingsTable).where(eq(bookingsTable.id, id));
+  const oldStatus = oldBooking?.status;
+
   const [booking] = await db.update(bookingsTable).set(updateData).where(eq(bookingsTable.id, id)).returning();
   if (!booking) return res.status(404).json({ error: "Không tìm thấy đơn hàng" });
+
+  // Auto-compute job earnings when job is marked as completed
+  if (status === "completed" && oldStatus !== "completed") {
+    computeBookingEarnings(id).catch(err => console.error("Earnings compute error:", err));
+  }
 
   const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, booking.customerId));
   const payments = await db.select().from(paymentsTable).where(eq(paymentsTable.bookingId, id));

@@ -16,6 +16,8 @@ import expensesRouter from "./expenses";
 import contractsRouter from "./contracts";
 import payrollsRouter from "./payrolls";
 import pricingRouter from "./pricing";
+import salaryRatesRouter from "./salary-rates";
+import jobEarningsRouter from "./job-earnings";
 
 const router: IRouter = Router();
 
@@ -36,5 +38,7 @@ router.use(expensesRouter);
 router.use(contractsRouter);
 router.use(payrollsRouter);
 router.use(pricingRouter);
+router.use(salaryRatesRouter);
+router.use(jobEarningsRouter);
 
 export default router;
