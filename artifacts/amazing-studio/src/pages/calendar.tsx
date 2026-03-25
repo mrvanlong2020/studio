@@ -37,7 +37,8 @@ type Service = { id: number; name: string; price: number; category: string; code
 type ServiceOption = { key: string; name: string; price: number };
 type OrderLine = {
   tempId: string; serviceName: string; serviceId: number | null; price: number;
-  photoId: number | null; photoName: string; makeupId: number | null; makeupName: string;
+  photoId: number | null; photoName: string; photoTask: string;
+  makeupId: number | null; makeupName: string; makeupTask: string;
 };
 
 const STATUS = {
@@ -148,7 +149,7 @@ function OrderLineRow({ line, photographers, makeupArtists, services, onChange, 
       {useCustom && (
         <Input className="h-9 text-sm" placeholder="Tên dịch vụ..." value={line.serviceName} onChange={e => onChange({ ...line, serviceName: e.target.value })} />
       )}
-      <div className="grid grid-cols-[1fr_1fr_auto] gap-1.5">
+      <div className="grid grid-cols-2 gap-1.5">
         <div>
           <p className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><Camera className="w-3 h-3" /> Nhiếp ảnh</p>
           <select className="w-full h-8 border border-input rounded-lg px-2 text-xs bg-background" value={line.photoId ?? ""}
@@ -156,6 +157,26 @@ function OrderLineRow({ line, photographers, makeupArtists, services, onChange, 
             <option value="">— Chọn —</option>
             {photographers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
+          {line.photoId && (
+            <select className="w-full h-8 border border-input rounded-lg px-2 text-xs bg-background mt-1" value={line.photoTask ?? ""}
+              onChange={e => onChange({ ...line, photoTask: e.target.value })}>
+              <option value="">— Loại chụp —</option>
+              <option value="chup_cong">Chụp cổng</option>
+              <option value="chup_album">Chụp album</option>
+              <option value="chup_tiec_truyen_thong">Chụp tiệc truyền thống</option>
+              <option value="chup_tiec_phong_su">Chụp tiệc phóng sự</option>
+              <option value="chup_beauty">Chụp beauty</option>
+              <option value="chup_nang_tho">Chụp nàng thơ</option>
+              <option value="chup_gia_dinh">Chụp gia đình</option>
+              <option value="chup_em_be">Chụp em bé</option>
+              <option value="chup_ngoai_canh">Chụp ngoại cảnh</option>
+              <option value="chup_prewedding">Chụp prewedding</option>
+              <option value="chup_concept">Chụp concept</option>
+              <option value="chup_san_pham">Chụp sản phẩm</option>
+              <option value="ho_tro_chup">Hỗ trợ chụp</option>
+              <option value="mac_dinh">Mặc định</option>
+            </select>
+          )}
         </div>
         <div>
           <p className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><Sparkles className="w-3 h-3" /> Makeup</p>
@@ -164,11 +185,27 @@ function OrderLineRow({ line, photographers, makeupArtists, services, onChange, 
             <option value="">— Không —</option>
             {makeupArtists.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
+          {line.makeupId && (
+            <select className="w-full h-8 border border-input rounded-lg px-2 text-xs bg-background mt-1" value={line.makeupTask ?? ""}
+              onChange={e => onChange({ ...line, makeupTask: e.target.value })}>
+              <option value="">— Loại makeup —</option>
+              <option value="makeup_chup_cong">Makeup chụp cổng</option>
+              <option value="makeup_chup_album">Makeup chụp album</option>
+              <option value="makeup_chup_tiec">Makeup chụp tiệc</option>
+              <option value="makeup_nang_tho">Makeup nàng thơ</option>
+              <option value="makeup_beauty">Makeup beauty</option>
+              <option value="makeup_ngoai_canh">Makeup ngoại cảnh</option>
+              <option value="makeup_co_dau">Makeup cô dâu</option>
+              <option value="makeup_me">Makeup mẹ / người thân</option>
+              <option value="makeup_phu">Makeup phụ</option>
+              <option value="mac_dinh">Mặc định</option>
+            </select>
+          )}
         </div>
-        <div>
-          <p className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><CreditCard className="w-3 h-3" /> Giá (đ)</p>
-          <Input type="number" className="h-8 text-sm w-28" value={line.price || ""} placeholder="0" onChange={e => onChange({ ...line, price: parseFloat(e.target.value) || 0 })} />
-        </div>
+      </div>
+      <div>
+        <p className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><CreditCard className="w-3 h-3" /> Giá (đ)</p>
+        <Input type="number" className="h-8 text-sm w-40" value={line.price || ""} placeholder="0" onChange={e => onChange({ ...line, price: parseFloat(e.target.value) || 0 })} />
       </div>
     </div>
   );
@@ -219,8 +256,8 @@ function ShowFormPanel({
   };
 
   const [lines, setLines] = useState<OrderLine[]>(() => {
-    if (booking?.items?.length) return booking.items.map(i => ({ ...i, tempId: genId() }));
-    return [{ tempId: genId(), serviceName: "", serviceId: null, price: 0, photoId: null, photoName: "", makeupId: null, makeupName: "" }];
+    if (booking?.items?.length) return booking.items.map(i => ({ photoTask: "", makeupTask: "", ...i, tempId: genId() }));
+    return [{ tempId: genId(), serviceName: "", serviceId: null, price: 0, photoId: null, photoName: "", photoTask: "", makeupId: null, makeupName: "", makeupTask: "" }];
   });
 
   const [deposit, setDeposit] = useState(booking?.depositAmount?.toString() ?? "0");
@@ -246,7 +283,9 @@ function ShowFormPanel({
     return {};
   };
   const [saleId, setSaleId] = useState<number | null>(() => getAssignedObj().sale ?? null);
+  const [saleTask, setSaleTask] = useState<string>(() => String(getAssignedObj().saleTask ?? "mac_dinh"));
   const [photoshopId, setPhotoshopId] = useState<number | null>(() => getAssignedObj().photoshop ?? null);
+  const [photoshopTask, setPhotoshopTask] = useState<string>(() => String(getAssignedObj().photoshopTask ?? "mac_dinh"));
   const allServices: ServiceOption[] = [
     ...services.map(s => ({ key: `svc-${s.id}`, name: s.name, price: s.price })),
     ...pricingPackages.map(p => ({ key: `pkg-${p.id}`, name: p.name, price: p.price })),
@@ -316,13 +355,10 @@ function ShowFormPanel({
       const finalDeposit = hasServices ? depositNum : 0;
 
       // Build role-keyed assignedStaff object for payroll auto-compute
-      const assignedStaff: Record<string, number> = {};
-      const firstPhotoId = validLines.find(l => l.photoId)?.photoId;
-      const firstMakeupId = validLines.find(l => l.makeupId)?.makeupId;
-      if (firstPhotoId) assignedStaff.photographer = firstPhotoId;
-      if (firstMakeupId) assignedStaff.makeup = firstMakeupId;
-      if (saleId) assignedStaff.sale = saleId;
-      if (photoshopId) assignedStaff.photoshop = photoshopId;
+      // Include task keys so earnings compute can look up the right price
+      const assignedStaff: Record<string, unknown> = {};
+      if (saleId) { assignedStaff.sale = saleId; assignedStaff.saleTask = saleTask || "mac_dinh"; }
+      if (photoshopId) { assignedStaff.photoshop = photoshopId; assignedStaff.photoshopTask = photoshopTask || "mac_dinh"; }
 
       const body = {
         customerId: cid, shootDate, shootTime: timeStart,
@@ -492,7 +528,7 @@ function ShowFormPanel({
                 <span className="normal-case text-[10px] font-normal text-muted-foreground/60">(tuỳ chọn)</span>
               </h4>
               <button
-                onClick={() => setLines(p => [...p, { tempId: genId(), serviceName: "", serviceId: null, price: 0, photoId: null, photoName: "", makeupId: null, makeupName: "" }])}
+                onClick={() => setLines(p => [...p, { tempId: genId(), serviceName: "", serviceId: null, price: 0, photoId: null, photoName: "", photoTask: "", makeupId: null, makeupName: "", makeupTask: "" }])}
                 className="flex items-center gap-1 text-xs text-primary hover:underline font-medium"
               >
                 <Plus className="w-3 h-3" /> Thêm dòng
@@ -526,6 +562,20 @@ function ShowFormPanel({
                       <option value="">-- Chưa chọn --</option>
                       {saleStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
+                    {saleId && (
+                      <select className="w-full h-8 border border-input rounded-lg px-2 text-xs bg-background mt-1"
+                        value={saleTask} onChange={e => setSaleTask(e.target.value)}>
+                        <option value="mac_dinh">— Loại sale (mặc định) —</option>
+                        <option value="sale_chup_cong">Sale chụp cổng</option>
+                        <option value="sale_chup_album">Sale chụp album</option>
+                        <option value="sale_chup_tiec">Sale chụp tiệc</option>
+                        <option value="sale_beauty">Sale beauty</option>
+                        <option value="sale_prewedding">Sale prewedding</option>
+                        <option value="sale_combo_cuoi">Sale combo cưới</option>
+                        <option value="sale_tron_goi">Sale trọn gói</option>
+                        <option value="sale_phat_sinh">Sale phát sinh</option>
+                      </select>
+                    )}
                   </div>
                 )}
                 {photoshopStaff.length > 0 && (
@@ -539,6 +589,20 @@ function ShowFormPanel({
                       <option value="">-- Chưa chọn --</option>
                       {photoshopStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
+                    {photoshopId && (
+                      <select className="w-full h-8 border border-input rounded-lg px-2 text-xs bg-background mt-1"
+                        value={photoshopTask} onChange={e => setPhotoshopTask(e.target.value)}>
+                        <option value="mac_dinh">— Loại chỉnh sửa (mặc định) —</option>
+                        <option value="chinh_album">Chỉnh album</option>
+                        <option value="chinh_anh_le">Chỉnh ảnh lẻ</option>
+                        <option value="chinh_anh_beauty">Chỉnh ảnh beauty</option>
+                        <option value="chinh_anh_cuoi">Chỉnh ảnh cưới</option>
+                        <option value="blend_mau">Blend màu</option>
+                        <option value="retouch_da">Retouch da</option>
+                        <option value="thiet_ke_album">Thiết kế album</option>
+                        <option value="xuat_file">Xuất file</option>
+                      </select>
+                    )}
                   </div>
                 )}
               </div>

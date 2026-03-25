@@ -1,0 +1,217 @@
+Tôi muốn xây lại phần “Nhân viên & Lương” theo đúng mô hình studio thực tế như sau:
+
+I. NGUYÊN TẮC CHUNG
+
+1. Không dùng bảng giá lương chung theo chức vụ.
+2. Mỗi nhân viên có bảng giá riêng hoàn toàn, vì tay nghề, kinh nghiệm và mức trả của mỗi người khác nhau.
+3. Một nhân viên có thể có một hoặc nhiều chức vụ cùng lúc.
+Ví dụ:
+- Hoa: Sale + Makeup
+- Chung: Chụp ảnh
+- Minh: Photoshop
+4. Chức vụ chỉ dùng để xổ ra bộ nhiệm vụ / dịch vụ mẫu.
+5. Đơn giá không lấy theo chức vụ, mà lấy theo từng nhân viên, từng nhiệm vụ, từng chức vụ mà họ đảm nhận.
+
+II. KHI BẤM “THÊM NHÂN VIÊN MỚI”
+
+Form tạo nhân viên mới phải có các trường sau:
+
+1. Thông tin cơ bản:
+- Họ tên
+- Số điện thoại
+- Email
+- Địa chỉ (nếu cần)
+- Trạng thái làm việc: Đang làm / Nghỉ / Tạm nghỉ
+- Ngày vào làm
+- Ghi chú
+
+2. Thông tin lương cơ bản:
+- Lương cứng
+- Phụ cấp (nếu có)
+- Ghi chú lương
+
+3. Chọn chức vụ:
+Cho phép chọn một hoặc nhiều chức vụ cùng lúc.
+Ví dụ:
+- Sale
+- Chụp ảnh
+- Makeup
+- Photoshop
+- Marketing
+- Khác
+
+III. SAU KHI CHỌN CHỨC VỤ
+
+1. Hệ thống phải tự động tạo ra các block riêng theo từng chức vụ đã chọn.
+2. Mỗi block là một bảng nhiệm vụ mẫu của chức vụ đó.
+3. Tất cả ô giá / phần trăm ban đầu phải để trống hoàn toàn để tôi tự nhập.
+4. Không tự động điền giá mặc định.
+5. Nếu nhân viên có nhiều chức vụ thì phải có nhiều block riêng, không được gộp chung.
+
+IV. MẪU CẤU TRÚC TỪNG BLOCK CHỨC VỤ
+
+A. Nếu chọn chức vụ “Chụp ảnh”
+Tạo block “Bảng giá Chụp ảnh” gồm các ô nhập tiền trống cho từng nhiệm vụ:
+- Chụp cổng
+- Chụp album
+- Chụp tiệc truyền thống
+- Chụp tiệc phóng sự
+- Chụp beauty
+- Chụp nàng thơ
+- Chụp gia đình
+- Chụp em bé
+- Chụp ngoại cảnh
+- Chụp prewedding
+- Chụp concept
+- Chụp sản phẩm
+- Hỗ trợ chụp / phụ chụp
+- Mặc định
+
+B. Nếu chọn chức vụ “Makeup”
+Tạo block “Bảng giá Makeup” gồm các ô nhập tiền trống cho từng nhiệm vụ:
+- Makeup chụp cổng
+- Makeup chụp album
+- Makeup chụp tiệc
+- Makeup nàng thơ
+- Makeup beauty
+- Makeup ngoại cảnh
+- Makeup cô dâu ngày cưới
+- Makeup mẹ / người thân
+- Makeup phụ
+- Mặc định
+
+C. Nếu chọn chức vụ “Sale”
+Tạo block “Bảng giá Sale” gồm các dòng nhiệm vụ:
+- Sale chụp cổng
+- Sale chụp album
+- Sale chụp tiệc
+- Sale beauty
+- Sale prewedding
+- Sale combo cưới
+- Sale trọn gói
+- Sale phát sinh
+- Mặc định
+
+Mỗi dòng của Sale phải có:
+- Kiểu tính: “tiền cố định” hoặc “phần trăm”
+- Giá trị nhập tay
+Ví dụ:
+- Sale album: 5%
+hoặc
+- Sale album: 150000
+
+D. Nếu chọn chức vụ “Photoshop”
+Tạo block “Bảng giá Photoshop” gồm:
+- Chỉnh album
+- Chỉnh ảnh lẻ
+- Chỉnh ảnh beauty
+- Chỉnh ảnh cưới
+- Blend màu
+- Retouch da
+- Thiết kế album
+- Xuất file / hoàn thiện file
+- Mặc định
+
+E. Nếu chọn chức vụ “Marketing”
+Tạo block “Bảng giá Marketing” gồm:
+- Viết bài
+- Đăng bài
+- Thiết kế bài đăng
+- Chạy quảng cáo
+- Quay video
+- Dựng video
+- Livestream
+- Hỗ trợ content
+- Mặc định
+
+V. YÊU CẦU VỀ Ô NHẬP GIÁ
+
+1. Tất cả ô đều để trống để tôi tự nhập.
+2. Mỗi nhân viên nhập giá riêng, không liên quan người khác.
+3. Có thể bỏ trống những nhiệm vụ nhân viên không làm.
+4. Nếu ô nào để trống thì hiểu là nhân viên chưa có giá cho nhiệm vụ đó.
+5. Hỗ trợ nhập:
+- tiền cố định
+- phần trăm
+- hoặc gói trọn gói nếu cần
+
+VI. LOGIC KHI TẠO JOB
+
+1. Khi tạo job mới, tôi sẽ chọn:
+- Tên job
+- Loại dịch vụ
+- Ngày làm
+- Khách hàng
+- Nhân viên tham gia
+- Vai trò / chức vụ của từng người trong job đó
+
+2. Khi chọn nhân viên + vai trò + loại công việc, hệ thống phải tự động lấy đúng đơn giá từ bảng giá riêng của chính nhân viên đó.
+
+Ví dụ:
+- Hoa + Makeup + chụp cổng => lấy giá từ block Makeup > Makeup chụp cổng
+- Hoa + Sale + chụp cổng => lấy giá từ block Sale > Sale chụp cổng
+- Chung + Chụp ảnh + chụp cổng => lấy giá từ block Chụp ảnh > Chụp cổng
+
+3. Nếu là Sale và kiểu tính là phần trăm, hệ thống phải tự tính theo giá trị đơn hàng.
+Ví dụ:
+- Sale trọn gói = 5%
+- Đơn hàng = 10.000.000
+=> hoa hồng sale = 500.000
+
+4. Nếu là tiền cố định thì lấy đúng số tiền đã nhập sẵn.
+
+VII. CHỈ TÍNH LƯƠNG KHI HOÀN THÀNH
+
+1. Job ở trạng thái “Đang làm” thì chưa cộng lương.
+2. Chỉ khi job chuyển sang “Hoàn thành” thì mới cộng lương cho nhân viên.
+3. Khi hoàn thành job, hệ thống phải tự cập nhật:
+- Lương hôm nay
+- Lương tháng này
+- Tổng số job hoàn thành
+- Tổng thu nhập theo từng nhân viên
+
+VIII. HIỂN THỊ Ở TRANG NHÂN VIÊN
+
+Mỗi nhân viên phải hiển thị:
+- Họ tên
+- Chức vụ
+- Trạng thái
+- Lương cứng
+- Tổng lương hôm nay
+- Tổng lương tháng này
+- Tổng số job hoàn thành
+- Nút sửa thông tin
+- Nút sửa bảng giá riêng
+
+IX. NÚT “SỬA BẢNG GIÁ RIÊNG”
+
+1. Mỗi nhân viên phải có nút “Sửa bảng giá riêng”.
+2. Khi bấm vào phải mở ra đúng các block chức vụ mà nhân viên đó đang có.
+3. Cho phép sửa giá từng nhiệm vụ bất kỳ lúc nào.
+4. Không ảnh hưởng đến bảng giá của nhân viên khác.
+
+X. CẢNH BÁO HỆ THỐNG
+
+1. Nếu chọn job nhưng nhân viên chưa có giá cho nhiệm vụ đó thì phải báo rõ:
+“Nhân viên này chưa có mức lương cho công việc này”.
+2. Không tự động lấy giá mặc định chung.
+3. Không cộng lương nếu job chưa hoàn thành.
+
+XI. YÊU CẦU GIAO DIỆN MOBILE
+
+1. Giao diện phải tối ưu cho điện thoại.
+2. Form thêm nhân viên phải gọn, rõ, dễ nhập.
+3. Sau khi chọn chức vụ, các block bảng giá phải xổ xuống rõ ràng.
+4. Mỗi block có tiêu đề riêng, dễ nhìn.
+5. Ô nhập tiền lớn, dễ bấm trên màn hình điện thoại.
+6. Có thể cuộn mượt, không rối.
+
+XII. TƯ DUY DỮ LIỆU CẦN LÀM ĐÚNG
+
+1. Nhân viên là trung tâm.
+2. Mỗi nhân viên có nhiều chức vụ.
+3. Mỗi chức vụ có nhiều nhiệm vụ mẫu.
+4. Mỗi nhiệm vụ của mỗi nhân viên có một đơn giá riêng.
+5. Khi tạo job, hệ thống phải map đúng:
+nhân viên -> chức vụ -> nhiệm vụ -> đơn giá
+6. Không dùng bảng giá chung theo vai trò nữa.

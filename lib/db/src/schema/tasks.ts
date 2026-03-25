@@ -16,7 +16,7 @@ export const staffTable = pgTable("staff", {
   baseSalaryAmount: numeric("base_salary_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   salaryType: text("salary_type").notNull().default("fixed"),
   commissionRate: numeric("commission_rate", { precision: 5, scale: 2 }).notNull().default("0"),
-  joinDate: date("join_date").notNull(),
+  joinDate: date("join_date"),
   isActive: integer("is_active").notNull().default(1),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

@@ -44,6 +44,24 @@ export const staffJobEarningsTable = pgTable("staff_job_earnings", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// ─── Per-staff, per-role, per-task individual price list ─────────────────────
+// This is the source of truth: each staff member has their own price per task.
+// role = photographer/makeup/sale/photoshop/marketing
+// taskKey = predefined task key (chup_cong, makeup_co_dau, sale_tron_goi, etc.)
+// rate = null means "not set" (no rate configured yet)
+// rateType = 'fixed' (VND amount) or 'percent' (% of booking total, for sale)
+export const staffRatePricesTable = pgTable("staff_rate_prices", {
+  id: serial("id").primaryKey(),
+  staffId: integer("staff_id").notNull().references(() => staffTable.id, { onDelete: "cascade" }),
+  role: text("role").notNull(),
+  taskKey: text("task_key").notNull(),
+  taskName: text("task_name").notNull(),
+  rate: numeric("rate", { precision: 12, scale: 2 }),
+  rateType: text("rate_type").notNull().default("fixed"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // ─── KPI configuration ────────────────────────────────────────────────────────
 export const staffKpiConfigTable = pgTable("staff_kpi_config", {
   id: serial("id").primaryKey(),
