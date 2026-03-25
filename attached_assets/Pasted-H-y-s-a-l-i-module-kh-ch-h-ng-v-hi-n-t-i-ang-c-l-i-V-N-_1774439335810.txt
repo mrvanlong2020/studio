@@ -1,0 +1,139 @@
+Hãy sửa lại module khách hàng vì hiện tại đang có lỗi:
+
+VẤN ĐỀ HIỆN TẠI:
+- Tôi đã có form “Thêm khách hàng mới”
+- Đã có upload avatar
+- Nhưng khi mở một khách hàng hoặc vào module khách hàng thì không thêm được khách mới như mong muốn
+- Tức là form có nhưng chưa lưu được dữ liệu mới vào database hoặc lưu xong không cập nhật lại danh sách
+
+TÔI MUỐN SỬA NHƯ SAU:
+
+==================================================
+1. FORM THÊM KHÁCH HÀNG PHẢI LƯU ĐƯỢC THẬT
+==================================================
+
+Khi tôi bấm nút “Thêm khách hàng” trong popup:
+- phải insert customer mới vào database thật
+- không được chỉ đóng popup
+- không được chỉ lưu tạm ở state frontend
+
+Sau khi lưu thành công:
+- hiện thông báo thành công
+- đóng popup
+- tự động reload / refresh danh sách khách hàng
+- khách mới phải xuất hiện ngay trong danh sách
+
+==================================================
+2. DANH SÁCH KHÁCH HÀNG PHẢI CẬP NHẬT NGAY
+==================================================
+
+Sau khi thêm khách mới thành công:
+- khách mới phải hiện ngay ở đầu danh sách hoặc theo thứ tự mới nhất
+- không cần reload tay cả trang
+- số liệu thống kê cũng phải cập nhật theo:
+  + tổng khách
+  + nguồn khách
+  + các ô đếm
+
+==================================================
+3. KHI ĐANG Ở TRANG CHI TIẾT KHÁCH HÀNG VẪN PHẢI THÊM KHÁCH MỚI ĐƯỢC
+==================================================
+
+Dù tôi đang:
+- ở danh sách khách hàng
+- hay đang mở chi tiết một khách hàng
+
+thì nút “+ Thêm khách hàng” vẫn phải hoạt động bình thường.
+
+Yêu cầu:
+- không bị khóa
+- không bị lỗi state
+- không bị loop render
+- không bị crash khi đang ở trang khách hàng
+
+==================================================
+4. KIỂM TRA SUBMIT FORM
+==================================================
+
+Hãy kiểm tra lại toàn bộ logic submit của form thêm khách hàng:
+
+Các field cần lưu:
+- full_name
+- phone
+- avatar_url
+- gender
+- email
+- address
+- facebook_url
+- zalo_contact
+- source
+- tags
+- notes
+
+Yêu cầu:
+- field nào để trống thì vẫn lưu được nếu không bắt buộc
+- chỉ bắt buộc:
+  + họ và tên
+  + số điện thoại
+
+==================================================
+5. KIỂM TRA VALIDATION
+==================================================
+
+Nếu lưu không thành công:
+- phải báo lỗi rõ ràng
+- không được im lặng
+- không được chỉ đứng yên không phản ứng
+
+Ví dụ:
+- Số điện thoại đã tồn tại
+- Thiếu họ tên
+- Không kết nối được database
+
+==================================================
+6. KIỂM TRA TRÙNG SỐ ĐIỆN THOẠI
+==================================================
+
+Nếu số điện thoại đã tồn tại:
+- không tạo trùng customer mới
+- hiện cảnh báo rõ:
+  "Số điện thoại này đã có trong hệ thống"
+- có thể gợi ý mở hồ sơ khách cũ
+
+==================================================
+7. ĐỒNG BỘ AVATAR
+==================================================
+
+Nếu tôi upload avatar khi tạo khách mới:
+- avatar phải được lưu thật
+- sau khi lưu xong, danh sách khách hàng phải hiện đúng avatar đó
+- chi tiết khách hàng cũng phải hiện đúng avatar đó
+
+==================================================
+8. TRÁNH LỖI MAXIMUM CALL STACK SIZE EXCEEDED
+==================================================
+
+Tôi đã từng gặp lỗi:
+- Maximum call stack size exceeded
+
+Hãy kiểm tra và sửa để:
+- không bị gọi hàm lặp vô hạn khi mở popup thêm khách hàng
+- không bị useEffect / setState loop
+- không bị re-render vô hạn sau khi thêm khách
+
+==================================================
+9. MỤC TIÊU CUỐI
+==================================================
+
+Tôi muốn flow đúng như sau:
+
+- Bấm “+ Thêm khách hàng”
+- Nhập thông tin + avatar
+- Bấm “Thêm khách hàng”
+- Dữ liệu lưu vào database thật
+- Popup đóng lại
+- Danh sách khách hàng cập nhật ngay
+- Khách mới xuất hiện ngay
+- Có thể bấm vào xem chi tiết khách mới
+
+Đây phải là CRUD thật, không phải UI demo.

@@ -4,12 +4,48 @@ import { formatVND, formatDate } from "@/lib/utils";
 import { Button, Input, Select, Textarea, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui";
 import {
   Search, Plus, Phone, MapPin, Edit, Trash2, Users, Facebook,
-  TrendingUp, Calendar, Camera, X, ChevronRight,
+  TrendingUp, Calendar, Camera, X, ChevronRight, AlertCircle, CheckCircle,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-const fetchJson = (url: string, opts?: RequestInit) =>
-  fetch(`${BASE}${url}`, { headers: { "Content-Type": "application/json" }, ...opts }).then(r => r.json());
+
+// ─── fetchJson — throws on HTTP errors ────────────────────────────────────────
+async function fetchJson<T = unknown>(url: string, opts?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${url}`, {
+    headers: { "Content-Type": "application/json" },
+    ...opts,
+  });
+  if (!res.ok) {
+    let msg = `Lỗi ${res.status}`;
+    try { const j = await res.json(); msg = j.error ?? j.message ?? msg; } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  return res.json() as Promise<T>;
+}
+
+// ─── Image compression (canvas) — resize avatar to max 320x320, quality 0.75 ──
+function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const MAX = 320;
+        let { width, height } = img;
+        if (width > height) { if (width > MAX) { height = Math.round((height * MAX) / width); width = MAX; } }
+        else { if (height > MAX) { width = Math.round((width * MAX) / height); height = MAX; } }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        canvas.getContext("2d")?.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.75));
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 const SOURCE_LABELS: Record<string, string> = {
   facebook: "Facebook", instagram: "Instagram", referral: "Giới thiệu",
@@ -23,12 +59,21 @@ const SOURCE_COLORS: Record<string, string> = {
   other: "bg-muted text-muted-foreground",
 };
 
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  draft:           { label: "Lịch tạm",          color: "text-slate-500" },
+  pending_service: { label: "Chưa chốt DV",       color: "text-orange-500" },
+  pending:         { label: "Chờ xác nhận",       color: "text-yellow-600" },
+  confirmed:       { label: "Đã xác nhận",        color: "text-blue-600" },
+  in_progress:     { label: "Đang chụp",          color: "text-purple-600" },
+  completed:       { label: "Hoàn thành",         color: "text-green-600" },
+  cancelled:       { label: "Đã hủy",             color: "text-gray-400" },
+};
+
 type Customer = {
   id: number; customCode: string; name: string; phone: string; email?: string;
   address?: string; gender?: string; facebook?: string; zalo?: string;
   source?: string; tags?: string; notes?: string; createdAt: string;
-  avatar?: string;
-  totalBookings?: number; totalPaid?: number; totalDebt?: number;
+  avatar?: string; totalBookings?: number; totalPaid?: number; totalDebt?: number;
 };
 
 type CustomerDetail = Customer & {
@@ -40,29 +85,17 @@ const EMPTY_FORM = {
   source: "facebook", tags: "", notes: "", avatar: "",
 };
 
-// ─── Avatar component (hiện ảnh thật hoặc chữ cái đầu) ────────────────────
+// ─── Avatar component ──────────────────────────────────────────────────────────
 function AvatarCircle({ name, avatar, size = "md" }: { name: string; avatar?: string; size?: "sm" | "md" | "lg" | "xl" }) {
   const sizes = { sm: "w-8 h-8 text-xs", md: "w-10 h-10 text-sm", lg: "w-14 h-14 text-lg", xl: "w-20 h-20 text-2xl" };
-  const cls = `${sizes[size]} rounded-full flex-shrink-0 overflow-hidden`;
-  if (avatar) {
-    return <img src={avatar} alt={name} className={`${cls} object-cover`} />;
-  }
+  const cls = `${sizes[size]} rounded-full flex-shrink-0`;
+  if (avatar) return <img src={avatar} alt={name} className={`${cls} object-cover`} />;
   return (
-    <div className={`${cls} bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center text-primary font-bold`}>
+    <div className={`${cls} bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center text-primary font-bold overflow-hidden`}>
       {name.charAt(0).toUpperCase()}
     </div>
   );
 }
-
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  draft:           { label: "Lịch tạm",          color: "text-slate-500" },
-  pending_service: { label: "Chưa chốt DV",       color: "text-orange-500" },
-  pending:         { label: "Chờ xác nhận",       color: "text-yellow-600" },
-  confirmed:       { label: "Đã xác nhận",        color: "text-blue-600" },
-  in_progress:     { label: "Đang chụp",          color: "text-purple-600" },
-  completed:       { label: "Hoàn thành",         color: "text-green-600" },
-  cancelled:       { label: "Đã hủy",             color: "text-gray-400" },
-};
 
 export default function CustomersPage() {
   const qc = useQueryClient();
@@ -71,36 +104,53 @@ export default function CustomersPage() {
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [formError, setFormError] = useState("");
+  const [formSuccess, setFormSuccess] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: customers = [], isLoading } = useQuery<Customer[]>({
     queryKey: ["customers", search, sourceFilter],
     queryFn: () => {
       const params = new URLSearchParams();
       if (search.length > 1) params.set("search", search);
-      return fetchJson(`/api/customers?${params}`);
+      return fetchJson<Customer[]>(`/api/customers?${params}`);
     },
+    retry: 1,
   });
 
   const { data: customerDetail } = useQuery<CustomerDetail>({
     queryKey: ["customer-detail", selectedId],
-    queryFn: () => fetchJson(`/api/customers/${selectedId}`),
+    queryFn: () => fetchJson<CustomerDetail>(`/api/customers/${selectedId}`),
     enabled: !!selectedId,
   });
 
+  // ── Mutations ─────────────────────────────────────────────────────────────────
   const createMutation = useMutation({
-    mutationFn: (data: typeof form) => fetchJson("/api/customers", { method: "POST", body: JSON.stringify(data) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["customers"] }); setIsOpen(false); setForm({ ...EMPTY_FORM }); },
+    mutationFn: (data: typeof form) =>
+      fetchJson<Customer>("/api/customers", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: (newCustomer) => {
+      qc.invalidateQueries({ queryKey: ["customers"] });
+      setFormSuccess(`Đã thêm khách hàng "${newCustomer.name}" thành công!`);
+      setTimeout(() => { setIsOpen(false); setForm({ ...EMPTY_FORM }); setFormSuccess(""); }, 1200);
+    },
+    onError: (err: Error) => {
+      setFormError(err.message || "Lưu thất bại. Vui lòng thử lại.");
+    },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: typeof form }) =>
-      fetchJson(`/api/customers/${id}`, { method: "PUT", body: JSON.stringify(data) }),
-    onSuccess: () => {
+      fetchJson<Customer>(`/api/customers/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    onSuccess: (updated) => {
       qc.invalidateQueries({ queryKey: ["customers"] });
       qc.invalidateQueries({ queryKey: ["customer-detail", editingId] });
-      setIsOpen(false);
+      setFormSuccess(`Đã cập nhật "${updated.name}" thành công!`);
+      setTimeout(() => { setIsOpen(false); setFormSuccess(""); }, 1200);
+    },
+    onError: (err: Error) => {
+      setFormError(err.message || "Cập nhật thất bại. Vui lòng thử lại.");
     },
   });
 
@@ -109,36 +159,67 @@ export default function CustomersPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["customers"] }); setSelectedId(null); },
   });
 
-  const openCreate = () => { setForm({ ...EMPTY_FORM }); setEditingId(null); setIsOpen(true); };
+  // ── Form helpers ─────────────────────────────────────────────────────────────
+  const openCreate = () => {
+    setForm({ ...EMPTY_FORM });
+    setEditingId(null);
+    setFormError("");
+    setFormSuccess("");
+    setIsOpen(true);
+  };
 
   const openEdit = (c: Customer) => {
     setForm({
       name: c.name, phone: c.phone, email: c.email || "", address: c.address || "",
       gender: c.gender || "", facebook: c.facebook || "", zalo: c.zalo || "",
-      source: c.source || "other", tags: c.tags || "", notes: c.notes || "",
-      avatar: c.avatar || "",
+      source: c.source || "other",
+      tags: Array.isArray(c.tags) ? (c.tags as string[]).join(", ") : (c.tags || ""),
+      notes: c.notes || "", avatar: c.avatar || "",
     });
-    setEditingId(c.id); setIsOpen(true);
+    setEditingId(c.id);
+    setFormError("");
+    setFormSuccess("");
+    setIsOpen(true);
   };
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => setForm(f => ({ ...f, avatar: ev.target?.result as string }));
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressImage(file);
+      setForm(f => ({ ...f, avatar: compressed }));
+    } catch {
+      setFormError("Không thể đọc ảnh. Vui lòng thử ảnh khác.");
+    }
   };
 
-  const handleSubmit = () => {
-    if (!form.name || !form.phone) return alert("Vui lòng nhập tên và số điện thoại");
-    if (editingId) updateMutation.mutate({ id: editingId, data: form });
-    else createMutation.mutate(form);
+  const handleSubmit = async () => {
+    setFormError("");
+    if (!form.name.trim()) { setFormError("Vui lòng nhập họ và tên khách hàng"); return; }
+    if (!form.phone.trim()) { setFormError("Vui lòng nhập số điện thoại"); return; }
+
+    // Kiểm tra trùng số điện thoại (chỉ khi tạo mới)
+    if (!editingId) {
+      const existing = customers.find(c => c.phone.replace(/\s/g, "") === form.phone.replace(/\s/g, ""));
+      if (existing) {
+        setFormError(`Số điện thoại này đã có trong hệ thống (${existing.name} – ${existing.customCode}). Vui lòng tìm và chỉnh sửa hồ sơ khách cũ.`);
+        return;
+      }
+    }
+
+    const payload = {
+      ...form,
+      tags: form.tags.trim(),
+    };
+
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, data: payload });
+    } else {
+      createMutation.mutate(payload);
+    }
   };
 
-  const filtered = customers.filter(c => {
-    const matchSource = !sourceFilter || c.source === sourceFilter;
-    return matchSource;
-  });
+  const filtered = customers.filter(c => !sourceFilter || c.source === sourceFilter);
 
   const stats = {
     total: customers.length,
@@ -147,6 +228,8 @@ export default function CustomersPage() {
       .filter(x => x.count > 0)
       .slice(0, 3),
   };
+
+  const isSaving = createMutation.isPending || updateMutation.isPending;
 
   return (
     <div className="space-y-4">
@@ -173,7 +256,7 @@ export default function CustomersPage() {
       </div>
 
       <div className="flex gap-4">
-        {/* ─── List ─────────────────────────────────────────────────────────── */}
+        {/* ─── Customer List ───────────────────────────────────────────────── */}
         <div className={`flex-1 min-w-0 ${selectedId ? "hidden lg:block" : ""}`}>
           <div className="flex gap-2 mb-3">
             <div className="relative flex-1">
@@ -197,9 +280,7 @@ export default function CustomersPage() {
                   className={`rounded-xl border p-3.5 cursor-pointer transition-all hover:shadow-md ${selectedId === c.id ? "border-primary bg-primary/5" : "bg-card hover:border-primary/40"}`}
                 >
                   <div className="flex items-center gap-3">
-                    {/* Avatar */}
                     <AvatarCircle name={c.name} avatar={c.avatar} size="md" />
-
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-sm">{c.name}</span>
@@ -211,17 +292,16 @@ export default function CustomersPage() {
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 flex-wrap">
                         <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{c.phone}</span>
-                        {c.totalBookings ? <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{c.totalBookings} show</span> : null}
-                        {c.address && <span className="flex items-center gap-1 truncate"><MapPin className="w-3 h-3 flex-shrink-0" />{c.address}</span>}
+                        {(c.totalBookings ?? 0) > 0 && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{c.totalBookings} show</span>}
+                        {c.address && <span className="flex items-center gap-1 truncate max-w-[150px]"><MapPin className="w-3 h-3 flex-shrink-0" />{c.address}</span>}
                       </div>
                     </div>
-
                     <div className="flex items-center gap-1.5 flex-shrink-0">
-                      {c.totalDebt && c.totalDebt > 0 ? (
+                      {(c.totalDebt ?? 0) > 0 && (
                         <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full font-semibold hidden sm:block">
-                          Nợ {formatVND(c.totalDebt)}
+                          Nợ {formatVND(c.totalDebt!)}
                         </span>
-                      ) : null}
+                      )}
                       <button onClick={e => { e.stopPropagation(); openEdit(c); }} className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-primary transition-colors">
                         <Edit className="w-3.5 h-3.5" />
                       </button>
@@ -233,24 +313,25 @@ export default function CustomersPage() {
                   </div>
                 </div>
               ))}
-              {filtered.length === 0 && (
-                <div className="py-16 text-center text-muted-foreground">Không tìm thấy khách hàng</div>
+              {filtered.length === 0 && !isLoading && (
+                <div className="py-16 text-center text-muted-foreground">
+                  <Users className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                  <p>Không tìm thấy khách hàng</p>
+                  <button onClick={openCreate} className="mt-2 text-sm text-primary hover:underline">+ Thêm khách hàng mới</button>
+                </div>
               )}
             </div>
           )}
         </div>
 
-        {/* ─── Customer Detail Panel ─────────────────────────────────────── */}
+        {/* ─── Detail Panel ────────────────────────────────────────────────── */}
         {selectedId && customerDetail && (
           <div className="w-full lg:w-80 xl:w-96 flex-shrink-0">
             <div className="bg-card rounded-2xl border shadow-sm overflow-hidden sticky top-4">
-              {/* Header with avatar */}
               <div className="relative bg-gradient-to-br from-primary/10 via-primary/5 to-card p-5 border-b">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <AvatarCircle name={customerDetail.name} avatar={customerDetail.avatar} size="lg" />
-                    </div>
+                    <AvatarCircle name={customerDetail.name} avatar={customerDetail.avatar} size="lg" />
                     <div>
                       <h3 className="font-bold text-base">{customerDetail.name}</h3>
                       <p className="text-xs text-muted-foreground">{customerDetail.customCode}</p>
@@ -270,8 +351,6 @@ export default function CustomersPage() {
                     </button>
                   </div>
                 </div>
-
-                {/* Financial quick stats */}
                 <div className="grid grid-cols-3 gap-2 mt-4">
                   <div className="bg-white/60 dark:bg-black/10 rounded-xl p-2 text-center">
                     <p className="text-[10px] text-muted-foreground">Số show</p>
@@ -280,7 +359,7 @@ export default function CustomersPage() {
                   <div className="bg-white/60 dark:bg-black/10 rounded-xl p-2 text-center">
                     <p className="text-[10px] text-muted-foreground">Đã trả</p>
                     <p className="font-bold text-sm text-green-600">
-                      {formatVND(customerDetail.bookings?.reduce((s: number, b: any) => s + (b.paidAmount || 0), 0) ?? 0)}
+                      {formatVND(customerDetail.bookings?.reduce((s, b) => s + (b.paidAmount || 0), 0) ?? 0)}
                     </p>
                   </div>
                   <div className="bg-white/60 dark:bg-black/10 rounded-xl p-2 text-center">
@@ -293,16 +372,15 @@ export default function CustomersPage() {
               </div>
 
               <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto">
-                {/* Contact info */}
                 <div className="space-y-2">
-                  {[
+                  {([
                     { label: "Số điện thoại", value: customerDetail.phone, icon: Phone },
                     { label: "Email", value: customerDetail.email, icon: TrendingUp },
                     { label: "Địa chỉ", value: customerDetail.address, icon: MapPin },
                     { label: "Facebook", value: customerDetail.facebook, icon: Facebook },
                     { label: "Zalo", value: customerDetail.zalo, icon: Phone },
                     { label: "Giới tính", value: customerDetail.gender === "male" ? "Nam" : customerDetail.gender === "female" ? "Nữ" : undefined, icon: Users },
-                  ].filter(f => f.value).map(f => (
+                  ] as { label: string; value?: string; icon: React.ElementType }[]).filter(f => f.value).map(f => (
                     <div key={f.label} className="flex items-center gap-2 text-sm">
                       <f.icon className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
                       <span className="text-muted-foreground text-xs w-24 flex-shrink-0">{f.label}:</span>
@@ -311,25 +389,25 @@ export default function CustomersPage() {
                   ))}
                 </div>
 
-                {customerDetail.tags && typeof customerDetail.tags === "string" && customerDetail.tags.trim() && (
+                {customerDetail.tags && (
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Tags</p>
                     <div className="flex flex-wrap gap-1">
-                      {customerDetail.tags.split(",").map(t => t.trim()).filter(Boolean).map(t => (
-                        <span key={t} className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">{t}</span>
-                      ))}
+                      {(typeof customerDetail.tags === "string" ? customerDetail.tags : (customerDetail.tags as unknown as string[]).join(", "))
+                        .split(",").map(t => t.trim()).filter(Boolean).map(t => (
+                          <span key={t} className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">{t}</span>
+                        ))}
                     </div>
                   </div>
                 )}
 
                 {customerDetail.notes && (
-                  <div className="p-3 bg-muted/30 rounded-xl text-sm">
+                  <div className="p-3 bg-muted/30 rounded-xl">
                     <p className="font-semibold text-xs text-muted-foreground mb-1">Ghi chú</p>
                     <p className="text-sm">{customerDetail.notes}</p>
                   </div>
                 )}
 
-                {/* Lịch sử show */}
                 {customerDetail.bookings && customerDetail.bookings.length > 0 && (
                   <div>
                     <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-2">
@@ -339,7 +417,7 @@ export default function CustomersPage() {
                       {customerDetail.bookings.map(b => {
                         const st = STATUS_LABELS[b.status] ?? { label: b.status, color: "text-muted-foreground" };
                         return (
-                          <div key={b.id} className="p-2.5 rounded-xl border bg-muted/20 text-sm">
+                          <div key={b.id} className="p-2.5 rounded-xl border bg-muted/20">
                             <div className="flex justify-between items-start">
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium text-xs truncate">{b.packageType || "Chưa chốt dịch vụ"}</p>
@@ -366,13 +444,28 @@ export default function CustomersPage() {
         )}
       </div>
 
-      {/* ─── Create / Edit Dialog ──────────────────────────────────────────── */}
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      {/* ─── Create / Edit Dialog ─────────────────────────────────────────────── */}
+      <Dialog open={isOpen} onOpenChange={open => { if (!isSaving) { setIsOpen(open); if (!open) { setFormError(""); setFormSuccess(""); } } }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingId ? "Chỉnh sửa khách hàng" : "Thêm khách hàng mới"}</DialogTitle>
           </DialogHeader>
+
           <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+            {/* Error / Success banners */}
+            {formError && (
+              <div className="flex items-start gap-2 p-3 bg-destructive/10 text-destructive rounded-xl text-sm">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>{formError}</span>
+              </div>
+            )}
+            {formSuccess && (
+              <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/30 text-green-700 rounded-xl text-sm">
+                <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{formSuccess}</span>
+              </div>
+            )}
+
             {/* Avatar upload */}
             <div className="flex items-center gap-4">
               <button
@@ -380,14 +473,13 @@ export default function CustomersPage() {
                 onClick={() => avatarInputRef.current?.click()}
                 className="relative w-16 h-16 rounded-full border-2 border-dashed border-border hover:border-primary overflow-hidden flex items-center justify-center bg-muted/40 transition-colors flex-shrink-0 group"
               >
-                {form.avatar
-                  ? <img src={form.avatar} alt="avatar" className="w-full h-full object-cover" />
-                  : (
-                    <div className="w-full h-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center text-primary font-bold text-xl">
-                      {form.name ? form.name.charAt(0).toUpperCase() : <Camera className="w-5 h-5 text-muted-foreground" />}
-                    </div>
-                  )
-                }
+                {form.avatar ? (
+                  <img src={form.avatar} alt="avatar" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center text-primary font-bold text-xl">
+                    {form.name ? form.name.charAt(0).toUpperCase() : <Camera className="w-5 h-5 text-muted-foreground" />}
+                  </div>
+                )}
                 <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <Camera className="w-5 h-5 text-white" />
                 </div>
@@ -395,7 +487,7 @@ export default function CustomersPage() {
               <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
               <div className="flex-1">
                 <p className="text-sm font-medium">Ảnh đại diện</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Bấm vào ảnh để chọn từ thiết bị</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Bấm để chọn ảnh từ thiết bị (tự nén)</p>
                 {form.avatar && (
                   <button type="button" onClick={() => setForm(f => ({ ...f, avatar: "" }))} className="text-xs text-destructive hover:underline mt-1">
                     Xoá ảnh
@@ -404,14 +496,23 @@ export default function CustomersPage() {
               </div>
             </div>
 
+            {/* Fields */}
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
                 <label className="text-xs font-medium text-muted-foreground">Họ và tên *</label>
-                <Input placeholder="Nguyễn Thị Hoa" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+                <Input
+                  placeholder="Nguyễn Thị Hoa"
+                  value={form.name}
+                  onChange={e => { setForm(f => ({ ...f, name: e.target.value })); setFormError(""); }}
+                />
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Số điện thoại *</label>
-                <Input placeholder="0912 345 678" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
+                <Input
+                  placeholder="0912 345 678"
+                  value={form.phone}
+                  onChange={e => { setForm(f => ({ ...f, phone: e.target.value })); setFormError(""); }}
+                />
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Giới tính</label>
@@ -444,7 +545,7 @@ export default function CustomersPage() {
                 </Select>
               </div>
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Tags</label>
+                <label className="text-xs font-medium text-muted-foreground">Tags (phẩy cách nhau)</label>
                 <Input placeholder="VIP, Cô dâu, Tái ký" value={form.tags} onChange={e => setForm(f => ({ ...f, tags: e.target.value }))} />
               </div>
               <div className="col-span-2">
@@ -454,14 +555,16 @@ export default function CustomersPage() {
             </div>
 
             <div className="flex gap-2 pt-2">
-              <Button
-                onClick={handleSubmit}
-                disabled={createMutation.isPending || updateMutation.isPending}
-                className="flex-1"
-              >
-                {createMutation.isPending || updateMutation.isPending ? "Đang lưu..." : editingId ? "Cập nhật" : "Thêm khách hàng"}
+              <Button onClick={handleSubmit} disabled={isSaving} className="flex-1 gap-2">
+                {isSaving ? (
+                  <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Đang lưu...</>
+                ) : (
+                  editingId ? "Cập nhật" : "Thêm khách hàng"
+                )}
               </Button>
-              <Button variant="outline" onClick={() => setIsOpen(false)}>Hủy</Button>
+              <Button variant="outline" onClick={() => { if (!isSaving) { setIsOpen(false); setFormError(""); setFormSuccess(""); } }}>
+                Hủy
+              </Button>
             </div>
           </div>
         </DialogContent>
