@@ -1,0 +1,180 @@
+Hãy đồng bộ lại toàn bộ module khách hàng trong app studio.
+
+VẤN ĐỀ HIỆN TẠI:
+- Trong phần khách hàng hiện tại vẫn chưa có avatar khách hàng
+- Form thêm khách hàng và danh sách khách hàng chưa đồng bộ dữ liệu với nhau
+- Form tạo show, đơn hàng, báo giá và hồ sơ khách hàng chưa dùng chung 1 nguồn dữ liệu khách hàng
+- Tôi muốn toàn bộ thông tin khách hàng phải thống nhất ở mọi nơi trong app
+
+==================================================
+1. THÊM AVATAR KHÁCH HÀNG Ở TOÀN BỘ HỆ THỐNG
+==================================================
+
+Hãy thêm trường avatar khách hàng ở tất cả các nơi liên quan, gồm:
+
+- Form thêm khách hàng mới
+- Form chỉnh sửa khách hàng
+- Danh sách khách hàng
+- Chi tiết khách hàng
+- Form tạo show
+- Form tạo đơn hàng
+- Báo giá
+- Hợp đồng
+- Lịch chụp / event chi tiết nếu có hiển thị khách
+
+Yêu cầu:
+- Có ô upload ảnh avatar
+- Có thể chọn ảnh từ điện thoại
+- Có preview ảnh trước khi lưu
+- Nếu chưa có avatar thì dùng avatar mặc định theo chữ cái đầu tên khách
+- Nếu có avatar thì luôn ưu tiên hiển thị avatar thật
+
+==================================================
+2. DÙNG CHUNG 1 HỒ SƠ KHÁCH HÀNG
+==================================================
+
+Tôi muốn mọi nơi trong app đều dùng chung 1 customer record duy nhất.
+
+Thông tin khách hàng chuẩn gồm:
+- Họ và tên
+- Số điện thoại
+- Avatar
+- Giới tính
+- Email
+- Địa chỉ
+- Link Facebook
+- Link Zalo
+- Nguồn khách hàng
+- Tags
+- Ghi chú
+
+Yêu cầu:
+- Khi tạo khách ở form khách hàng => các module khác đều thấy ngay
+- Khi sửa khách ở hồ sơ khách hàng => lịch, đơn hàng, báo giá, hợp đồng cũng cập nhật theo
+- Không tạo dữ liệu khách hàng rời rạc ở từng module riêng
+
+==================================================
+3. ĐỒNG BỘ GIỮA FORM KHÁCH HÀNG VÀ FORM TẠO SHOW
+==================================================
+
+Trong form tạo show:
+- nếu nhập số điện thoại đã tồn tại thì tự gợi ý khách hàng cũ
+- nếu chọn khách cũ thì tự load:
+  + tên khách
+  + avatar
+  + Facebook
+  + Zalo
+  + ghi chú nếu cần
+
+Nếu chưa có khách:
+- cho phép tạo khách mới ngay trong form tạo show
+- sau khi lưu thì khách đó phải xuất hiện trong danh sách khách hàng chính
+
+==================================================
+4. DANH SÁCH KHÁCH HÀNG PHẢI HIỂN THỊ AVATAR
+==================================================
+
+Trong màn hình danh sách khách hàng:
+- mỗi khách phải có avatar bên trái
+- nếu có ảnh thật thì hiện ảnh thật
+- nếu chưa có thì hiện avatar tròn với chữ cái đầu
+
+Ngoài ra nên hiển thị:
+- tên khách
+- mã khách
+- số điện thoại
+- nguồn khách
+- tag chính nếu có
+
+==================================================
+5. CHI TIẾT KHÁCH HÀNG
+==================================================
+
+Tạo hoặc hoàn thiện màn hình chi tiết khách hàng, gồm:
+
+- Avatar lớn
+- Họ tên
+- Số điện thoại
+- Facebook
+- Zalo
+- Nguồn khách
+- Tags
+- Ghi chú
+- Lịch sử show
+- Lịch sử đơn hàng
+- Tổng số tiền đã chi
+- Tình trạng khách: mới / cũ / VIP / tái ký
+
+==================================================
+6. ĐỒNG BỘ VỚI CÁC MODULE KHÁC
+==================================================
+
+Hãy đảm bảo dữ liệu khách hàng được đồng bộ ở các module sau:
+
+A. Lịch chụp
+- event chi tiết phải hiện đúng tên khách và avatar nếu cần
+
+B. Đơn hàng
+- đơn hàng phải link với customer_id thật
+- đổi thông tin khách ở hồ sơ chính thì đơn hàng cập nhật theo
+
+C. Báo giá
+- báo giá phải lấy đúng thông tin khách hàng từ database
+
+D. Hợp đồng
+- hợp đồng phải lấy đúng tên, số điện thoại, Facebook/Zalo nếu có
+
+E. Khách hàng
+- đây phải là module gốc quản lý customer
+
+==================================================
+7. DATABASE
+==================================================
+
+Đảm bảo bảng customers có đủ các cột sau:
+- id
+- customer_code
+- full_name
+- phone
+- avatar_url
+- gender
+- email
+- address
+- facebook_url
+- zalo_contact
+- source
+- tags
+- notes
+- created_at
+- updated_at
+
+Nếu chưa có avatar_url thì hãy thêm vào schema và migration.
+
+==================================================
+8. GIAO DIỆN
+==================================================
+
+Tôi muốn giao diện phần khách hàng:
+- gọn
+- dễ nhìn
+- đồng bộ cùng style toàn app
+- avatar hiển thị đẹp
+- dễ thao tác trên điện thoại
+
+==================================================
+9. MỤC TIÊU CUỐI
+==================================================
+
+Tôi muốn phần khách hàng trong app trở thành hồ sơ khách hàng thật sự, không phải chỉ là danh sách tên và số điện thoại.
+
+Phải đồng bộ toàn bộ:
+- avatar
+- thông tin khách
+- lịch
+- show
+- đơn hàng
+- báo giá
+- hợp đồng
+
+Tức là sửa ở một nơi thì các nơi khác đều dùng đúng dữ liệu đó.
+Không để mỗi module giữ một bản khách hàng riêng.
