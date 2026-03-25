@@ -41,11 +41,13 @@ type OrderLine = {
 };
 
 const STATUS = {
-  pending:     { label: "Chờ xác nhận", color: "bg-yellow-100 text-yellow-800 border-yellow-300", dot: "bg-yellow-400", bar: "bg-yellow-400 text-yellow-900" },
-  confirmed:   { label: "Đã xác nhận",  color: "bg-blue-100 text-blue-800 border-blue-300",   dot: "bg-blue-500",   bar: "bg-blue-500 text-white" },
-  in_progress: { label: "Đang chụp",    color: "bg-purple-100 text-purple-800 border-purple-300", dot: "bg-purple-500", bar: "bg-purple-500 text-white" },
-  completed:   { label: "Hoàn thành",   color: "bg-green-100 text-green-800 border-green-300",  dot: "bg-green-500",  bar: "bg-green-500 text-white" },
-  cancelled:   { label: "Đã hủy",       color: "bg-gray-100 text-gray-500 border-gray-300",    dot: "bg-gray-400",   bar: "bg-gray-300 text-gray-600" },
+  draft:            { label: "Lịch tạm",          color: "bg-slate-100 text-slate-600 border-slate-300",   dot: "bg-slate-400",   bar: "bg-slate-300 text-slate-700" },
+  pending_service:  { label: "Chưa chốt dịch vụ", color: "bg-orange-100 text-orange-700 border-orange-300", dot: "bg-orange-400",  bar: "bg-orange-400 text-white" },
+  pending:          { label: "Chờ xác nhận",       color: "bg-yellow-100 text-yellow-800 border-yellow-300", dot: "bg-yellow-400",  bar: "bg-yellow-400 text-yellow-900" },
+  confirmed:        { label: "Đã xác nhận",        color: "bg-blue-100 text-blue-800 border-blue-300",       dot: "bg-blue-500",    bar: "bg-blue-500 text-white" },
+  in_progress:      { label: "Đang chụp",          color: "bg-purple-100 text-purple-800 border-purple-300", dot: "bg-purple-500",  bar: "bg-purple-500 text-white" },
+  completed:        { label: "Hoàn thành",         color: "bg-green-100 text-green-800 border-green-300",    dot: "bg-green-500",   bar: "bg-green-500 text-white" },
+  cancelled:        { label: "Đã hủy",             color: "bg-gray-100 text-gray-500 border-gray-300",       dot: "bg-gray-400",    bar: "bg-gray-300 text-gray-600" },
 } as const;
 
 function genId() { return Math.random().toString(36).slice(2); }
@@ -191,7 +193,9 @@ function ShowFormPanel({
   const [customerId, setCustomerId] = useState<number | null>(booking?.customerId ?? null);
   const [facebook, setFacebook] = useState("");
   const [zalo, setZalo] = useState("");
+  const [avatar, setAvatar] = useState<string>("");
   const [showExtra, setShowExtra] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const [shootDate, setShootDateLocal] = useState(() => format(date, "yyyy-MM-dd"));
   const shootDateObj = useMemo(() => {
@@ -242,6 +246,15 @@ function ShowFormPanel({
   const handleSelectCustomer = (c: Customer) => {
     setCustomerId(c.id); setCustomerName(c.name); setPhone(c.phone);
     setFacebook(c.facebook ?? ""); setZalo(c.zalo ?? "");
+    if (c.avatar) setAvatar(c.avatar);
+  };
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => setAvatar(ev.target?.result as string);
+    reader.readAsDataURL(file);
   };
 
   const save = async () => {
@@ -249,36 +262,61 @@ function ShowFormPanel({
     if (!customerName.trim()) { setError("Vui lòng nhập tên khách hàng"); return; }
     if (!phone.trim()) { setError("Vui lòng nhập số điện thoại"); return; }
     if (!shootDate) { setError("Vui lòng chọn ngày chụp"); return; }
-    const validLines = lines.filter(l => l.serviceName || l.serviceId);
-    if (validLines.length === 0) { setError("Vui lòng thêm ít nhất 1 dịch vụ"); return; }
+    if (!timeStart) { setError("Vui lòng chọn giờ bắt đầu"); return; }
     setSaving(true);
     try {
+      // ── 1. Tạo / tìm khách hàng ──
       let cid = customerId;
       if (!cid) {
         const found = await fetch(`${BASE}/api/customers?search=${encodeURIComponent(phone)}`).then(r => r.json()) as Customer[];
         const existing = found.find(c => c.phone === phone);
-        if (existing) { cid = existing.id; }
-        else {
+        if (existing) {
+          cid = existing.id;
+          // Update avatar nếu có ảnh mới
+          if (avatar && !existing.avatar) {
+            await fetch(`${BASE}/api/customers/${cid}`, {
+              method: "PUT", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ avatar }),
+            });
+          }
+        } else {
           const nc = await fetch(`${BASE}/api/customers`, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: customerName, phone, facebook, zalo, source: "walk-in" }),
+            body: JSON.stringify({ name: customerName, phone, facebook: facebook || undefined, zalo: zalo || undefined, avatar: avatar || undefined, source: "walk-in" }),
           }).then(r => r.json()) as Customer;
           cid = nc.id;
         }
       }
-      const mainSvc = validLines[0];
-      const packageType = validLines.length === 1 ? (mainSvc.serviceName || "Dịch vụ") : `${mainSvc.serviceName || "Dịch vụ"} (+${validLines.length - 1})`;
+
+      // ── 2. Chuẩn bị dịch vụ (không bắt buộc) ──
+      const validLines = lines.filter(l => l.serviceName || l.serviceId);
+      const hasServices = validLines.length > 0;
+
+      const packageType = hasServices
+        ? (validLines.length === 1
+            ? (validLines[0].serviceName || "Dịch vụ")
+            : `${validLines[0].serviceName || "Dịch vụ"} (+${validLines.length - 1})`)
+        : "Chưa chốt dịch vụ";
+
+      const finalStatus = hasServices ? status : (status === "confirmed" || status === "in_progress" || status === "completed" ? status : "pending_service");
+      const finalTotal = hasServices ? totalAmount : 0;
+      const finalDeposit = hasServices ? depositNum : 0;
+
       const assignedStaff = Array.from(new Set([
         ...validLines.filter(l => l.photoId).map(l => l.photoId!),
         ...validLines.filter(l => l.makeupId).map(l => l.makeupId!),
       ]));
+
       const body = {
         customerId: cid, shootDate, shootTime: timeStart,
         serviceCategory: "wedding", packageType,
-        location: location || null, status, totalAmount, depositAmount: depositNum,
-        discountAmount: 0, items: validLines.map(({ tempId: _t, ...rest }) => rest),
+        location: location || null, status: finalStatus,
+        totalAmount: finalTotal, depositAmount: finalDeposit,
+        discountAmount: 0,
+        items: hasServices ? validLines.map(({ tempId: _t, ...rest }) => rest) : [],
         assignedStaff, notes: notes || null,
       };
+
       let saved: Booking;
       if (isEdit && booking) {
         saved = await fetch(`${BASE}/api/bookings/${booking.id}`, {
@@ -289,12 +327,15 @@ function ShowFormPanel({
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
         }).then(r => { if (!r.ok) throw new Error("Lỗi tạo đơn"); return r.json(); });
       }
-      if (!isEdit && depositNum > 0) {
+
+      // ── 3. Ghi thanh toán đặt cọc nếu có ──
+      if (!isEdit && finalDeposit > 0) {
         await fetch(`${BASE}/api/payments`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ bookingId: saved.id, amount: depositNum, paymentMethod: "transfer", paymentType: "deposit", notes: `Đặt cọc – ${packageType}` }),
+          body: JSON.stringify({ bookingId: saved.id, amount: finalDeposit, paymentMethod: "transfer", paymentType: "deposit", notes: `Đặt cọc – ${packageType}` }),
         });
       }
+
       qc.invalidateQueries({ queryKey: ["bookings"] });
       qc.invalidateQueries({ queryKey: ["customers"] });
       onSaved();
@@ -345,15 +386,40 @@ function ShowFormPanel({
             <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
               <User className="w-3.5 h-3.5" /> A. Khách hàng
             </h4>
-            {/* Tên trước, SĐT sau */}
+            {/* 1. Tên khách hàng */}
             <Input className="h-10" placeholder="Tên khách hàng *" value={customerName} onChange={e => setCustomerName(e.target.value)} />
+            {/* 2. Số điện thoại */}
             <PhoneAutocomplete value={phone} onChange={v => { setPhone(v); setCustomerId(null); }} onSelect={handleSelectCustomer} />
             {customerId && (
               <div className="flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2.5 py-1.5 rounded-lg">
                 <Check className="w-3.5 h-3.5" /> Khách cũ đã tìm thấy (ID #{customerId})
               </div>
             )}
-            {/* + Mở rộng FB / Zalo */}
+            {/* 3. Avatar khách hàng */}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                className="relative w-14 h-14 rounded-full border-2 border-dashed border-border hover:border-primary overflow-hidden flex items-center justify-center bg-muted/40 transition-colors flex-shrink-0"
+              >
+                {avatar
+                  ? <img src={avatar} alt="avatar" className="w-full h-full object-cover" />
+                  : <Camera className="w-5 h-5 text-muted-foreground" />
+                }
+                <div className="absolute inset-0 bg-black/20 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <Camera className="w-4 h-4 text-white" />
+                </div>
+              </button>
+              <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+              <div className="flex-1">
+                <p className="text-xs font-medium text-foreground">Ảnh đại diện khách hàng</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Bấm vào vòng tròn để chọn ảnh từ thiết bị</p>
+                {avatar && (
+                  <button type="button" onClick={() => setAvatar("")} className="text-[11px] text-destructive hover:underline mt-0.5">Xoá ảnh</button>
+                )}
+              </div>
+            </div>
+            {/* 4. + Mở rộng FB / Zalo */}
             <button type="button" onClick={() => setShowExtra(!showExtra)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground py-0.5">
               <span className={`w-4 h-4 rounded-full border border-current flex items-center justify-center transition-transform ${showExtra ? "rotate-45" : ""}`}>
                 <Plus className="w-2.5 h-2.5" />
@@ -385,11 +451,13 @@ function ShowFormPanel({
               <div>
                 <label className="text-[10px] text-muted-foreground mb-1 block">Trạng thái</label>
                 <select className="w-full h-9 border border-input rounded-lg px-2 text-sm bg-background" value={status} onChange={e => setStatus(e.target.value)}>
-                  <option value="pending">Chờ xác nhận</option>
-                  <option value="confirmed">Đã xác nhận</option>
-                  <option value="in_progress">Đang thực hiện</option>
-                  <option value="completed">Hoàn thành</option>
-                  <option value="cancelled">Đã hủy</option>
+                  <option value="draft">📋 Lịch tạm</option>
+                  <option value="pending_service">⏳ Chưa chốt dịch vụ</option>
+                  <option value="pending">🟡 Chờ xác nhận</option>
+                  <option value="confirmed">🔵 Đã xác nhận</option>
+                  <option value="in_progress">🟣 Đang thực hiện</option>
+                  <option value="completed">🟢 Hoàn thành</option>
+                  <option value="cancelled">⚫ Đã hủy</option>
                 </select>
               </div>
             </div>
@@ -403,7 +471,8 @@ function ShowFormPanel({
           <section className="space-y-2">
             <div className="flex items-center justify-between">
               <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Package2 className="w-3.5 h-3.5" /> C. Dịch vụ / Job chụp ({lines.length})
+                <Package2 className="w-3.5 h-3.5" /> C. Dịch vụ / Job chụp
+                <span className="normal-case text-[10px] font-normal text-muted-foreground/60">(tuỳ chọn)</span>
               </h4>
               <button
                 onClick={() => setLines(p => [...p, { tempId: genId(), serviceName: "", serviceId: null, price: 0, photoId: null, photoName: "", makeupId: null, makeupName: "" }])}

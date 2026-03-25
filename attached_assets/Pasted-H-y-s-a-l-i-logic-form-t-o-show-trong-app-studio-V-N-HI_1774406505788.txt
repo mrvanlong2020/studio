@@ -1,0 +1,129 @@
+Hãy sửa lại logic form tạo show trong app studio.
+
+VẤN ĐỀ HIỆN TẠI:
+- Hệ thống đang bắt buộc phải chọn ít nhất 1 dịch vụ thì mới cho lưu
+- Điều này không phù hợp với quy trình studio thực tế
+- Tôi muốn dù chưa chọn gói chụp / chưa chọn dịch vụ thì vẫn phải lưu được khách hàng và show tạm
+
+==================================================
+1. CHO PHÉP LƯU KHÁCH HÀNG DÙ CHƯA CHỌN DỊCH VỤ
+==================================================
+
+Tôi muốn:
+- nếu đã nhập thông tin khách hàng
+- và đã có ngày / giờ lịch chụp
+thì vẫn cho phép bấm lưu
+
+Không được bắt buộc phải có dịch vụ mới được lưu.
+
+==================================================
+2. CHO PHÉP TẠO MEMBER / KHÁCH HÀNG NGAY TRONG FORM
+==================================================
+
+Ngay trong form này, tôi muốn tạo luôn hồ sơ khách hàng / member.
+
+Phần khách hàng phải gồm:
+- Tên khách hàng
+- Số điện thoại
+- Avatar khách hàng
+- Nút dấu cộng để mở thêm:
+  + Link Facebook
+  + Link Zalo
+
+Yêu cầu:
+- thêm 1 ô upload ảnh avatar khách hàng
+- có thể chọn ảnh từ điện thoại
+- lưu avatar vào hồ sơ khách hàng
+- sau này dùng để tạo database khách hàng
+
+==================================================
+3. NẾU CHƯA CÓ DỊCH VỤ VẪN CHO LƯU
+==================================================
+
+Nếu khách chưa chốt gói chụp / chưa chọn dịch vụ:
+- vẫn phải lưu được
+- trạng thái có thể là:
+  + Khách mới
+  + Chưa chốt dịch vụ
+  + Show tạm
+  + Chờ tư vấn
+
+Tức là:
+- dịch vụ là không bắt buộc
+- chỉ cần có khách hàng + ngày giờ là đủ để lưu
+
+==================================================
+4. ĐỔI LOGIC VALIDATION
+==================================================
+
+Hiện tại đang báo lỗi:
+"Vui lòng thêm ít nhất 1 dịch vụ"
+
+Hãy bỏ validate bắt buộc này.
+
+Validation mới chỉ cần bắt buộc:
+- tên khách hàng
+- số điện thoại
+- ngày chụp
+- giờ bắt đầu
+
+Dịch vụ:
+- không bắt buộc
+
+==================================================
+5. TÁCH 2 TRƯỜNG HỢP LƯU
+==================================================
+
+Trường hợp 1:
+Có khách hàng + có lịch + có dịch vụ
+=> lưu thành show chính thức
+
+Trường hợp 2:
+Có khách hàng + có lịch nhưng chưa có dịch vụ
+=> vẫn lưu được, nhưng lưu thành:
+- show nháp
+hoặc
+- lịch giữ chỗ
+hoặc
+- khách chờ chốt
+
+==================================================
+6. DATABASE
+==================================================
+
+Hãy đảm bảo khi bấm lưu:
+- vẫn tạo được customer
+- vẫn tạo được event / show
+- dù chưa có order_items hoặc chưa có dịch vụ
+
+Nếu chưa có dịch vụ:
+- total_amount = 0
+- deposit = 0
+- remaining_amount = 0
+- status = draft hoặc pending_service
+
+==================================================
+7. GIAO DIỆN
+==================================================
+
+Phần khách hàng phải có thêm:
+- ô avatar / upload ảnh
+
+Thứ tự phần khách hàng:
+1. Tên khách hàng
+2. Số điện thoại
+3. Avatar khách hàng
+4. Nút + mở thêm Facebook / Zalo
+
+==================================================
+8. MỤC TIÊU CUỐI
+==================================================
+
+Tôi muốn app dùng đúng quy trình studio thực tế:
+- có thể lưu khách trước
+- có thể giữ lịch trước
+- có thể tạo member / database khách hàng trước
+- chưa cần chọn gói chụp vẫn lưu được
+- sau này quay lại bổ sung dịch vụ và tiền sau
+
+Không được ép phải có dịch vụ mới cho lưu.
