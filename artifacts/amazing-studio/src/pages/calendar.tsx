@@ -32,9 +32,10 @@ type Customer = {
   id: number; name: string; phone: string; email?: string;
   facebook?: string; zalo?: string; avatar?: string; customCode?: string; totalDebt?: number;
 };
-type Staff = { id: number; name: string; role: string; roles: string[]; isActive: boolean };
-type Service = { id: number; name: string; price: number; category: string; code: string };
-type ServiceOption = { key: string; name: string; price: number };
+type Staff = { id: number; name: string; role: string; roles: string[]; isActive: boolean; staffType?: string };
+type ServiceSplit = { role: string; amount: number; rateType: "fixed" | "percent" };
+type Service = { id: number; name: string; price: number; category: string; code: string; splits?: ServiceSplit[] };
+type ServiceOption = { key: string; name: string; price: number; splits?: ServiceSplit[] };
 type OrderLine = {
   tempId: string; serviceName: string; serviceId: number | null; price: number;
   photoId: number | null; photoName: string; photoTask: string;
@@ -115,6 +116,10 @@ function PhoneAutocomplete({ value, onChange, onSelect }: {
 }
 
 // ─── Order line row ────────────────────────────────────────────────────────────
+function fmtVND(n: number) {
+  return n.toLocaleString("vi-VN") + "đ";
+}
+
 function OrderLineRow({ line, photographers, makeupArtists, services, onChange, onRemove }: {
   line: OrderLine;
   photographers: Staff[];
@@ -124,6 +129,20 @@ function OrderLineRow({ line, photographers, makeupArtists, services, onChange, 
   onRemove: () => void;
 }) {
   const [useCustom, setUseCustom] = useState(!line.serviceId && !!line.serviceName);
+
+  // Find the selected service to show splits preview
+  const selectedSvc = line.serviceId
+    ? services.find(s => s.key === `svc-${line.serviceId}`)
+    : null;
+  const splits = selectedSvc?.splits || [];
+  const photoSplit = splits.find(sp => sp.role === "photographer");
+  const makeupSplit = splits.find(sp => sp.role === "makeup");
+
+  function calcSplit(sp: ServiceSplit | undefined): number {
+    if (!sp) return 0;
+    return sp.rateType === "percent" ? (line.price * sp.amount / 100) : sp.amount;
+  }
+
   return (
     <div className="p-2.5 bg-muted/30 rounded-xl border border-border/50 space-y-2">
       <div className="flex gap-1.5 items-center">
@@ -155,7 +174,7 @@ function OrderLineRow({ line, photographers, makeupArtists, services, onChange, 
           <select className="w-full h-8 border border-input rounded-lg px-2 text-xs bg-background" value={line.photoId ?? ""}
             onChange={e => { const s = photographers.find(x => x.id === parseInt(e.target.value)); onChange({ ...line, photoId: s?.id ?? null, photoName: s?.name ?? "" }); }}>
             <option value="">— Chọn —</option>
-            {photographers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {photographers.map(s => <option key={s.id} value={s.id}>{s.name}{s.staffType === "freelancer" ? " (CTV)" : ""}</option>)}
           </select>
           {line.photoId && (
             <select className="w-full h-8 border border-input rounded-lg px-2 text-xs bg-background mt-1" value={line.photoTask ?? ""}
@@ -176,6 +195,13 @@ function OrderLineRow({ line, photographers, makeupArtists, services, onChange, 
               <option value="ho_tro_chup">Hỗ trợ chụp</option>
               <option value="mac_dinh">Mặc định</option>
             </select>
+          )}
+          {/* Photo earnings preview */}
+          {line.photoId && photoSplit && calcSplit(photoSplit) > 0 && (
+            <div className="mt-1 text-[10px] bg-blue-50 text-blue-700 rounded px-2 py-1 flex justify-between">
+              <span>💰 Thù lao dự kiến</span>
+              <span className="font-semibold">{fmtVND(calcSplit(photoSplit))}</span>
+            </div>
           )}
         </div>
         <div>
@@ -201,11 +227,27 @@ function OrderLineRow({ line, photographers, makeupArtists, services, onChange, 
               <option value="mac_dinh">Mặc định</option>
             </select>
           )}
+          {/* Makeup earnings preview */}
+          {line.makeupId && makeupSplit && calcSplit(makeupSplit) > 0 && (
+            <div className="mt-1 text-[10px] bg-pink-50 text-pink-700 rounded px-2 py-1 flex justify-between">
+              <span>💰 Thù lao dự kiến</span>
+              <span className="font-semibold">{fmtVND(calcSplit(makeupSplit))}</span>
+            </div>
+          )}
         </div>
       </div>
-      <div>
-        <p className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><CreditCard className="w-3 h-3" /> Giá (đ)</p>
-        <Input type="number" className="h-8 text-sm w-40" value={line.price || ""} placeholder="0" onChange={e => onChange({ ...line, price: parseFloat(e.target.value) || 0 })} />
+      <div className="flex items-end gap-3">
+        <div>
+          <p className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><CreditCard className="w-3 h-3" /> Giá (đ)</p>
+          <Input type="number" className="h-8 text-sm w-40" value={line.price || ""} placeholder="0" onChange={e => onChange({ ...line, price: parseFloat(e.target.value) || 0 })} />
+        </div>
+        {line.price > 0 && selectedSvc && splits.length > 0 && (
+          <div className="text-[10px] text-muted-foreground pb-1">
+            Studio giữ: <span className="font-semibold text-green-600">
+              {fmtVND(line.price - splits.reduce((s, sp) => s + (sp.rateType === "percent" ? line.price * sp.amount / 100 : sp.amount), 0))}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -287,8 +329,8 @@ function ShowFormPanel({
   const [photoshopId, setPhotoshopId] = useState<number | null>(() => getAssignedObj().photoshop ?? null);
   const [photoshopTask, setPhotoshopTask] = useState<string>(() => String(getAssignedObj().photoshopTask ?? "mac_dinh"));
   const allServices: ServiceOption[] = [
-    ...services.map(s => ({ key: `svc-${s.id}`, name: s.name, price: s.price })),
-    ...pricingPackages.map(p => ({ key: `pkg-${p.id}`, name: p.name, price: p.price })),
+    ...services.map(s => ({ key: `svc-${s.id}`, name: s.name, price: s.price, splits: s.splits || [] })),
+    ...pricingPackages.map(p => ({ key: `pkg-${p.id}`, name: p.name, price: p.price, splits: [] })),
   ];
 
   const totalAmount = lines.reduce((s, l) => s + (l.price || 0), 0);
