@@ -50,7 +50,7 @@ router.get("/staff/:id", async (req, res) => {
 });
 
 router.post("/staff", async (req, res) => {
-  const { name, phone, role, roles, email, salary, baseSalaryAmount, joinDate, isActive, status, notes, salaryNotes } = req.body;
+  const { name, phone, role, roles, email, salary, baseSalaryAmount, joinDate, isActive, status, staffType, notes, salaryNotes } = req.body;
   // status: "active"|"inactive"|"probation" → isActive
   const activeVal = isActive !== undefined ? (isActive ? 1 : 0) : (status === "inactive" || status === "probation" ? 0 : 1);
   const notesVal = [notes, salaryNotes].filter(Boolean).join(" | ") || null;
@@ -65,6 +65,7 @@ router.post("/staff", async (req, res) => {
       baseSalaryAmount: baseSalaryAmount ? String(baseSalaryAmount) : "0",
       joinDate: joinDate || null,
       isActive: activeVal,
+      staffType: staffType || "official",
       notes: notesVal,
     })
     .returning();
@@ -73,10 +74,11 @@ router.post("/staff", async (req, res) => {
 
 router.put("/staff/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  const { name, phone, role, roles, email, salary, baseSalaryAmount, joinDate, isActive, status, notes, salaryNotes } = req.body;
+  const { name, phone, role, roles, email, salary, baseSalaryAmount, joinDate, isActive, status, staffType, notes, salaryNotes } = req.body;
   const update: Record<string, unknown> = {};
   if (name !== undefined) update.name = name;
   if (phone !== undefined) update.phone = phone;
+  if (staffType !== undefined) update.staffType = staffType;
   if (role !== undefined) update.role = role;
   if (roles !== undefined) {
     update.roles = Array.isArray(roles) ? roles : [];
@@ -100,6 +102,9 @@ router.put("/staff/:id", async (req, res) => {
 
 router.delete("/staff/:id", async (req, res) => {
   const id = parseInt(req.params.id);
+  // Null-out non-cascade FK references first
+  await db.execute(`UPDATE tasks SET assignee_id = NULL WHERE assignee_id = ${id}`);
+  await db.execute(`DELETE FROM payrolls WHERE staff_id = ${id}`);
   await db.delete(staffTable).where(eq(staffTable.id, id));
   res.status(204).send();
 });

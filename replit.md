@@ -16,11 +16,16 @@ A wedding photography studio and wedding dress rental management system for "Ama
 - **Cho thuê váy (Rentals)**: Dress rental management with return tracking
 - **Thanh toán (Payments)**: Payment tracking (cash, bank transfer, MoMo, ZaloPay)
 - **Bảng giá (Pricing)**: Full pricing catalog — service groups, packages with detailed items, surcharges CRUD; 4 DB tables: service_groups, service_packages, package_items, surcharges; seed data with 11 groups, 15 packages, 10 surcharges
-- **Nhân sự & Lương (Staff & Payroll)** `/staff`: Full HR system with multi-role staff (sale/photographer/makeup/photoshop/marketing), salary rates by service×role, individual overrides, auto job earnings computation on booking completion, monthly earnings dashboard
-  - DB: `staff.roles` (jsonb array), `staff_salary_rates`, `staff_salary_overrides`, `staff_job_earnings`, `staff_kpi_config`
-  - API: `/api/salary-rates`, `/api/salary-overrides`, `/api/job-earnings`, `/api/job-earnings/compute/:id`
-  - Auto-compute: When booking → "completed" status, earns for each assigned staff member auto-generated
-  - Calendar form: Booking-level sale/photoshop selectors added; `assignedStaff` stored as object `{photographer, makeup, sale, photoshop}`
+- **Nhân sự & Lương (Staff & Payroll)** `/staff`: Full HR system with multi-role staff + freelancer support
+  - `staffType` field: "official" (nhân viên chính thức) or "freelancer" (CTV)
+  - Roles: admin, photographer, makeup, sale, photoshop, assistant, marketing (jsonb array)
+  - Real staff seeded: 5 chính thức (Trần Chí, Trung, Hoa, Quân, Diệu Mai) + 15 CTV photographers
+  - Per-staff individual pricing via `staff_rate_prices` table (staffId × role × taskKey → rate + rateType)
+  - Filter by type (Tất cả / Chính thức / CTV) and role in staff list
+  - DB: `staff.roles` (jsonb), `staff.staffType`, `staff_rate_prices`, `staff_job_earnings`
+  - API: `/api/staff-rates` (bulk upsert), `/api/job-earnings`
+  - Auto-compute: booking → "completed" → earnings auto-generated per assigned staff using per-staff rates
+  - Calendar: `photoTask`/`makeupTask`/`saleTask`/`photoshopTask` stored per booking item + `assignedStaff`
 
 ## Stack
 

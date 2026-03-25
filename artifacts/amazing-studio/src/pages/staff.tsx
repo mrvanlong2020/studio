@@ -22,10 +22,12 @@ async function fetchJson(url: string, opts?: RequestInit) {
 
 // ─── Role definitions ─────────────────────────────────────────────────────────
 const ROLES = [
+  { key: "admin",        label: "Quản lý",    icon: "👑" },
   { key: "photographer", label: "Nhiếp ảnh",  icon: "📷" },
   { key: "makeup",       label: "Trang điểm", icon: "💄" },
   { key: "sale",         label: "Kinh doanh",  icon: "💼" },
   { key: "photoshop",    label: "Chỉnh sửa",  icon: "🖥️" },
+  { key: "assistant",    label: "Hỗ trợ",     icon: "🤝" },
   { key: "marketing",    label: "Marketing",  icon: "📣" },
 ];
 
@@ -184,12 +186,12 @@ function PriceBlock({ role, prices, onChange }: PriceBlockProps) {
 // ─── Staff Info Form (Add / Edit) ─────────────────────────────────────────────
 type StaffFormData = {
   name: string; phone: string; email: string; address: string;
-  status: string; joinDate: string; notes: string;
+  status: string; staffType: string; joinDate: string; notes: string;
   baseSalaryAmount: string; allowance: string; salaryNotes: string;
 };
 const EMPTY_FORM: StaffFormData = {
   name: "", phone: "", email: "", address: "",
-  status: "active", joinDate: "", notes: "",
+  status: "active", staffType: "official", joinDate: "", notes: "",
   baseSalaryAmount: "", allowance: "", salaryNotes: "",
 };
 
@@ -218,6 +220,7 @@ function StaffFormSheet({ open, onClose, editStaff }: StaffFormSheetProps) {
         email: String(editStaff.email || ""),
         address: String(editStaff.address || ""),
         status: String(editStaff.status || "active"),
+        staffType: String(editStaff.staffType || "official"),
         joinDate: String(editStaff.joinDate || ""),
         notes: String(editStaff.notes || ""),
         baseSalaryAmount: editStaff.baseSalaryAmount ? String(editStaff.baseSalaryAmount) : "",
@@ -281,6 +284,7 @@ function StaffFormSheet({ open, onClose, editStaff }: StaffFormSheetProps) {
         email: form.email.trim(),
         address: form.address.trim(),
         status: form.status,
+        staffType: form.staffType || "official",
         joinDate: form.joinDate || null,
         notes: form.notes.trim(),
         baseSalaryAmount: form.baseSalaryAmount ? parseFloat(form.baseSalaryAmount) : null,
@@ -384,6 +388,16 @@ function StaffFormSheet({ open, onClose, editStaff }: StaffFormSheetProps) {
                       <SelectItem value="active">Đang làm</SelectItem>
                       <SelectItem value="inactive">Nghỉ</SelectItem>
                       <SelectItem value="probation">Tạm nghỉ</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Loại nhân viên</Label>
+                  <Select value={form.staffType} onValueChange={v => setField("staffType", v)}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="official">Chính thức</SelectItem>
+                      <SelectItem value="freelancer">Cộng tác viên (CTV)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -630,6 +644,7 @@ function StaffCard({ staff, earnings, onEdit, onEditPrice }: StaffCardProps) {
   const now = new Date();
   const thisMonth = now.getMonth() + 1;
   const thisYear = now.getFullYear();
+  const isFreelancer = staff.staffType === "freelancer";
 
   const mine = earnings.filter(e => e.staffId === (staff.id as number));
   const todayTotal = mine.filter(e => e.earnedDate.slice(0, 10) === todayStr).reduce((s, e) => s + e.rate, 0);
@@ -646,14 +661,19 @@ function StaffCard({ staff, earnings, onEdit, onEditPrice }: StaffCardProps) {
   } as Record<string, string>)[String(staff.status || "active")] || "bg-gray-100 text-gray-700";
 
   return (
-    <div className="border rounded-xl p-4 bg-card hover:shadow-sm transition-shadow flex flex-col gap-3">
+    <div className={`border rounded-xl p-4 bg-card hover:shadow-sm transition-shadow flex flex-col gap-3 ${isFreelancer ? "border-purple-200 bg-purple-50/30" : ""}`}>
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-sm shrink-0">
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${isFreelancer ? "bg-purple-100 text-purple-700" : "bg-primary/10 text-primary"}`}>
             {String(staff.name || "?")[0].toUpperCase()}
           </div>
           <div className="min-w-0">
-            <div className="font-semibold truncate">{String(staff.name)}</div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-semibold truncate">{String(staff.name)}</span>
+              {isFreelancer && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium shrink-0">CTV</span>
+              )}
+            </div>
             <div className="text-xs text-muted-foreground">{String(staff.phone || "—")}</div>
           </div>
         </div>
@@ -837,6 +857,8 @@ export default function StaffPage() {
   const [editStaff, setEditStaff] = useState<Record<string, unknown> | null>(null);
   const [priceStaff, setPriceStaff] = useState<Record<string, unknown> | null>(null);
   const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | "official" | "freelancer">("all");
+  const [roleFilter, setRoleFilter] = useState("all");
 
   const { data: staffList = [] } = useQuery<Array<Record<string, unknown>>>({
     queryKey: ["staff"],
@@ -848,15 +870,18 @@ export default function StaffPage() {
     queryFn: () => fetchJson(`${BASE}/api/job-earnings`),
   });
 
-  const filtered = staffList.filter(s =>
-    !search ||
-    String(s.name || "").toLowerCase().includes(search.toLowerCase()) ||
-    String(s.phone || "").includes(search)
-  );
+  const filtered = staffList.filter(s => {
+    if (typeFilter === "official" && s.staffType !== "official" && s.staffType !== null && s.staffType !== undefined && s.staffType !== "") return false;
+    if (typeFilter === "freelancer" && s.staffType !== "freelancer") return false;
+    if (roleFilter !== "all" && !getRoles(s).includes(roleFilter)) return false;
+    if (search && !String(s.name || "").toLowerCase().includes(search.toLowerCase()) && !String(s.phone || "").includes(search)) return false;
+    return true;
+  });
 
-  const activeCount = staffList.filter(s => !s.status || s.status === "active").length;
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const officialCount = staffList.filter(s => s.staffType !== "freelancer").length;
+  const freelancerCount = staffList.filter(s => s.staffType === "freelancer").length;
   const now = new Date();
+  const todayStr = new Date().toISOString().slice(0, 10);
   const todayTotal = allEarnings.filter(e => e.earnedDate.slice(0, 10) === todayStr).reduce((s, e) => s + e.rate, 0);
   const monthTotal = allEarnings.filter(e => {
     const d = new Date(e.earnedDate);
@@ -880,20 +905,20 @@ export default function StaffPage() {
       {/* Stats row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         <div className="border rounded-lg p-3 text-center">
-          <div className="text-2xl font-bold">{staffList.length}</div>
-          <div className="text-xs text-muted-foreground">Tổng nhân viên</div>
+          <div className="text-2xl font-bold">{officialCount}</div>
+          <div className="text-xs text-muted-foreground">Nhân viên chính thức</div>
         </div>
         <div className="border rounded-lg p-3 text-center">
-          <div className="text-2xl font-bold text-green-600">{activeCount}</div>
-          <div className="text-xs text-muted-foreground">Đang làm việc</div>
+          <div className="text-2xl font-bold text-purple-600">{freelancerCount}</div>
+          <div className="text-xs text-muted-foreground">Cộng tác viên (CTV)</div>
         </div>
         <div className="border rounded-lg p-3 text-center">
           <div className="text-sm font-bold text-blue-600">{fmt(monthTotal)}</div>
-          <div className="text-xs text-muted-foreground">Tổng lương tháng này</div>
+          <div className="text-xs text-muted-foreground">Thu nhập tháng này</div>
         </div>
         <div className="border rounded-lg p-3 text-center">
           <div className="text-sm font-bold text-orange-600">{fmt(todayTotal)}</div>
-          <div className="text-xs text-muted-foreground">Tổng lương hôm nay</div>
+          <div className="text-xs text-muted-foreground">Thu nhập hôm nay</div>
         </div>
       </div>
 
@@ -904,17 +929,43 @@ export default function StaffPage() {
         </TabsList>
 
         <TabsContent value="staff">
-          <Input
-            placeholder="Tìm theo tên, số điện thoại..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="mb-4 max-w-sm"
-          />
+          {/* Filters */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            <Input
+              placeholder="Tìm theo tên, số điện thoại..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="max-w-xs"
+            />
+            <div className="flex gap-1 bg-muted rounded-lg p-1">
+              {(["all","official","freelancer"] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setTypeFilter(t)}
+                  className={`text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${typeFilter === t ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  {t === "all" ? "Tất cả" : t === "official" ? "Chính thức" : "CTV"}
+                </button>
+              ))}
+            </div>
+            <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <SelectTrigger className="w-44 h-9 text-sm">
+                <SelectValue placeholder="Lọc theo vai trò" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tất cả vai trò</SelectItem>
+                {ROLES.map(r => (
+                  <SelectItem key={r.key} value={r.key}>{r.icon} {r.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {filtered.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
               <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p className="font-medium">Chưa có nhân viên nào</p>
-              <p className="text-sm mt-1">Bấm "Thêm nhân viên" để bắt đầu</p>
+              <p className="font-medium">Không tìm thấy nhân viên</p>
+              <p className="text-sm mt-1">Thử thay đổi bộ lọc hoặc bấm "Thêm nhân viên"</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

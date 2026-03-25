@@ -18,6 +18,7 @@ export const staffTable = pgTable("staff", {
   commissionRate: numeric("commission_rate", { precision: 5, scale: 2 }).notNull().default("0"),
   joinDate: date("join_date"),
   isActive: integer("is_active").notNull().default(1),
+  staffType: text("staff_type").notNull().default("official"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
