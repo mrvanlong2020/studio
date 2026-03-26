@@ -27,6 +27,7 @@ export const servicePackagesTable = pgTable("service_packages", {
   products: text("products"),
   serviceType: text("service_type"),
   photoCount: integer("photo_count").notNull().default(1),
+  includesMakeup: integer("includes_makeup").notNull().default(1),
   isActive: integer("is_active").notNull().default(1),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),

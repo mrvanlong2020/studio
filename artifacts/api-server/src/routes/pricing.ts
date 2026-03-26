@@ -14,7 +14,8 @@ const fmtGroup = (g: { isActive: number; [k: string]: unknown }) => ({
 const fmtPkg = (p: {
   price: string; costPrice: string; printCost: string; operatingCost: string;
   salePercent: string; isActive: number; addons: string | null; products: string | null;
-  serviceType?: string | null; photoCount?: number | null; [k: string]: unknown
+  serviceType?: string | null; photoCount?: number | null; includesMakeup?: number | null;
+  [k: string]: unknown
 }) => ({
   ...p,
   price: parseFloat(p.price),
@@ -27,6 +28,7 @@ const fmtPkg = (p: {
   products: p.products ? (() => { try { return JSON.parse(p.products!); } catch { return []; } })() : [],
   serviceType: p.serviceType ?? null,
   photoCount: p.photoCount ?? 1,
+  includesMakeup: p.includesMakeup !== 0,
 });
 
 const fmtSurcharge = (s: { price: string; isActive: number; [k: string]: unknown }) => ({
@@ -326,6 +328,179 @@ async function seedTiecCuoiIfMissing() {
 
 seedTiecCuoiIfMissing().catch(console.error);
 
+// ─── Addon: Combo ngày cưới ───────────────────────────────────────────────────
+const ADDONS_COMBO = JSON.stringify([
+  { key: "nang_sare",      name: "Nâng sare (thêm 1 bộ)",               price: 500000 },
+  { key: "them_vest",      name: "Thêm 1 bộ vest chú rể",               price: 300000 },
+  { key: "thue_mam_qua",  name: "Thuê mâm quả",                         price: 500000 },
+  { key: "them_hoa_xe",   name: "Thêm hoa xe cưới",                     price: 500000 },
+  { key: "nang_ao_dai",   name: "Nâng áo dài mẹ (thêm 1 bộ)",          price: 300000 },
+]);
+
+async function seedComboIfMissing() {
+  const existing = await db.select()
+    .from(serviceGroupsTable)
+    .where(eq(serviceGroupsTable.name, "COMBO CÓ MAKEUP"))
+    .limit(1);
+  if (existing.length > 0) return;
+
+  // ─── Nhóm 4: COMBO CÓ MAKEUP ─────────────────────────────────────────────
+  const [grComboMK] = await db.insert(serviceGroupsTable).values([
+    { name: "COMBO CÓ MAKEUP", description: "Combo ngày cưới bao gồm dịch vụ makeup", sortOrder: 4 },
+  ]).returning();
+
+  const [cmSilver, cmGold, cmDiamond, cmLuxury] = await db.insert(servicePackagesTable).values([
+    {
+      groupId: grComboMK.id, code: "CM-SILVER", name: "Combo Makeup Silver",
+      price: "6000000", costPrice: "0",
+      printCost: "0", operatingCost: "500000", salePercent: "10",
+      description: "1 sare + vest + makeup cô dâu + mâm quả",
+      serviceType: "combo_co_makeup", photoCount: 1, includesMakeup: 1,
+      addons: ADDONS_COMBO,
+      products: JSON.stringify(["Trang phục thuê ngày cưới", "Phụ kiện đính kèm"]),
+      sortOrder: 1,
+    },
+    {
+      groupId: grComboMK.id, code: "CM-GOLD", name: "Combo Makeup Gold",
+      price: "9000000", costPrice: "0",
+      printCost: "0", operatingCost: "500000", salePercent: "10",
+      description: "2 sare + vest + makeup cô dâu & chú rể + mâm quả",
+      serviceType: "combo_co_makeup", photoCount: 1, includesMakeup: 1,
+      addons: ADDONS_COMBO,
+      products: JSON.stringify(["Trang phục thuê ngày cưới", "Phụ kiện đính kèm"]),
+      sortOrder: 2,
+    },
+    {
+      groupId: grComboMK.id, code: "CM-DIAMOND", name: "Combo Makeup Diamond",
+      price: "11000000", costPrice: "0",
+      printCost: "0", operatingCost: "500000", salePercent: "10",
+      description: "2 sare nâng cao + vest + 2 lần makeup (tiệc + cổng) + hoa xe + mâm quả",
+      serviceType: "combo_co_makeup", photoCount: 1, includesMakeup: 1,
+      addons: ADDONS_COMBO,
+      products: JSON.stringify(["Trang phục thuê ngày cưới", "Phụ kiện đính kèm"]),
+      sortOrder: 3,
+    },
+    {
+      groupId: grComboMK.id, code: "CM-LUXURY", name: "Combo Makeup Luxury",
+      price: "13000000", costPrice: "0",
+      printCost: "0", operatingCost: "500000", salePercent: "10",
+      description: "3 sare luxury + vest + 3 lần makeup (tiệc + cổng + xu) + hoa xe + mâm quả lớn",
+      serviceType: "combo_co_makeup", photoCount: 1, includesMakeup: 1,
+      addons: ADDONS_COMBO,
+      products: JSON.stringify(["Trang phục thuê ngày cưới", "Phụ kiện đính kèm"]),
+      sortOrder: 4,
+    },
+  ]).returning();
+
+  // Items — Combo có makeup
+  await db.insert(packageItemsTable).values([
+    { packageId: cmSilver.id,  name: "Sare cô dâu",                   quantity: "1", unit: "bộ", sortOrder: 1 },
+    { packageId: cmSilver.id,  name: "Vest chú rể",                   quantity: "1", unit: "bộ", sortOrder: 2 },
+    { packageId: cmSilver.id,  name: "Makeup cô dâu",                 quantity: "1", unit: "lần", sortOrder: 3 },
+    { packageId: cmSilver.id,  name: "Mâm quả",                       quantity: "1", unit: "bộ", sortOrder: 4 },
+    { packageId: cmSilver.id,  name: "Hoa cầm tay + hoa cài áo",     quantity: "1", unit: "bộ", sortOrder: 5 },
+
+    { packageId: cmGold.id,    name: "Sare cô dâu",                   quantity: "2", unit: "bộ", sortOrder: 1 },
+    { packageId: cmGold.id,    name: "Vest chú rể",                   quantity: "1", unit: "bộ", sortOrder: 2 },
+    { packageId: cmGold.id,    name: "Makeup cô dâu + chú rể",        quantity: "1", unit: "lần", sortOrder: 3 },
+    { packageId: cmGold.id,    name: "Mâm quả",                       quantity: "1", unit: "bộ", sortOrder: 4 },
+    { packageId: cmGold.id,    name: "Hoa cầm tay + hoa cài áo",     quantity: "1", unit: "bộ", sortOrder: 5 },
+
+    { packageId: cmDiamond.id, name: "Sare cô dâu nâng cao",         quantity: "2", unit: "bộ", sortOrder: 1 },
+    { packageId: cmDiamond.id, name: "Vest chú rể",                   quantity: "1", unit: "bộ", sortOrder: 2 },
+    { packageId: cmDiamond.id, name: "Makeup (tiệc + cổng)",          quantity: "2", unit: "lần", sortOrder: 3 },
+    { packageId: cmDiamond.id, name: "Hoa xe cưới",                   quantity: "1", unit: "bộ", sortOrder: 4 },
+    { packageId: cmDiamond.id, name: "Mâm quả",                       quantity: "1", unit: "bộ", sortOrder: 5 },
+    { packageId: cmDiamond.id, name: "Hoa cầm tay + hoa cài áo",     quantity: "1", unit: "bộ", sortOrder: 6 },
+
+    { packageId: cmLuxury.id,  name: "Sare cô dâu luxury",            quantity: "3", unit: "bộ", sortOrder: 1 },
+    { packageId: cmLuxury.id,  name: "Vest chú rể",                   quantity: "1", unit: "bộ", sortOrder: 2 },
+    { packageId: cmLuxury.id,  name: "Makeup (tiệc + cổng + xu)",     quantity: "3", unit: "lần", sortOrder: 3 },
+    { packageId: cmLuxury.id,  name: "Áo dài mẹ cô dâu",             quantity: "1", unit: "bộ", sortOrder: 4 },
+    { packageId: cmLuxury.id,  name: "Hoa xe cưới",                   quantity: "1", unit: "bộ", sortOrder: 5 },
+    { packageId: cmLuxury.id,  name: "Mâm quả lớn",                   quantity: "1", unit: "bộ", sortOrder: 6 },
+    { packageId: cmLuxury.id,  name: "Hoa cầm tay + hoa cài áo",     quantity: "1", unit: "bộ", sortOrder: 7 },
+  ]);
+
+  // ─── Nhóm 5: COMBO KHÔNG MAKEUP ──────────────────────────────────────────
+  const [grComboNoMK] = await db.insert(serviceGroupsTable).values([
+    { name: "COMBO KHÔNG MAKEUP", description: "Combo ngày cưới không bao gồm dịch vụ makeup", sortOrder: 5 },
+  ]).returning();
+
+  const [cnSilver, cnGold, cnDiamond, cnLuxury] = await db.insert(servicePackagesTable).values([
+    {
+      groupId: grComboNoMK.id, code: "CN-SILVER", name: "Combo Không Makeup Silver",
+      price: "4500000", costPrice: "0",
+      printCost: "0", operatingCost: "300000", salePercent: "10",
+      description: "1 sare + vest + mâm quả — không bao gồm makeup",
+      serviceType: "combo_khong_makeup", photoCount: 1, includesMakeup: 0,
+      addons: ADDONS_COMBO,
+      products: JSON.stringify(["Trang phục thuê ngày cưới", "Phụ kiện đính kèm"]),
+      sortOrder: 1,
+    },
+    {
+      groupId: grComboNoMK.id, code: "CN-GOLD", name: "Combo Không Makeup Gold",
+      price: "5900000", costPrice: "0",
+      printCost: "0", operatingCost: "300000", salePercent: "10",
+      description: "2 sare + vest + mâm quả — không bao gồm makeup",
+      serviceType: "combo_khong_makeup", photoCount: 1, includesMakeup: 0,
+      addons: ADDONS_COMBO,
+      products: JSON.stringify(["Trang phục thuê ngày cưới", "Phụ kiện đính kèm"]),
+      sortOrder: 2,
+    },
+    {
+      groupId: grComboNoMK.id, code: "CN-DIAMOND", name: "Combo Không Makeup Diamond",
+      price: "7900000", costPrice: "0",
+      printCost: "0", operatingCost: "300000", salePercent: "10",
+      description: "2 sare + vest + hoa xe + mâm quả — không bao gồm makeup",
+      serviceType: "combo_khong_makeup", photoCount: 1, includesMakeup: 0,
+      addons: ADDONS_COMBO,
+      products: JSON.stringify(["Trang phục thuê ngày cưới", "Phụ kiện đính kèm"]),
+      sortOrder: 3,
+    },
+    {
+      groupId: grComboNoMK.id, code: "CN-LUXURY", name: "Combo Không Makeup Luxury",
+      price: "9900000", costPrice: "0",
+      printCost: "0", operatingCost: "300000", salePercent: "10",
+      description: "3 sare + vest + hoa xe + mâm quả lớn + áo dài mẹ — không bao gồm makeup",
+      serviceType: "combo_khong_makeup", photoCount: 1, includesMakeup: 0,
+      addons: ADDONS_COMBO,
+      products: JSON.stringify(["Trang phục thuê ngày cưới", "Phụ kiện đính kèm"]),
+      sortOrder: 4,
+    },
+  ]).returning();
+
+  // Items — Combo không makeup
+  await db.insert(packageItemsTable).values([
+    { packageId: cnSilver.id,  name: "Sare cô dâu",               quantity: "1", unit: "bộ", sortOrder: 1 },
+    { packageId: cnSilver.id,  name: "Vest chú rể",               quantity: "1", unit: "bộ", sortOrder: 2 },
+    { packageId: cnSilver.id,  name: "Mâm quả",                   quantity: "1", unit: "bộ", sortOrder: 3 },
+    { packageId: cnSilver.id,  name: "Hoa cầm tay + hoa cài áo", quantity: "1", unit: "bộ", sortOrder: 4 },
+
+    { packageId: cnGold.id,    name: "Sare cô dâu",               quantity: "2", unit: "bộ", sortOrder: 1 },
+    { packageId: cnGold.id,    name: "Vest chú rể",               quantity: "1", unit: "bộ", sortOrder: 2 },
+    { packageId: cnGold.id,    name: "Mâm quả",                   quantity: "1", unit: "bộ", sortOrder: 3 },
+    { packageId: cnGold.id,    name: "Hoa cầm tay + hoa cài áo", quantity: "1", unit: "bộ", sortOrder: 4 },
+
+    { packageId: cnDiamond.id, name: "Sare cô dâu",               quantity: "2", unit: "bộ", sortOrder: 1 },
+    { packageId: cnDiamond.id, name: "Vest chú rể",               quantity: "1", unit: "bộ", sortOrder: 2 },
+    { packageId: cnDiamond.id, name: "Hoa xe cưới",               quantity: "1", unit: "bộ", sortOrder: 3 },
+    { packageId: cnDiamond.id, name: "Mâm quả",                   quantity: "1", unit: "bộ", sortOrder: 4 },
+    { packageId: cnDiamond.id, name: "Hoa cầm tay + hoa cài áo", quantity: "1", unit: "bộ", sortOrder: 5 },
+
+    { packageId: cnLuxury.id,  name: "Sare cô dâu",               quantity: "3", unit: "bộ", sortOrder: 1 },
+    { packageId: cnLuxury.id,  name: "Vest chú rể",               quantity: "1", unit: "bộ", sortOrder: 2 },
+    { packageId: cnLuxury.id,  name: "Áo dài mẹ cô dâu",         quantity: "1", unit: "bộ", sortOrder: 3 },
+    { packageId: cnLuxury.id,  name: "Hoa xe cưới",               quantity: "1", unit: "bộ", sortOrder: 4 },
+    { packageId: cnLuxury.id,  name: "Mâm quả lớn",               quantity: "1", unit: "bộ", sortOrder: 5 },
+    { packageId: cnLuxury.id,  name: "Hoa cầm tay + hoa cài áo", quantity: "1", unit: "bộ", sortOrder: 6 },
+  ]);
+
+  console.log("[seed] COMBO CÓ MAKEUP + COMBO KHÔNG MAKEUP — 8 gói đã được thêm.");
+}
+
+seedComboIfMissing().catch(console.error);
+
 // ─── Service groups ─────────────────────────────────────────────────────────
 router.get("/service-groups", async (_req, res) => {
   const groups = await db.select().from(serviceGroupsTable).orderBy(asc(serviceGroupsTable.sortOrder));
@@ -384,7 +559,7 @@ router.post("/service-packages", async (req, res) => {
   const {
     groupId, code, name, price, costPrice, printCost, operatingCost, salePercent,
     description, notes, addons, products, isActive, sortOrder, items = [],
-    serviceType, photoCount,
+    serviceType, photoCount, includesMakeup,
   } = req.body;
   const [pkg] = await db.insert(servicePackagesTable).values({
     groupId: groupId ? parseInt(groupId) : null,
@@ -401,6 +576,7 @@ router.post("/service-packages", async (req, res) => {
     sortOrder: sortOrder ?? 0,
     serviceType: serviceType ?? null,
     photoCount: photoCount ? parseInt(photoCount) : 1,
+    includesMakeup: includesMakeup === false || includesMakeup === 0 ? 0 : 1,
   }).returning();
 
   if (items.length > 0) {
@@ -426,7 +602,7 @@ router.put("/service-packages/:id", async (req, res) => {
   const {
     groupId, code, name, price, costPrice, printCost, operatingCost, salePercent,
     description, notes, addons, products, isActive, sortOrder, items,
-    serviceType, photoCount,
+    serviceType, photoCount, includesMakeup,
   } = req.body;
 
   const update: Record<string, unknown> = {};
@@ -446,6 +622,7 @@ router.put("/service-packages/:id", async (req, res) => {
   if (sortOrder !== undefined) update.sortOrder = sortOrder;
   if (serviceType !== undefined) update.serviceType = serviceType ?? null;
   if (photoCount !== undefined) update.photoCount = photoCount ? parseInt(photoCount) : 1;
+  if (includesMakeup !== undefined) update.includesMakeup = includesMakeup === false || includesMakeup === 0 ? 0 : 1;
 
   const [pkg] = await db.update(servicePackagesTable).set(update)
     .where(eq(servicePackagesTable.id, id)).returning();

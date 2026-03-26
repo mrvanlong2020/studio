@@ -277,11 +277,13 @@ export default function PricingPage() {
                                   const typeLabel: Record<string, string> = {
                                     tiec: "🎊 Tiệc cưới", tiec_le: "🎊 Tiệc + Lễ",
                                     phong_su: "📸 Phóng sự", phong_su_luxury: "📸 Phóng sự luxury",
+                                    combo_co_makeup: "💄 Có makeup", combo_khong_makeup: "👗 Không makeup",
                                   };
+                                  const isCombo = pkg.serviceType?.startsWith("combo");
                                   return (
                                     <div className="flex flex-wrap gap-1 mt-1">
                                       <span className="text-[9px] px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-semibold">{typeLabel[pkg.serviceType!] ?? pkg.serviceType}</span>
-                                      <span className="text-[9px] px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded-full font-semibold">📷 {pkg.photoCount ?? 1} photo</span>
+                                      {!isCombo && <span className="text-[9px] px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded-full font-semibold">📷 {pkg.photoCount ?? 1} photo</span>}
                                     </div>
                                   );
                                 })()}

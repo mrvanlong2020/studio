@@ -46,6 +46,7 @@ type ServiceOption = {
   products?: string[];
   serviceType?: string | null;
   photoCount?: number | null;
+  includesMakeup?: boolean;
 };
 type OrderLine = {
   tempId: string; serviceName: string; serviceId: number | null; serviceKey: string; price: number;
@@ -188,7 +189,18 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
     setUseCustom(false);
     const svc = services.find(s => s.key === key);
     const idNum = key.startsWith("svc-") ? parseInt(key.replace("svc-", "")) : null;
-    onChange({ ...line, serviceId: idNum, serviceKey: key, serviceName: svc?.name ?? "", price: svc?.price ?? 0, basePrice: svc?.price ?? 0, selectedAddons: [] });
+    const noMakeup = svc?.includesMakeup === false;
+    onChange({
+      ...line,
+      serviceId: idNum,
+      serviceKey: key,
+      serviceName: svc?.name ?? "",
+      price: svc?.price ?? 0,
+      basePrice: svc?.price ?? 0,
+      selectedAddons: [],
+      // Tự xóa makeup khi chọn gói không có makeup
+      ...(noMakeup ? { makeupId: null, makeupName: "", makeupTask: "" } : {}),
+    });
   }
 
   function handleToggleAddon(addonKey: string, addonPrice: number) {
@@ -239,6 +251,8 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
           tiec_le: "🎊 Tiệc + Lễ",
           phong_su: "📸 Phóng sự",
           phong_su_luxury: "📸 Phóng sự luxury (2 photo)",
+          combo_co_makeup: "💄 Combo có makeup",
+          combo_khong_makeup: "👗 Combo không makeup",
         };
         const label = typeLabel[selectedSvc.serviceType] ?? selectedSvc.serviceType;
         const photoN = selectedSvc?.photoCount ?? 1;
@@ -247,9 +261,12 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
             <span className="inline-flex items-center gap-1 bg-indigo-100 text-indigo-700 text-[10px] font-semibold px-2 py-1 rounded-full">
               {label}
             </span>
-            <span className="inline-flex items-center gap-1 bg-sky-100 text-sky-700 text-[10px] font-semibold px-2 py-1 rounded-full">
-              📷 {photoN} photographer
-            </span>
+            {/* Badge photographer — chỉ hiện cho gói chụp ảnh, không phải combo */}
+            {!selectedSvc?.serviceType?.startsWith("combo") && photoN > 0 && (
+              <span className="inline-flex items-center gap-1 bg-sky-100 text-sky-700 text-[10px] font-semibold px-2 py-1 rounded-full">
+                📷 {photoN} photographer
+              </span>
+            )}
           </div>
         );
       })()}
@@ -324,35 +341,43 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
         </div>
         <div>
           <p className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><Sparkles className="w-3 h-3" /> Makeup</p>
-          <select className="w-full h-8 border border-input rounded-lg px-2 text-xs bg-background" value={line.makeupId ?? ""}
-            onChange={e => { const s = makeupArtists.find(x => x.id === parseInt(e.target.value)); onChange({ ...line, makeupId: s?.id ?? null, makeupName: s?.name ?? "", makeupTask: "" }); }}>
-            <option value="">— Không —</option>
-            {makeupArtists.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-          {line.makeupId && (
-            <select className="w-full h-8 border border-input rounded-lg px-2 text-xs bg-background mt-1" value={line.makeupTask ?? ""}
-              onChange={e => onChange({ ...line, makeupTask: e.target.value })}>
-              <option value="">— Loại makeup —</option>
-              <option value="makeup_chup_cong">Makeup chụp cổng</option>
-              <option value="makeup_chup_album">Makeup chụp album</option>
-              <option value="makeup_chup_tiec">Makeup chụp tiệc</option>
-              <option value="makeup_nang_tho">Makeup nàng thơ</option>
-              <option value="makeup_beauty">Makeup beauty</option>
-              <option value="makeup_ngoai_canh">Makeup ngoại cảnh</option>
-              <option value="makeup_co_dau">Makeup cô dâu</option>
-              <option value="makeup_me">Makeup mẹ / người thân</option>
-              <option value="makeup_phu">Makeup phụ</option>
-              <option value="mac_dinh">Mặc định</option>
-            </select>
-          )}
-          {line.makeupId && makeupCast > 0 && (
-            <div className="mt-1 text-[10px] bg-pink-50 text-pink-700 rounded px-2 py-1 flex justify-between">
-              <span>💰 Cast {makeupArtists.find(m => m.id === line.makeupId)?.name}</span>
-              <span className="font-semibold">{fmtVND(makeupCast)}</span>
+          {isPkg && selectedSvc?.includesMakeup === false ? (
+            <div className="h-8 flex items-center px-3 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-500 italic">
+              🚫 Gói không bao gồm makeup
             </div>
-          )}
-          {line.makeupId && makeupCast === 0 && (
-            <div className="mt-1 text-[10px] bg-orange-50 text-orange-600 rounded px-2 py-1">⚠️ Chưa có cast</div>
+          ) : (
+            <>
+              <select className="w-full h-8 border border-input rounded-lg px-2 text-xs bg-background" value={line.makeupId ?? ""}
+                onChange={e => { const s = makeupArtists.find(x => x.id === parseInt(e.target.value)); onChange({ ...line, makeupId: s?.id ?? null, makeupName: s?.name ?? "", makeupTask: "" }); }}>
+                <option value="">— Không —</option>
+                {makeupArtists.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              {line.makeupId && (
+                <select className="w-full h-8 border border-input rounded-lg px-2 text-xs bg-background mt-1" value={line.makeupTask ?? ""}
+                  onChange={e => onChange({ ...line, makeupTask: e.target.value })}>
+                  <option value="">— Loại makeup —</option>
+                  <option value="makeup_chup_cong">Makeup chụp cổng</option>
+                  <option value="makeup_chup_album">Makeup chụp album</option>
+                  <option value="makeup_chup_tiec">Makeup chụp tiệc</option>
+                  <option value="makeup_nang_tho">Makeup nàng thơ</option>
+                  <option value="makeup_beauty">Makeup beauty</option>
+                  <option value="makeup_ngoai_canh">Makeup ngoại cảnh</option>
+                  <option value="makeup_co_dau">Makeup cô dâu</option>
+                  <option value="makeup_me">Makeup mẹ / người thân</option>
+                  <option value="makeup_phu">Makeup phụ</option>
+                  <option value="mac_dinh">Mặc định</option>
+                </select>
+              )}
+              {line.makeupId && makeupCast > 0 && (
+                <div className="mt-1 text-[10px] bg-pink-50 text-pink-700 rounded px-2 py-1 flex justify-between">
+                  <span>💰 Cast {makeupArtists.find(m => m.id === line.makeupId)?.name}</span>
+                  <span className="font-semibold">{fmtVND(makeupCast)}</span>
+                </div>
+              )}
+              {line.makeupId && makeupCast === 0 && (
+                <div className="mt-1 text-[10px] bg-orange-50 text-orange-600 rounded px-2 py-1">⚠️ Chưa có cast</div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -517,7 +542,7 @@ function ShowFormPanel({
   const { data: pricingPackages = [] } = useQuery<{
     id: number; name: string; price: number; printCost: number; operatingCost: number; salePercent: number;
     items?: PkgItem[]; addons?: Addon[]; products?: string[]; description?: string;
-    serviceType?: string | null; photoCount?: number | null;
+    serviceType?: string | null; photoCount?: number | null; includesMakeup?: boolean;
   }[]>({ queryKey: ["service-packages"], queryFn: () => fetch(`${BASE}/api/service-packages`).then(r => r.json()) });
   const { data: allStaffRates = [] } = useQuery<StaffRate[]>({ queryKey: ["staff-rates"], queryFn: () => fetch(`${BASE}/api/staff-rates`).then(r => r.json()) });
 
@@ -546,6 +571,7 @@ function ShowFormPanel({
       items: p.items || [], addons: p.addons || [], products: p.products || [],
       serviceType: p.serviceType ?? null,
       photoCount: p.photoCount ?? null,
+      includesMakeup: p.includesMakeup !== false,
     })),
   ];
 
