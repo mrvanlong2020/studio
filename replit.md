@@ -26,6 +26,13 @@ A wedding photography studio and wedding dress rental management system for "Ama
   - **Detail view**: When `parentId` is set, detail panel fetches full booking (includes siblings) and shows violet card "Tất cả dịch vụ trong hợp đồng (N)" listing all siblings with dates, "Đang xem" badge on current. Admin sees green contract totals.
 - **Váy cưới (Dresses)**: Wedding dress inventory management
 - **Cho thuê váy (Rentals)**: Dress rental management with return tracking
+- **Nhân sự (HR/Staff)**: Full staff management with individual profile pages:
+  - **Trang danh sách**: Staff cards with "Bạn là ai?" viewer selector (localStorage-based); click "Xem hồ sơ chi tiết" to open profile
+  - **Hồ sơ cá nhân** (`/staff/:id`): A. Thông tin cơ bản; B. Công việc tháng này (clickable stat cards → filtered list); C. Tiền lương tháng này; D. Thu nhập hôm nay; E. Lịch sử công việc; F. Đơn xin nghỉ (create + admin approve/reject); G. Bảng giá cá nhân (per-role rates); H. Ghi chú nội bộ (admin-only)
+  - **Phân quyền**: Admin xem tất cả; nhân viên chỉ xem hồ sơ của chính mình; `StaffAuthContext` lưu viewer trong localStorage
+  - **DB tables**: `staff_leave_requests` (đơn xin nghỉ), `staff_internal_notes` (ghi chú admin)
+  - **API**: `GET /api/staff/:id/profile` (full profile data), `POST/GET /api/staff/:id/leave-requests`, `PUT /api/leave-requests/:id`, `GET/PUT /api/staff/:id/internal-notes`
+  - **Job query**: Hỗ trợ 2 format assignedStaff: array `[id]` (cũ) và object `{photo: id, makeup: id}` (mới)
 - **Thanh toán (Payments)**: Payment tracking (cash, bank transfer, MoMo, ZaloPay)
 - **Bảng giá (Pricing)**: Full pricing catalog — service groups, packages with detailed items, surcharges CRUD; 4 DB tables: service_groups, service_packages, package_items, surcharges; seed data with 11 groups, 15 packages, 10 surcharges
 - **ServiceSearchBox** (`src/components/service-search-box.tsx`): Shared searchable package picker — live filtering, smart suggestions from localStorage recent, shows tags (serviceType, makeup, addon, album). Used in booking forms and calendar.

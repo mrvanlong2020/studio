@@ -12,6 +12,7 @@ import ServiceDetailPage from "@/pages/service-detail";
 import PricingPage from "@/pages/pricing";
 import AccountingHrPage from "@/pages/accounting-hr";
 import StaffPage from "@/pages/staff";
+import StaffProfilePage from "@/pages/staff-profile";
 import AiAssistantPage from "@/pages/ai-assistant";
 import SettingsPage from "@/pages/settings";
 import BookingsPage from "@/pages/bookings";
@@ -19,6 +20,7 @@ import ContractsPage from "@/pages/contracts";
 import ReportsPage from "@/pages/reports";
 import PaymentsPage from "@/pages/payments";
 import NotFound from "@/pages/not-found";
+import { StaffAuthProvider } from "@/contexts/StaffAuthContext";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,6 +45,7 @@ function Router() {
         <Route path="/pricing" component={PricingPage} />
         <Route path="/services/:id" component={ServiceDetailPage} />
         <Route path="/services" component={ServicesPage} />
+        <Route path="/staff/:id" component={StaffProfilePage} />
         <Route path="/staff" component={StaffPage} />
         <Route path="/accounting" component={AccountingHrPage} />
         <Route path="/ai-assistant" component={AiAssistantPage} />
@@ -60,9 +63,11 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-        <Router />
-      </WouterRouter>
+      <StaffAuthProvider>
+        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+          <Router />
+        </WouterRouter>
+      </StaffAuthProvider>
     </QueryClientProvider>
   );
 }

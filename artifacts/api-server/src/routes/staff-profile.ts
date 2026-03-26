@@ -1,0 +1,233 @@
+import { Router, type IRouter } from "express";
+import { db, pool } from "@workspace/db";
+import {
+  staffTable, staffJobEarningsTable, staffRatePricesTable,
+  staffLeaveRequestsTable, staffInternalNotesTable,
+} from "@workspace/db/schema";
+import { eq, desc } from "drizzle-orm";
+
+const router: IRouter = Router();
+
+const fmtStaff = (s: Record<string, unknown>) => ({
+  ...s,
+  salary: s.salary ? parseFloat(s.salary as string) : null,
+  baseSalaryAmount: s.baseSalaryAmount ? parseFloat(s.baseSalaryAmount as string) : 0,
+  commissionRate: s.commissionRate ? parseFloat(s.commissionRate as string) : 0,
+  isActive: Boolean(s.isActive),
+  roles: Array.isArray(s.roles) ? s.roles : (s.roles ? [s.roles] : []),
+});
+
+// ── Lấy toàn bộ dữ liệu hồ sơ nhân viên ──────────────────────────────────────
+router.get("/staff/:id/profile", async (req, res) => {
+  const staffId = parseInt(req.params.id);
+  if (isNaN(staffId)) return res.status(400).json({ error: "ID không hợp lệ" });
+
+  const [member] = await db.select().from(staffTable).where(eq(staffTable.id, staffId));
+  if (!member) return res.status(404).json({ error: "Không tìm thấy nhân viên" });
+
+  const now = new Date();
+  const thisMonth = now.getMonth() + 1;
+  const thisYear = now.getFullYear();
+  const today = now.toISOString().slice(0, 10);
+  const monthStart = `${thisYear}-${String(thisMonth).padStart(2, "0")}-01`;
+
+  // ── Jobs của nhân viên (query JSONB – hỗ trợ cả format array [id] và object {photo:id}) ──
+  const arrJson = JSON.stringify([staffId]);
+  const jobsResult = await pool.query(`
+    SELECT
+      b.id, b.shoot_date, b.package_type, b.status, b.total_amount, b.assigned_staff,
+      b.service_label, b.is_parent_contract, b.parent_id,
+      c.name AS customer_name, c.phone AS customer_phone
+    FROM bookings b
+    LEFT JOIN customers c ON c.id = b.customer_id
+    WHERE
+      (b.assigned_staff @> $2::jsonb)
+      OR (jsonb_typeof(b.assigned_staff) = 'object' AND (
+        (b.assigned_staff->>'photo')::int = $1
+        OR (b.assigned_staff->>'photographer')::int = $1
+        OR (b.assigned_staff->>'makeup')::int = $1
+        OR (b.assigned_staff->>'sale')::int = $1
+        OR (b.assigned_staff->>'photoshop')::int = $1
+      ))
+    ORDER BY b.shoot_date DESC
+    LIMIT 200
+  `, [staffId, arrJson]);
+
+  const allJobs = jobsResult.rows.map((r: Record<string, unknown>) => {
+    const assigned = r.assigned_staff as Record<string, unknown> | unknown[];
+    const roles: string[] = [];
+    const roleTasks: Record<string, string> = {};
+    if (Array.isArray(assigned)) {
+      // Định dạng cũ: mảng ID — không biết vai trò cụ thể
+      if (assigned.includes(staffId) || assigned.map(Number).includes(staffId)) {
+        roles.push("unknown");
+      }
+    } else if (assigned && typeof assigned === "object") {
+      const a = assigned as Record<string, unknown>;
+      if (String(a.photo) === String(staffId)) { roles.push("photo"); if (a.photoTask) roleTasks.photo = String(a.photoTask); }
+      if (String(a.photographer) === String(staffId)) { roles.push("photo"); if (a.photographerTask) roleTasks.photo = String(a.photographerTask); }
+      if (String(a.makeup) === String(staffId)) { roles.push("makeup"); if (a.makeupTask) roleTasks.makeup = String(a.makeupTask); }
+      if (String(a.sale) === String(staffId)) { roles.push("sale"); if (a.saleTask) roleTasks.sale = String(a.saleTask); }
+      if (String(a.photoshop) === String(staffId)) { roles.push("photoshop"); if (a.photoshopTask) roleTasks.photoshop = String(a.photoshopTask); }
+    }
+    return {
+      id: r.id,
+      shootDate: r.shoot_date,
+      packageType: r.package_type,
+      serviceLabel: r.service_label,
+      status: r.status,
+      totalAmount: parseFloat(String(r.total_amount || 0)),
+      customerName: r.customer_name,
+      customerPhone: r.customer_phone,
+      roles,
+      roleTasks,
+      isParentContract: Boolean(r.is_parent_contract),
+      parentId: r.parent_id,
+    };
+  });
+
+  // ── Phân loại job tháng này ───────────────────────────────────────────────
+  const monthJobs = allJobs.filter(j => {
+    const d = String(j.shootDate || "");
+    return d >= monthStart && d <= today.slice(0, 7) + "-31";
+  });
+
+  const todayJobs = allJobs.filter(j => String(j.shootDate) === today);
+
+  const STATUS_MAP: Record<string, string> = {
+    completed: "completed",
+    hoan_thanh: "completed",
+    done: "completed",
+    cancelled: "cancelled",
+    huy: "cancelled",
+    pending: "pending",
+    confirmed: "confirmed",
+    in_progress: "in_progress",
+  };
+
+  const normalizeStatus = (s: string) => STATUS_MAP[s?.toLowerCase()] ?? "pending";
+
+  const monthStats = {
+    total: monthJobs.length,
+    completed: monthJobs.filter(j => normalizeStatus(String(j.status)) === "completed").length,
+    pending: monthJobs.filter(j => ["pending", "confirmed"].includes(normalizeStatus(String(j.status)))).length,
+    inProgress: monthJobs.filter(j => normalizeStatus(String(j.status)) === "in_progress").length,
+    cancelled: monthJobs.filter(j => normalizeStatus(String(j.status)) === "cancelled").length,
+  };
+
+  // ── Thu nhập từ staff_job_earnings ────────────────────────────────────────
+  const earnings = await db.select().from(staffJobEarningsTable)
+    .where(eq(staffJobEarningsTable.staffId, staffId))
+    .orderBy(desc(staffJobEarningsTable.createdAt));
+
+  const monthEarnings = earnings.filter(e => e.month === thisMonth && e.year === thisYear);
+  const todayEarnings = earnings.filter(e => e.earnedDate === today);
+
+  // ── Bảng giá cá nhân ─────────────────────────────────────────────────────
+  const rates = await db.select().from(staffRatePricesTable)
+    .where(eq(staffRatePricesTable.staffId, staffId))
+    .orderBy(staffRatePricesTable.role, staffRatePricesTable.taskKey);
+
+  // ── Đơn xin nghỉ ──────────────────────────────────────────────────────────
+  const leaves = await db.select().from(staffLeaveRequestsTable)
+    .where(eq(staffLeaveRequestsTable.staffId, staffId))
+    .orderBy(desc(staffLeaveRequestsTable.createdAt));
+
+  // ── Ghi chú nội bộ ────────────────────────────────────────────────────────
+  const [internalNotes] = await db.select().from(staffInternalNotesTable)
+    .where(eq(staffInternalNotesTable.staffId, staffId));
+
+  res.json({
+    staff: fmtStaff(member as unknown as Record<string, unknown>),
+    monthStats,
+    monthJobs,
+    todayJobs,
+    jobHistory: allJobs,
+    earnings: {
+      thisMonth: monthEarnings.reduce((s, e) => s + parseFloat(e.rate), 0),
+      today: todayEarnings.reduce((s, e) => s + parseFloat(e.rate), 0),
+      total: earnings.reduce((s, e) => s + parseFloat(e.rate), 0),
+      records: monthEarnings.map(e => ({
+        ...e,
+        rate: parseFloat(e.rate),
+      })),
+    },
+    rates: rates.map(r => ({
+      ...r,
+      rate: r.rate ? parseFloat(r.rate) : null,
+    })),
+    leaveRequests: leaves,
+    internalNotes: internalNotes || null,
+  });
+});
+
+// ── Đơn xin nghỉ ──────────────────────────────────────────────────────────────
+router.get("/staff/:id/leave-requests", async (req, res) => {
+  const staffId = parseInt(req.params.id);
+  const leaves = await db.select().from(staffLeaveRequestsTable)
+    .where(eq(staffLeaveRequestsTable.staffId, staffId))
+    .orderBy(desc(staffLeaveRequestsTable.createdAt));
+  res.json(leaves);
+});
+
+router.post("/staff/:id/leave-requests", async (req, res) => {
+  const staffId = parseInt(req.params.id);
+  const { startDate, endDate, reason, notes } = req.body;
+  if (!startDate || !endDate || !reason?.trim()) {
+    return res.status(400).json({ error: "Vui lòng điền đầy đủ thông tin" });
+  }
+  const [created] = await db.insert(staffLeaveRequestsTable)
+    .values({ staffId, startDate, endDate, reason, notes: notes || null })
+    .returning();
+  res.status(201).json(created);
+});
+
+router.put("/leave-requests/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { status, approvedByName, notes } = req.body;
+  const update: Record<string, unknown> = {};
+  if (status) update.status = status;
+  if (approvedByName !== undefined) update.approvedByName = approvedByName;
+  if (notes !== undefined) update.notes = notes;
+  if (status && status !== "pending") update.reviewedAt = new Date();
+
+  const [updated] = await db.update(staffLeaveRequestsTable)
+    .set(update).where(eq(staffLeaveRequestsTable.id, id)).returning();
+  if (!updated) return res.status(404).json({ error: "Không tìm thấy đơn" });
+  res.json(updated);
+});
+
+// ── Ghi chú nội bộ ────────────────────────────────────────────────────────────
+router.get("/staff/:id/internal-notes", async (req, res) => {
+  const staffId = parseInt(req.params.id);
+  const [notes] = await db.select().from(staffInternalNotesTable)
+    .where(eq(staffInternalNotesTable.staffId, staffId));
+  res.json(notes || null);
+});
+
+router.put("/staff/:id/internal-notes", async (req, res) => {
+  const staffId = parseInt(req.params.id);
+  const { skillsStrong, workNotes, internalRating, generalNotes } = req.body;
+  const [existing] = await db.select().from(staffInternalNotesTable)
+    .where(eq(staffInternalNotesTable.staffId, staffId));
+
+  const data = {
+    skillsStrong: skillsStrong ?? null,
+    workNotes: workNotes ?? null,
+    internalRating: internalRating ?? null,
+    generalNotes: generalNotes ?? null,
+    updatedAt: new Date(),
+  };
+
+  let result;
+  if (existing) {
+    [result] = await db.update(staffInternalNotesTable)
+      .set(data).where(eq(staffInternalNotesTable.staffId, staffId)).returning();
+  } else {
+    [result] = await db.insert(staffInternalNotesTable)
+      .values({ staffId, ...data }).returning();
+  }
+  res.json(result);
+});
+
+export default router;

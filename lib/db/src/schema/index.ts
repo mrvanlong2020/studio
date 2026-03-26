@@ -12,3 +12,4 @@ export * from "./contracts";
 export * from "./payrolls";
 export * from "./pricing";
 export * from "./staff_payroll";
+export * from "./staff_hr";

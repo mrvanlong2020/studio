@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Users, Plus, Pencil, Banknote, DollarSign, Briefcase, ClipboardList, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
+import { Users, Plus, Pencil, Banknote, DollarSign, Briefcase, ClipboardList, ChevronDown, ChevronUp, AlertCircle, UserCircle, LogOut, ChevronRight } from "lucide-react";
+import { useStaffAuth, type ViewerUser } from "@/contexts/StaffAuthContext";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -639,6 +641,7 @@ interface StaffCardProps {
   onEditPrice: (s: Record<string, unknown>) => void;
 }
 function StaffCard({ staff, earnings, onEdit, onEditPrice }: StaffCardProps) {
+  const [, navigate] = useLocation();
   const roles = getRoles(staff);
   const todayStr = new Date().toISOString().slice(0, 10);
   const now = new Date();
@@ -717,7 +720,13 @@ function StaffCard({ staff, earnings, onEdit, onEditPrice }: StaffCardProps) {
         </div>
       )}
 
-      <div className="flex gap-2 mt-auto">
+      <button
+        onClick={() => navigate(`/staff/${String(staff.id)}`)}
+        className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg bg-primary/5 border border-primary/20 text-primary text-sm font-medium hover:bg-primary/10 transition-colors"
+      >
+        <UserCircle className="w-4 h-4" /> Xem hồ sơ chi tiết <ChevronRight className="w-3.5 h-3.5" />
+      </button>
+      <div className="flex gap-2">
         <Button size="sm" variant="outline" className="flex-1 gap-1" onClick={() => onEdit(staff)}>
           <Pencil className="w-3.5 h-3.5" /> Sửa thông tin
         </Button>
@@ -859,6 +868,8 @@ export default function StaffPage() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "official" | "freelancer">("all");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [viewerSheet, setViewerSheet] = useState(false);
+  const { viewer, setViewer } = useStaffAuth();
 
   const { data: staffList = [] } = useQuery<Array<Record<string, unknown>>>({
     queryKey: ["staff"],
@@ -900,6 +911,34 @@ export default function StaffPage() {
         <Button onClick={() => { setEditStaff(null); setShowForm(true); }} className="gap-1.5">
           <Plus className="w-4 h-4" /> Thêm nhân viên
         </Button>
+      </div>
+
+      {/* ── Viewer selector ─────────────────────────────────────── */}
+      <div className={`flex items-center gap-3 p-3 rounded-xl border mb-5 ${viewer ? "bg-emerald-50/50 border-emerald-200" : "bg-amber-50 border-amber-200"}`}>
+        <UserCircle className={`w-8 h-8 flex-shrink-0 ${viewer ? "text-emerald-600" : "text-amber-500"}`} />
+        <div className="flex-1 min-w-0">
+          {viewer ? (
+            <>
+              <p className="text-sm font-semibold truncate">{viewer.name}</p>
+              <p className="text-xs text-muted-foreground">{viewer.isAdmin ? "👑 Quản lý — xem được tất cả hồ sơ" : "Đang xem hồ sơ của chính mình"}</p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-amber-700">Bạn là ai?</p>
+              <p className="text-xs text-muted-foreground">Chọn tài khoản để xem hồ sơ cá nhân</p>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button onClick={() => setViewerSheet(true)} className="text-xs px-3 py-1.5 rounded-lg bg-white border border-border font-medium hover:bg-muted transition-colors">
+            {viewer ? "Đổi" : "Chọn tài khoản"}
+          </button>
+          {viewer && (
+            <button onClick={() => setViewer(null)} className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors" title="Đăng xuất">
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Stats row */}
@@ -997,6 +1036,56 @@ export default function StaffPage() {
         staff={priceStaff}
         onClose={() => setPriceStaff(null)}
       />
+
+      {/* ── Chọn tài khoản ─────────────────────────────────────── */}
+      <Sheet open={viewerSheet} onOpenChange={setViewerSheet}>
+        <SheetContent side="bottom" className="rounded-t-3xl max-h-[80vh] overflow-y-auto">
+          <SheetHeader className="mb-4">
+            <SheetTitle className="flex items-center gap-2">
+              <UserCircle className="w-5 h-5 text-primary" /> Chọn tài khoản của bạn
+            </SheetTitle>
+          </SheetHeader>
+          <p className="text-sm text-muted-foreground mb-4">
+            Chọn tên của bạn để đăng nhập và xem hồ sơ cá nhân. Admin có thể xem tất cả hồ sơ.
+          </p>
+          <div className="space-y-2">
+            {staffList.map(s => {
+              const roles = getRoles(s);
+              const isAdm = roles.includes("admin");
+              const isMe = viewer?.id === (s.id as number);
+              return (
+                <button
+                  key={String(s.id)}
+                  onClick={() => {
+                    const v: ViewerUser = {
+                      id: s.id as number,
+                      name: String(s.name),
+                      role: String(s.role || "assistant"),
+                      roles: getRoles(s),
+                      isAdmin: isAdm,
+                    };
+                    setViewer(v);
+                    setViewerSheet(false);
+                  }}
+                  className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${isMe ? "border-primary bg-primary/5" : "border-border hover:bg-muted/30"}`}
+                >
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${isAdm ? "bg-amber-100 text-amber-700" : "bg-primary/10 text-primary"}`}>
+                    {String(s.name || "?")[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{String(s.name)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {roles.map(r => ({ admin: "Quản lý", photographer: "Nhiếp ảnh", makeup: "Trang điểm", sale: "Kinh doanh", photoshop: "Chỉnh sửa", assistant: "Hỗ trợ", marketing: "Marketing" }[r] || r)).join(", ")}
+                    </p>
+                  </div>
+                  {isMe && <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full">Đang dùng</span>}
+                  {isAdm && !isMe && <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Admin</span>}
+                </button>
+              );
+            })}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
