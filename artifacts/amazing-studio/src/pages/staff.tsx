@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Separator } from "@/components/ui/separator";
 import { Users, Plus, Pencil, Banknote, DollarSign, Briefcase, ClipboardList, ChevronDown, ChevronUp, AlertCircle, UserCircle, LogOut, ChevronRight } from "lucide-react";
 import { useStaffAuth, type ViewerUser } from "@/contexts/StaffAuthContext";
+import StaffAvatar from "@/components/StaffAvatar";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -667,9 +668,14 @@ function StaffCard({ staff, earnings, onEdit, onEditPrice }: StaffCardProps) {
     <div className={`border rounded-xl p-4 bg-card hover:shadow-sm transition-shadow flex flex-col gap-3 ${isFreelancer ? "border-purple-200 bg-purple-50/30" : ""}`}>
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3 min-w-0">
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${isFreelancer ? "bg-purple-100 text-purple-700" : "bg-primary/10 text-primary"}`}>
-            {String(staff.name || "?")[0].toUpperCase()}
-          </div>
+          <StaffAvatar
+            name={String(staff.name || "?")}
+            avatar={(staff as Record<string, unknown>).avatar as string | undefined}
+            role={String(roles[0] || "assistant")}
+            status={String(staff.status || "active")}
+            isActive={Boolean(staff.isActive)}
+            size="md"
+          />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="font-semibold truncate">{String(staff.name)}</span>
@@ -915,7 +921,20 @@ export default function StaffPage() {
 
       {/* ── Viewer selector ─────────────────────────────────────── */}
       <div className={`flex items-center gap-3 p-3 rounded-xl border mb-5 ${viewer ? "bg-emerald-50/50 border-emerald-200" : "bg-amber-50 border-amber-200"}`}>
-        <UserCircle className={`w-8 h-8 flex-shrink-0 ${viewer ? "text-emerald-600" : "text-amber-500"}`} />
+        {viewer ? (() => {
+          const vs = staffList.find(s => s.id === viewer.id);
+          return (
+            <StaffAvatar
+              name={viewer.name}
+              avatar={(vs as Record<string, unknown> | undefined)?.avatar as string | undefined}
+              role={viewer.role}
+              status="active"
+              size="sm"
+            />
+          );
+        })() : (
+          <UserCircle className="w-8 h-8 flex-shrink-0 text-amber-500" />
+        )}
         <div className="flex-1 min-w-0">
           {viewer ? (
             <>
@@ -1069,9 +1088,14 @@ export default function StaffPage() {
                   }}
                   className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${isMe ? "border-primary bg-primary/5" : "border-border hover:bg-muted/30"}`}
                 >
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${isAdm ? "bg-amber-100 text-amber-700" : "bg-primary/10 text-primary"}`}>
-                    {String(s.name || "?")[0].toUpperCase()}
-                  </div>
+                  <StaffAvatar
+                    name={String(s.name || "?")}
+                    avatar={(s as Record<string, unknown>).avatar as string | undefined}
+                    role={String(s.role || "assistant")}
+                    status={String(s.status || "active")}
+                    isActive={Boolean(s.isActive)}
+                    size="sm"
+                  />
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm truncate">{String(s.name)}</p>
                     <p className="text-xs text-muted-foreground">

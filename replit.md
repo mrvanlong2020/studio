@@ -27,7 +27,8 @@ A wedding photography studio and wedding dress rental management system for "Ama
 - **Váy cưới (Dresses)**: Wedding dress inventory management
 - **Cho thuê váy (Rentals)**: Dress rental management with return tracking
 - **Nhân sự (HR/Staff)**: Full staff management with individual profile pages:
-  - **Trang danh sách**: Staff cards with "Bạn là ai?" viewer selector (localStorage-based); click "Xem hồ sơ chi tiết" to open profile
+  - **StaffAvatar component** (`src/components/StaffAvatar.tsx`): Shared avatar component — role-based gradient colors (photographer→blue, makeup→pink, sale→orange, admin→violet, photoshop→teal), status dot (green=active, amber=probation, red=inactive), initials fallback, click-to-upload (square center-crop 200px JPEG), image error fallback, sizes xs/sm/md/lg/xl
+  - **Trang danh sách**: Staff cards with "Bạn là ai?" viewer selector (localStorage-based); click "Xem hồ sơ chi tiết" to open profile; cards and viewer selector show StaffAvatar
   - **Hồ sơ cá nhân** (`/staff/:id`): A. Thông tin cơ bản; B. Công việc tháng này (clickable stat cards → filtered list); C. Tiền lương tháng này; D. Thu nhập hôm nay; E. Lịch sử công việc; F. Đơn xin nghỉ (create + admin approve/reject); G. Bảng giá cá nhân (per-role rates); H. Ghi chú nội bộ (admin-only)
   - **Phân quyền**: Admin xem tất cả; nhân viên chỉ xem hồ sơ của chính mình; `StaffAuthContext` lưu viewer trong localStorage
   - **DB tables**: `staff_leave_requests` (đơn xin nghỉ), `staff_internal_notes` (ghi chú admin)

@@ -50,9 +50,9 @@ router.get("/staff/:id", async (req, res) => {
 });
 
 router.post("/staff", async (req, res) => {
-  const { name, phone, role, roles, email, salary, baseSalaryAmount, joinDate, isActive, status, staffType, notes, salaryNotes } = req.body;
-  // status: "active"|"inactive"|"probation" → isActive
-  const activeVal = isActive !== undefined ? (isActive ? 1 : 0) : (status === "inactive" || status === "probation" ? 0 : 1);
+  const { name, phone, role, roles, email, salary, baseSalaryAmount, joinDate, isActive, status, staffType, notes, salaryNotes, avatar } = req.body;
+  const statusVal = status || "active";
+  const activeVal = isActive !== undefined ? (isActive ? 1 : 0) : (statusVal === "inactive" || statusVal === "probation" ? 0 : 1);
   const notesVal = [notes, salaryNotes].filter(Boolean).join(" | ") || null;
   const [member] = await db
     .insert(staffTable)
@@ -61,10 +61,12 @@ router.post("/staff", async (req, res) => {
       role: role || (Array.isArray(roles) && roles.length > 0 ? roles[0] : "assistant"),
       roles: Array.isArray(roles) ? roles : [],
       email: email || null,
+      avatar: avatar || null,
       salary: salary ? String(salary) : null,
       baseSalaryAmount: baseSalaryAmount ? String(baseSalaryAmount) : "0",
       joinDate: joinDate || null,
       isActive: activeVal,
+      status: statusVal,
       staffType: staffType || "official",
       notes: notesVal,
     })
@@ -74,7 +76,7 @@ router.post("/staff", async (req, res) => {
 
 router.put("/staff/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  const { name, phone, role, roles, email, salary, baseSalaryAmount, joinDate, isActive, status, staffType, notes, salaryNotes } = req.body;
+  const { name, phone, role, roles, email, salary, baseSalaryAmount, joinDate, isActive, status, staffType, notes, salaryNotes, avatar } = req.body;
   const update: Record<string, unknown> = {};
   if (name !== undefined) update.name = name;
   if (phone !== undefined) update.phone = phone;
@@ -85,12 +87,16 @@ router.put("/staff/:id", async (req, res) => {
     if (!role && Array.isArray(roles) && roles.length > 0) update.role = roles[0];
   }
   if (email !== undefined) update.email = email || null;
+  if (avatar !== undefined) update.avatar = avatar || null;
   if (salary !== undefined) update.salary = salary ? String(salary) : null;
   if (baseSalaryAmount !== undefined) update.baseSalaryAmount = baseSalaryAmount ? String(baseSalaryAmount) : "0";
   if (joinDate !== undefined) update.joinDate = joinDate || null;
-  if (isActive !== undefined) update.isActive = isActive ? 1 : 0;
-  else if (status !== undefined) update.isActive = (status === "inactive" || status === "probation") ? 0 : 1;
-  // Combine notes + salaryNotes if provided
+  if (status !== undefined) {
+    update.status = status;
+    update.isActive = (status === "inactive" || status === "probation") ? 0 : 1;
+  } else if (isActive !== undefined) {
+    update.isActive = isActive ? 1 : 0;
+  }
   if (notes !== undefined || salaryNotes !== undefined) {
     update.notes = [notes, salaryNotes].filter(Boolean).join(" | ") || null;
   }

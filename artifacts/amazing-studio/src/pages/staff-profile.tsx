@@ -9,13 +9,14 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  ArrowLeft, User, Phone, Mail, Calendar, Briefcase, Star,
+  ArrowLeft, Phone, Mail, Calendar, Briefcase,
   CheckCircle2, Clock, XCircle, PlayCircle, Banknote, TrendingUp,
   FileText, Plus, ChevronRight, Lock, Pencil, AlertCircle,
   CalendarOff, ClipboardList, Shield,
 } from "lucide-react";
 import { useStaffAuth } from "@/contexts/StaffAuthContext";
 import { cn } from "@/lib/utils";
+import StaffAvatar, { compressStaffAvatar } from "@/components/StaffAvatar";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -132,6 +133,7 @@ export default function StaffProfilePage() {
   const [notesSheet, setNotesSheet] = useState(false);
   const [notesForm, setNotesForm] = useState<Partial<InternalNotes>>({});
   const [jobDetailId, setJobDetailId] = useState<number | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   // Leave form
   const [leaveForm, setLeaveForm] = useState({ startDate: "", endDate: "", reason: "", notes: "" });
@@ -178,6 +180,34 @@ export default function StaffProfilePage() {
       setNotesSheet(false);
     },
   });
+
+  const handleAvatarUpload = async (base64: string) => {
+    setAvatarUploading(true);
+    try {
+      await fetchJson(`/api/staff/${staffId}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatar: base64 }),
+      });
+      qc.invalidateQueries({ queryKey: ["staff-profile", staffId] });
+      qc.invalidateQueries({ queryKey: ["staff"] });
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  const handleAvatarDelete = async () => {
+    setAvatarUploading(true);
+    try {
+      await fetchJson(`/api/staff/${staffId}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatar: null }),
+      });
+      qc.invalidateQueries({ queryKey: ["staff-profile", staffId] });
+      qc.invalidateQueries({ queryKey: ["staff"] });
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   // ── Access control ─────────────────────────────────────────────────────────
   if (!viewer) {
@@ -240,46 +270,101 @@ export default function StaffProfilePage() {
 
   const rolesDisplay = [staff.role, ...(staff.roles || [])].filter((r, i, a) => a.indexOf(r) === i).filter(Boolean);
 
-  return (
-    <div className="space-y-5 pb-10">
-      {/* ── Breadcrumb & Header ─────────────────────────────────────────── */}
-      <div className="flex items-center gap-3">
-        <button onClick={() => navigate("/staff")} className="p-2 rounded-xl hover:bg-muted transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">{staff.name}</h1>
-          <p className="text-sm text-muted-foreground">Hồ sơ nhân viên</p>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <span className={cn("text-xs px-2.5 py-1 rounded-full font-medium", staff.isActive ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700")}>
-            {staff.isActive ? "Đang làm" : "Nghỉ việc"}
-          </span>
-        </div>
-      </div>
+  const staffStatus = (staff as Record<string, unknown>).status as string | undefined;
+  const canEdit = isAdmin || viewer?.id === staffId;
 
-      {/* ── A. THÔNG TIN CƠ BẢN ────────────────────────────────────────── */}
-      <section className="bg-card border border-border rounded-2xl p-4 space-y-3">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-          <User className="w-3.5 h-3.5" /> Thông tin cơ bản
-        </p>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
-          <InfoRow icon={<User className="w-3.5 h-3.5" />} label="Họ tên" value={staff.name} />
-          <InfoRow icon={<Phone className="w-3.5 h-3.5" />} label="Điện thoại" value={staff.phone} />
-          {staff.email && <InfoRow icon={<Mail className="w-3.5 h-3.5" />} label="Email" value={staff.email} />}
-          {staff.joinDate && <InfoRow icon={<Calendar className="w-3.5 h-3.5" />} label="Ngày vào làm" value={fmtDate(staff.joinDate)} />}
-          <InfoRow icon={<Briefcase className="w-3.5 h-3.5" />} label="Loại nhân viên" value={staff.staffType === "official" ? "Chính thức" : "Freelancer"} />
-          <InfoRow icon={<Star className="w-3.5 h-3.5" />} label="Vai trò" value={
-            rolesDisplay.map(r => ROLE_LABELS[r] || r).join(", ")
-          } />
-        </div>
-        {/* Role badges */}
-        <div className="flex flex-wrap gap-1.5 pt-1">
-          {rolesDisplay.map(r => (
-            <span key={r} className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary font-medium">
-              {ROLE_ICONS[r] || "•"} {ROLE_LABELS[r] || r}
-            </span>
-          ))}
+  // Status config
+  const statusCfg = {
+    active:    { label: "Đang làm",  cls: "bg-emerald-100 text-emerald-700" },
+    probation: { label: "Thử việc",  cls: "bg-amber-100 text-amber-700" },
+    inactive:  { label: "Nghỉ việc", cls: "bg-red-100 text-red-700" },
+  }[staffStatus || (staff.isActive ? "active" : "inactive")] ?? { label: "Đang làm", cls: "bg-emerald-100 text-emerald-700" };
+
+  return (
+    <div className="space-y-4 pb-10">
+      {/* ── Back button ─────────────────────────────────────────────────── */}
+      <button
+        onClick={() => navigate("/staff")}
+        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft className="w-4 h-4" /> Về danh sách nhân sự
+      </button>
+
+      {/* ── A. IDENTITY CARD ─────────────────────────────────────────────── */}
+      <section className="bg-card border border-border rounded-2xl overflow-hidden">
+        {/* Top accent bar */}
+        <div className="h-1.5 w-full bg-gradient-to-r from-primary/70 via-primary to-primary/50" />
+
+        <div className="p-5 flex items-start gap-4">
+          {/* Avatar */}
+          <div className="flex-shrink-0 mt-0.5">
+            <StaffAvatar
+              name={staff.name}
+              avatar={(staff as Record<string, unknown>).avatar as string | undefined}
+              role={rolesDisplay[0]}
+              status={staffStatus}
+              isActive={staff.isActive}
+              size="xl"
+              editable={canEdit}
+              onUpload={handleAvatarUpload}
+              onDelete={handleAvatarDelete}
+              uploading={avatarUploading}
+            />
+            {canEdit && (
+              <p className="text-[10px] text-muted-foreground text-center mt-1.5 leading-tight">
+                {(staff as Record<string, unknown>).avatar ? "Bấm để đổi ảnh" : "Bấm để thêm ảnh"}
+              </p>
+            )}
+          </div>
+
+          {/* Info right */}
+          <div className="flex-1 min-w-0 space-y-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h1 className="text-xl font-bold tracking-tight leading-tight truncate">{staff.name}</h1>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {staff.staffType === "official" ? "Chính thức" : "Cộng tác viên"}
+                  {staff.joinDate ? ` · Vào ${fmtDate(staff.joinDate)}` : ""}
+                </p>
+              </div>
+              <span className={cn("text-xs px-2.5 py-1 rounded-full font-medium shrink-0", statusCfg.cls)}>
+                {statusCfg.label}
+              </span>
+            </div>
+
+            {/* Role badges */}
+            <div className="flex flex-wrap gap-1.5">
+              {rolesDisplay.map(r => (
+                <span key={r} className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary font-medium">
+                  {ROLE_ICONS[r] || "•"} {ROLE_LABELS[r] || r}
+                </span>
+              ))}
+            </div>
+
+            {/* Contact info */}
+            <div className="space-y-1 pt-0.5">
+              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Phone className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="truncate">{staff.phone || "—"}</span>
+              </div>
+              {staff.email && (
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Mail className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="truncate">{staff.email}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Briefcase className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>{staff.staffType === "official" ? "Nhân viên chính thức" : "Freelancer / CTV"}</span>
+              </div>
+              {staff.joinDate && (
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>Vào làm {fmtDate(staff.joinDate)}</span>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </section>
 
