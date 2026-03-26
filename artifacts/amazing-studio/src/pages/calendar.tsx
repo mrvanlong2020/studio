@@ -120,32 +120,56 @@ function fmtVND(n: number) {
   return n.toLocaleString("vi-VN") + "đ";
 }
 
-function OrderLineRow({ line, photographers, makeupArtists, services, onChange, onRemove }: {
+type StaffRate = { staffId: number; role: string; taskKey: string; rate: number | null; rateType: string };
+
+function lookupRate(staffId: number | null, role: string, taskKey: string, rates: StaffRate[]): number {
+  if (!staffId) return 0;
+  // Try exact taskKey first, then fallback to mac_dinh
+  const exact = rates.find(r => r.staffId === staffId && r.role === role && r.taskKey === taskKey && r.rate != null);
+  if (exact) return exact.rateType === "percent" ? 0 : (exact.rate ?? 0);
+  const fallback = rates.find(r => r.staffId === staffId && r.role === role && r.taskKey === "mac_dinh" && r.rate != null);
+  return fallback?.rate ?? 0;
+}
+
+function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRates, onChange, onRemove }: {
   line: OrderLine;
   photographers: Staff[];
   makeupArtists: Staff[];
   services: ServiceOption[];
+  allStaffRates: StaffRate[];
   onChange: (u: OrderLine) => void;
   onRemove: () => void;
 }) {
-  const [useCustom, setUseCustom] = useState(!line.serviceId && !!line.serviceName);
+  const [useCustom, setUseCustom] = useState(!line.serviceId && !line.serviceKey && !!line.serviceName);
 
-  // Find the selected service/package to show preview (use serviceKey to support both svc- and pkg- prefixes)
+  // Find the selected service/package
   const selectedSvc = line.serviceKey ? services.find(s => s.key === line.serviceKey) : null;
-  const splits = selectedSvc?.splits || [];
+  const isPkg = selectedSvc?.key?.startsWith("pkg-");
+
+  // Cast nhân sự từ bảng giá riêng
+  const photoCast = lookupRate(line.photoId, "photographer", line.photoTask || "mac_dinh", allStaffRates);
+  const makeupCast = lookupRate(line.makeupId, "makeup", line.makeupTask || "mac_dinh", allStaffRates);
+
+  // Chi phí cố định gói
+  const printCost = selectedSvc?.printCost || 0;
+  const operatingCost = selectedSvc?.operatingCost || 0;
+  const salePercent = selectedSvc?.salePercent || 0;
+  const saleAmt = Math.round(line.price * salePercent / 100);
+  const totalCost = printCost + operatingCost + saleAmt + photoCast + makeupCast;
+  const profit = line.price - totalCost;
+
+  // Cho dịch vụ (không phải gói), dùng splits cũ
+  const splits = (selectedSvc?.splits || []).filter(() => !isPkg);
   const photoSplit = splits.find(sp => sp.role === "photographer");
   const makeupSplit = splits.find(sp => sp.role === "makeup");
-  const isPkg = selectedSvc?.key?.startsWith("pkg-");
-  const pkgSaleAmt = isPkg ? Math.round(line.price * (selectedSvc?.salePercent || 0) / 100) : 0;
-  const pkgFixedCost = isPkg ? ((selectedSvc?.printCost || 0) + (selectedSvc?.operatingCost || 0) + pkgSaleAmt) : 0;
-
-  function calcSplit(sp: ServiceSplit | undefined): number {
+  function calcSplit(sp: ServiceSplit | undefined) {
     if (!sp) return 0;
     return sp.rateType === "percent" ? (line.price * sp.amount / 100) : sp.amount;
   }
 
   return (
     <div className="p-2.5 bg-muted/30 rounded-xl border border-border/50 space-y-2">
+      {/* Chọn dịch vụ / gói */}
       <div className="flex gap-1.5 items-center">
         <select
           className="flex-1 h-9 border border-input rounded-lg px-2 text-sm bg-background"
@@ -158,8 +182,13 @@ function OrderLineRow({ line, photographers, makeupArtists, services, onChange, 
             onChange({ ...line, serviceId: idNum, serviceKey: e.target.value, serviceName: svc?.name ?? "", price: svc ? svc.price : line.price });
           }}
         >
-          <option value="">— Chọn dịch vụ —</option>
-          {services.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
+          <option value="">— Chọn dịch vụ / gói —</option>
+          <optgroup label="📦 Gói chụp">
+            {services.filter(s => s.key.startsWith("pkg-")).map(s => <option key={s.key} value={s.key}>{s.name} — {s.price.toLocaleString("vi-VN")}đ</option>)}
+          </optgroup>
+          <optgroup label="🎯 Dịch vụ đơn lẻ">
+            {services.filter(s => s.key.startsWith("svc-")).map(s => <option key={s.key} value={s.key}>{s.name} — {s.price.toLocaleString("vi-VN")}đ</option>)}
+          </optgroup>
           <option value="_custom">✏️ Tự nhập tên...</option>
         </select>
         <button onClick={onRemove} className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors flex-shrink-0">
@@ -169,11 +198,13 @@ function OrderLineRow({ line, photographers, makeupArtists, services, onChange, 
       {useCustom && (
         <Input className="h-9 text-sm" placeholder="Tên dịch vụ..." value={line.serviceName} onChange={e => onChange({ ...line, serviceName: e.target.value })} />
       )}
+
+      {/* Chọn nhân sự */}
       <div className="grid grid-cols-2 gap-1.5">
         <div>
           <p className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><Camera className="w-3 h-3" /> Nhiếp ảnh</p>
           <select className="w-full h-8 border border-input rounded-lg px-2 text-xs bg-background" value={line.photoId ?? ""}
-            onChange={e => { const s = photographers.find(x => x.id === parseInt(e.target.value)); onChange({ ...line, photoId: s?.id ?? null, photoName: s?.name ?? "" }); }}>
+            onChange={e => { const s = photographers.find(x => x.id === parseInt(e.target.value)); onChange({ ...line, photoId: s?.id ?? null, photoName: s?.name ?? "", photoTask: "" }); }}>
             <option value="">— Chọn —</option>
             {photographers.map(s => <option key={s.id} value={s.id}>{s.name}{s.staffType === "freelancer" ? " (CTV)" : ""}</option>)}
           </select>
@@ -197,18 +228,21 @@ function OrderLineRow({ line, photographers, makeupArtists, services, onChange, 
               <option value="mac_dinh">Mặc định</option>
             </select>
           )}
-          {/* Photo earnings preview */}
-          {line.photoId && photoSplit && calcSplit(photoSplit) > 0 && (
+          {/* Cast photo từ bảng giá riêng */}
+          {line.photoId && photoCast > 0 && (
             <div className="mt-1 text-[10px] bg-blue-50 text-blue-700 rounded px-2 py-1 flex justify-between">
-              <span>💰 Thù lao dự kiến</span>
-              <span className="font-semibold">{fmtVND(calcSplit(photoSplit))}</span>
+              <span>💰 Cast {photographers.find(p => p.id === line.photoId)?.name}</span>
+              <span className="font-semibold">{fmtVND(photoCast)}</span>
             </div>
+          )}
+          {line.photoId && photoCast === 0 && (
+            <div className="mt-1 text-[10px] bg-orange-50 text-orange-600 rounded px-2 py-1">⚠️ Chưa có cast (vào Nhân sự để thêm)</div>
           )}
         </div>
         <div>
           <p className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><Sparkles className="w-3 h-3" /> Makeup</p>
           <select className="w-full h-8 border border-input rounded-lg px-2 text-xs bg-background" value={line.makeupId ?? ""}
-            onChange={e => { const s = makeupArtists.find(x => x.id === parseInt(e.target.value)); onChange({ ...line, makeupId: s?.id ?? null, makeupName: s?.name ?? "" }); }}>
+            onChange={e => { const s = makeupArtists.find(x => x.id === parseInt(e.target.value)); onChange({ ...line, makeupId: s?.id ?? null, makeupName: s?.name ?? "", makeupTask: "" }); }}>
             <option value="">— Không —</option>
             {makeupArtists.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
@@ -228,47 +262,84 @@ function OrderLineRow({ line, photographers, makeupArtists, services, onChange, 
               <option value="mac_dinh">Mặc định</option>
             </select>
           )}
-          {/* Makeup earnings preview */}
-          {line.makeupId && makeupSplit && calcSplit(makeupSplit) > 0 && (
+          {/* Cast makeup từ bảng giá riêng */}
+          {line.makeupId && makeupCast > 0 && (
             <div className="mt-1 text-[10px] bg-pink-50 text-pink-700 rounded px-2 py-1 flex justify-between">
-              <span>💰 Thù lao dự kiến</span>
-              <span className="font-semibold">{fmtVND(calcSplit(makeupSplit))}</span>
+              <span>💰 Cast {makeupArtists.find(m => m.id === line.makeupId)?.name}</span>
+              <span className="font-semibold">{fmtVND(makeupCast)}</span>
             </div>
+          )}
+          {line.makeupId && makeupCast === 0 && (
+            <div className="mt-1 text-[10px] bg-orange-50 text-orange-600 rounded px-2 py-1">⚠️ Chưa có cast (vào Nhân sự để thêm)</div>
           )}
         </div>
       </div>
+
+      {/* Giá bán */}
       <div className="flex items-end gap-3">
         <div>
-          <p className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><CreditCard className="w-3 h-3" /> Giá (đ)</p>
+          <p className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><CreditCard className="w-3 h-3" /> Giá bán (đ)</p>
           <Input type="number" className="h-8 text-sm w-40" value={line.price || ""} placeholder="0" onChange={e => onChange({ ...line, price: parseFloat(e.target.value) || 0 })} />
         </div>
-        {line.price > 0 && selectedSvc && splits.length > 0 && (
+        {/* Với dịch vụ đơn (svc-): hiển thị studio giữ theo splits cũ */}
+        {!isPkg && line.price > 0 && splits.length > 0 && (
           <div className="text-[10px] text-muted-foreground pb-1">
             Studio giữ: <span className="font-semibold text-green-600">
-              {fmtVND(line.price - splits.reduce((s, sp) => s + (sp.rateType === "percent" ? line.price * sp.amount / 100 : sp.amount), 0))}
+              {fmtVND(line.price - calcSplit(photoSplit) - calcSplit(makeupSplit))}
             </span>
           </div>
         )}
       </div>
 
-      {/* Package fixed cost breakdown */}
-      {isPkg && line.price > 0 && selectedSvc && (
-        <div className="text-[11px] bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 space-y-0.5">
-          <p className="font-semibold text-amber-800 mb-1">Chi phí cố định</p>
-          {(selectedSvc.printCost || 0) > 0 && (
-            <div className="flex justify-between text-amber-700"><span>🖨️ In ấn</span><span>{fmtVND(selectedSvc.printCost || 0)}</span></div>
-          )}
-          {(selectedSvc.operatingCost || 0) > 0 && (
-            <div className="flex justify-between text-amber-700"><span>⚡ Vận hành</span><span>{fmtVND(selectedSvc.operatingCost || 0)}</span></div>
-          )}
-          {(selectedSvc.salePercent || 0) > 0 && (
-            <div className="flex justify-between text-amber-700"><span>💼 Sale {selectedSvc.salePercent}%</span><span>≈ {fmtVND(pkgSaleAmt)}</span></div>
-          )}
-          <div className="flex justify-between font-semibold text-green-700 border-t border-amber-200 pt-1 mt-1">
-            <span>Còn lại (chưa trừ nhân sự)</span>
-            <span>{fmtVND(line.price - pkgFixedCost)}</span>
+      {/* ── Panel lợi nhuận (chỉ hiện khi chọn gói + có giá) ── */}
+      {isPkg && line.price > 0 && (
+        <div className="text-[11px] rounded-lg border overflow-hidden">
+          {/* Header */}
+          <div className="bg-green-600 text-white px-3 py-1.5 flex justify-between items-center">
+            <span className="font-bold">📊 Dự tính lợi nhuận</span>
+            <span className={`font-bold text-sm ${profit >= 0 ? "text-green-100" : "text-red-200"}`}>
+              {profit >= 0 ? "+" : ""}{fmtVND(profit)}
+            </span>
           </div>
-          <p className="text-[9px] text-amber-600 italic">* Chi phí photo & makeup tính từ bảng giá nhân sự</p>
+          {/* Doanh thu */}
+          <div className="bg-white px-3 py-1.5 border-b">
+            <div className="flex justify-between font-semibold text-green-700">
+              <span>💵 Doanh thu</span><span>{fmtVND(line.price)}</span>
+            </div>
+          </div>
+          {/* Chi phí */}
+          <div className="bg-red-50 px-3 py-1.5 space-y-0.5">
+            <p className="font-semibold text-red-800 mb-0.5">(-) Chi phí sản xuất</p>
+            {printCost > 0 && (
+              <div className="flex justify-between text-red-700"><span>🖨️ In ấn</span><span>{fmtVND(printCost)}</span></div>
+            )}
+            {operatingCost > 0 && (
+              <div className="flex justify-between text-red-700"><span>⚡ Vận hành</span><span>{fmtVND(operatingCost)}</span></div>
+            )}
+            {saleAmt > 0 && (
+              <div className="flex justify-between text-red-700"><span>💼 Sale {salePercent}%</span><span>{fmtVND(saleAmt)}</span></div>
+            )}
+            {line.photoId && (
+              <div className="flex justify-between text-blue-700">
+                <span>📷 Cast {photographers.find(p => p.id === line.photoId)?.name ?? "Nhiếp ảnh"}</span>
+                <span>{photoCast > 0 ? fmtVND(photoCast) : <span className="text-orange-500 italic">chưa có</span>}</span>
+              </div>
+            )}
+            {line.makeupId && (
+              <div className="flex justify-between text-pink-700">
+                <span>💄 Cast {makeupArtists.find(m => m.id === line.makeupId)?.name ?? "Makeup"}</span>
+                <span>{makeupCast > 0 ? fmtVND(makeupCast) : <span className="text-orange-500 italic">chưa có</span>}</span>
+              </div>
+            )}
+            <div className="flex justify-between font-semibold text-red-800 border-t border-red-200 pt-0.5 mt-0.5">
+              <span>Tổng chi phí</span><span>{fmtVND(totalCost)}</span>
+            </div>
+          </div>
+          {/* Lợi nhuận */}
+          <div className={`px-3 py-1.5 flex justify-between font-bold ${profit >= 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+            <span>= Lợi nhuận</span>
+            <span>{profit >= 0 ? "+" : ""}{fmtVND(profit)}</span>
+          </div>
         </div>
       )}
     </div>
@@ -332,6 +403,7 @@ function ShowFormPanel({
   const { data: allStaff = [] } = useQuery<Staff[]>({ queryKey: ["staff"], queryFn: () => fetch(`${BASE}/api/staff`).then(r => r.json()) });
   const { data: services = [] } = useQuery<Service[]>({ queryKey: ["services"], queryFn: () => fetch(`${BASE}/api/services`).then(r => r.json()) });
   const { data: pricingPackages = [] } = useQuery<{ id: number; name: string; price: number; printCost: number; operatingCost: number; salePercent: number }[]>({ queryKey: ["service-packages"], queryFn: () => fetch(`${BASE}/api/service-packages`).then(r => r.json()) });
+  const { data: allStaffRates = [] } = useQuery<StaffRate[]>({ queryKey: ["staff-rates"], queryFn: () => fetch(`${BASE}/api/staff-rates`).then(r => r.json()) });
 
   // Support both old single-role and new multi-role staff
   const hasRole = (s: Staff, role: string) => s.roles?.includes(role) || s.role === role;
@@ -600,7 +672,7 @@ function ShowFormPanel({
             </div>
             <div className="space-y-2">
               {lines.map(line => (
-                <OrderLineRow key={line.tempId} line={line} photographers={photographers} makeupArtists={makeupArtists} services={allServices}
+                <OrderLineRow key={line.tempId} line={line} photographers={photographers} makeupArtists={makeupArtists} services={allServices} allStaffRates={allStaffRates}
                   onChange={updated => setLines(p => p.map(l => l.tempId === line.tempId ? updated : l))}
                   onRemove={() => setLines(p => p.filter(l => l.tempId !== line.tempId))}
                 />
