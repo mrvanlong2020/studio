@@ -9,14 +9,14 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  ArrowLeft, Phone, Mail, Calendar, Briefcase,
+  ArrowLeft, Phone, Mail, Calendar, Briefcase, Star,
   CheckCircle2, Clock, XCircle, PlayCircle, Banknote, TrendingUp,
   FileText, Plus, ChevronRight, Lock, Pencil, AlertCircle,
   CalendarOff, ClipboardList, Shield,
 } from "lucide-react";
 import { useStaffAuth } from "@/contexts/StaffAuthContext";
 import { cn } from "@/lib/utils";
-import StaffAvatar, { compressStaffAvatar } from "@/components/StaffAvatar";
+import StaffAvatar from "@/components/StaffAvatar";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
