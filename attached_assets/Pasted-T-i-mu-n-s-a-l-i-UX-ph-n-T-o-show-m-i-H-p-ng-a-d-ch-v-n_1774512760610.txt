@@ -1,0 +1,88 @@
+Tôi muốn sửa lại UX phần “Tạo show mới / Hợp đồng đa dịch vụ” như sau:
+
+1. Hiện tại đang có lỗi:
+- Khi tôi đang nhập Dịch vụ 1
+- Sau đó bấm chọn thêm kiểu hợp đồng nhiều dịch vụ / nhiều ngày
+- Hoặc chọn lại dịch vụ
+=> hệ thống bị reset và làm mất dữ liệu của Dịch vụ 1 đã nhập trước đó
+=> phải nhập lại từ đầu, rất bất tiện
+
+2. Tôi muốn sửa logic:
+- Dịch vụ 1 luôn là block đầu tiên, giữ nguyên dữ liệu đã nhập
+- Không được tự xóa, không được reset khi tôi thao tác thêm dịch vụ mới
+- Khi tôi đã chọn gói / ngày / giờ / giá ở Dịch vụ 1 thì phải giữ nguyên
+
+3. Cách thêm dịch vụ mới:
+- Ở cuối block Dịch vụ 1 phải có nút: “+ Thêm dịch vụ mới”
+- Khi bấm vào, hệ thống tạo thêm block Dịch vụ 2 ở bên dưới
+- Dịch vụ 1 vẫn giữ nguyên toàn bộ dữ liệu cũ
+- Khi bấm tiếp thì tạo Dịch vụ 3, Dịch vụ 4...
+- Các block đã nhập trước đó không được mất dữ liệu
+
+4. Ngày mặc định của dịch vụ mới:
+- Khi thêm Dịch vụ 2 hoặc Dịch vụ 3, ngày mặc định phải tự lấy theo ngày hợp đồng hoặc ngày đang chọn hiện tại
+- Sau đó tôi có thể đổi sang ngày khác nếu cần
+- Nghĩa là block mới mở ra sẵn ngày mặc định, nhưng vẫn cho chỉnh ngày riêng
+
+5. Mỗi block dịch vụ phải hoạt động độc lập:
+Mỗi block gồm:
+- Tên dịch vụ
+- Ngày thực hiện
+- Giờ bắt đầu
+- Gói / dịch vụ
+- Nhiếp ảnh
+- Makeup
+- Giá bán
+- Ghi chú nếu cần
+
+6. Khi tôi chỉnh Dịch vụ 2 thì không được ảnh hưởng Dịch vụ 1
+7. Khi tôi chỉnh Dịch vụ 3 thì không được ảnh hưởng Dịch vụ 1 và Dịch vụ 2
+8. Mỗi block dịch vụ phải lưu state riêng hoàn toàn
+
+9. Yêu cầu kỹ thuật:
+- Không dùng lại cùng một state object cho tất cả block dịch vụ
+- Mỗi dịch vụ phải có id riêng
+- Dùng mảng services[] để quản lý danh sách dịch vụ
+- Khi thêm dịch vụ mới thì push thêm 1 object mới vào mảng
+- Không overwrite service đầu tiên
+- Không reset form cũ khi thêm block mới
+
+10. Gợi ý data structure:
+services = [
+  {
+    id: unique_id_1,
+    serviceName: "",
+    date: contractDate,
+    startTime: "",
+    packageId: "",
+    photographerId: "",
+    makeupId: "",
+    price: 0,
+    note: ""
+  },
+  {
+    id: unique_id_2,
+    serviceName: "",
+    date: contractDate,
+    startTime: "",
+    packageId: "",
+    photographerId: "",
+    makeupId: "",
+    price: 0,
+    note: ""
+  }
+]
+
+11. Giao diện mobile mong muốn:
+- Dịch vụ 1 hiển thị đầu tiên
+- Cuối block có nút “+ Thêm dịch vụ mới”
+- Bấm vào thì mở thêm Dịch vụ 2 ngay bên dưới
+- Bấm tiếp mở Dịch vụ 3
+- Trải nghiệm phải mượt, không mất dữ liệu đã nhập
+
+12. Lưu ý quan trọng:
+Đây là thêm block dịch vụ mới bên dưới, không phải chuyển đổi hay thay thế Dịch vụ 1 hiện tại.
+Tức là:
+- Dịch vụ 1 nhập rồi thì giữ nguyên
+- Muốn thêm thì thêm mới ở dưới
+- Không reset, không xóa, không nhập lại từ đầu
