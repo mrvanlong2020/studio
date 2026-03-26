@@ -278,12 +278,16 @@ export default function PricingPage() {
                                     tiec: "🎊 Tiệc cưới", tiec_le: "🎊 Tiệc + Lễ",
                                     phong_su: "📸 Phóng sự", phong_su_luxury: "📸 Phóng sự luxury",
                                     combo_co_makeup: "💄 Có makeup", combo_khong_makeup: "👗 Không makeup",
+                                    quay_phim: "🎬 Quay phim", beauty: "✨ Beauty",
+                                    gia_dinh: "👨‍👩‍👧 Gia đình", makeup_le: "💋 Makeup lẻ",
+                                    in_anh: "🖨️ In ảnh",
                                   };
                                   const isCombo = pkg.serviceType?.startsWith("combo");
+                                  const isNoPhoto = ["makeup_le", "in_anh"].includes(pkg.serviceType ?? "");
                                   return (
                                     <div className="flex flex-wrap gap-1 mt-1">
                                       <span className="text-[9px] px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-semibold">{typeLabel[pkg.serviceType!] ?? pkg.serviceType}</span>
-                                      {!isCombo && <span className="text-[9px] px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded-full font-semibold">📷 {pkg.photoCount ?? 1} photo</span>}
+                                      {!isCombo && !isNoPhoto && (pkg.photoCount ?? 0) > 0 && <span className="text-[9px] px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded-full font-semibold">📷 {pkg.photoCount ?? 1} photographer</span>}
                                     </div>
                                   );
                                 })()}
@@ -302,7 +306,20 @@ export default function PricingPage() {
                                 </p>
                               </div>
                             )}
-                            {pkg.items.length > 0 && (
+                            {pkg.description && (
+                              <div className="mt-2 bg-amber-50 rounded-lg px-2 py-1.5">
+                                <p className="text-[10px] font-semibold text-amber-800 mb-0.5">📋 Mô tả</p>
+                                <div className="space-y-0.5">
+                                  {pkg.description.split("\n").filter(Boolean).map((line, i) => (
+                                    <p key={i} className="text-[10px] text-amber-700 leading-relaxed">{line}</p>
+                                  ))}
+                                </div>
+                                {pkg.notes && (
+                                  <p className="text-[10px] text-orange-700 mt-1 font-medium">⚠️ {pkg.notes}</p>
+                                )}
+                              </div>
+                            )}
+                            {!pkg.description && pkg.items.length > 0 && (
                               <p className="text-xs text-muted-foreground mt-1.5">{pkg.items.length} hạng mục</p>
                             )}
                           </button>

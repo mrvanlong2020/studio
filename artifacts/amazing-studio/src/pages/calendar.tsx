@@ -47,6 +47,8 @@ type ServiceOption = {
   serviceType?: string | null;
   photoCount?: number | null;
   includesMakeup?: boolean;
+  description?: string | null;
+  notes?: string | null;
 };
 type OrderLine = {
   tempId: string; serviceName: string; serviceId: number | null; serviceKey: string; price: number;
@@ -253,16 +255,22 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
           phong_su_luxury: "📸 Phóng sự luxury (2 photo)",
           combo_co_makeup: "💄 Combo có makeup",
           combo_khong_makeup: "👗 Combo không makeup",
+          quay_phim: "🎬 Quay phim",
+          beauty: "✨ Chụp Beauty",
+          gia_dinh: "👨‍👩‍👧 Chụp Gia đình",
+          makeup_le: "💋 Makeup lẻ",
+          in_anh: "🖨️ In ảnh",
         };
         const label = typeLabel[selectedSvc.serviceType] ?? selectedSvc.serviceType;
         const photoN = selectedSvc?.photoCount ?? 1;
+        const isNoPhoto = ["makeup_le", "in_anh"].includes(selectedSvc.serviceType ?? "");
         return (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-flex items-center gap-1 bg-indigo-100 text-indigo-700 text-[10px] font-semibold px-2 py-1 rounded-full">
               {label}
             </span>
-            {/* Badge photographer — chỉ hiện cho gói chụp ảnh, không phải combo */}
-            {!selectedSvc?.serviceType?.startsWith("combo") && photoN > 0 && (
+            {/* Badge photographer — chỉ hiện cho gói chụp ảnh, không phải combo/makeup/in ảnh */}
+            {!selectedSvc?.serviceType?.startsWith("combo") && !isNoPhoto && photoN > 0 && (
               <span className="inline-flex items-center gap-1 bg-sky-100 text-sky-700 text-[10px] font-semibold px-2 py-1 rounded-full">
                 📷 {photoN} photographer
               </span>
@@ -270,6 +278,24 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
           </div>
         );
       })()}
+
+      {/* Gói: description + notes panel */}
+      {isPkg && selectedSvc?.description && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
+          <p className="text-[10px] font-semibold text-amber-800 mb-1">📋 Mô tả dịch vụ</p>
+          <div className="space-y-1">
+            {selectedSvc.description.split("\n").filter(Boolean).map((line, i) => (
+              <p key={i} className="text-[10px] text-amber-700 leading-relaxed">{line}</p>
+            ))}
+          </div>
+          {selectedSvc.notes && (
+            <div className="mt-1.5 pt-1.5 border-t border-amber-200">
+              <p className="text-[10px] font-semibold text-amber-900 mb-0.5">⚠️ Lưu ý</p>
+              <p className="text-[10px] text-amber-800">{selectedSvc.notes}</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Gói: hiện "Bao gồm" */}
       {isPkg && selectedSvc?.items && selectedSvc.items.length > 0 && (
@@ -541,7 +567,7 @@ function ShowFormPanel({
   const { data: services = [] } = useQuery<Service[]>({ queryKey: ["services"], queryFn: () => fetch(`${BASE}/api/services`).then(r => r.json()) });
   const { data: pricingPackages = [] } = useQuery<{
     id: number; name: string; price: number; printCost: number; operatingCost: number; salePercent: number;
-    items?: PkgItem[]; addons?: Addon[]; products?: string[]; description?: string;
+    items?: PkgItem[]; addons?: Addon[]; products?: string[]; description?: string | null; notes?: string | null;
     serviceType?: string | null; photoCount?: number | null; includesMakeup?: boolean;
   }[]>({ queryKey: ["service-packages"], queryFn: () => fetch(`${BASE}/api/service-packages`).then(r => r.json()) });
   const { data: allStaffRates = [] } = useQuery<StaffRate[]>({ queryKey: ["staff-rates"], queryFn: () => fetch(`${BASE}/api/staff-rates`).then(r => r.json()) });
@@ -572,6 +598,8 @@ function ShowFormPanel({
       serviceType: p.serviceType ?? null,
       photoCount: p.photoCount ?? null,
       includesMakeup: p.includesMakeup !== false,
+      description: p.description ?? null,
+      notes: p.notes ?? null,
     })),
   ];
 

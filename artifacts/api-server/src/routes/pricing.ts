@@ -501,6 +501,275 @@ async function seedComboIfMissing() {
 
 seedComboIfMissing().catch(console.error);
 
+// ─── Seed: Nhóm dịch vụ mới ──────────────────────────────────────────────────
+
+async function seedQuayPhimIfMissing() {
+  const ex = await db.select().from(serviceGroupsTable).where(eq(serviceGroupsTable.name, "QUAY PHIM")).limit(1);
+  if (ex.length > 0) return;
+  const [gr] = await db.insert(serviceGroupsTable).values([
+    { name: "QUAY PHIM", description: "Gói quay phim ngày cưới", sortOrder: 6 },
+  ]).returning();
+  const [p1, p2, p3] = await db.insert(servicePackagesTable).values([
+    {
+      groupId: gr.id, code: "QP-TRUYEN-THONG", name: "Quay phim truyền thống",
+      price: "5000000", costPrice: "0", printCost: "0", operatingCost: "300000", salePercent: "10",
+      serviceType: "quay_phim", photoCount: 1, includesMakeup: 0,
+      description: "Quay phim phong cách truyền thống — 1 cameraman — dựng phim khoảng 10–15 phút.\n\nPhù hợp: Các cặp đôi muốn lưu giữ toàn bộ khoảnh khắc ngày cưới theo phong cách trang trọng, đầy đủ.\n\nLưu ý: Thời gian giao phim 7–10 ngày sau sự kiện.",
+      notes: "Giao phim sau 7–10 ngày. Định dạng MP4 Full HD.",
+      addons: JSON.stringify([
+        { key: "len_4k",      name: "Nâng chất lượng lên 4K",         price: 1000000 },
+        { key: "them_drone",  name: "Thêm flycam (drone)",             price: 2000000 },
+        { key: "phim_ngan",   name: "Thêm phim ngắn highlight 3 phút", price: 500000 },
+      ]),
+      products: JSON.stringify(["Phim hoàn chỉnh 10–15 phút (MP4 Full HD)", "USB lưu trữ", "Link Google Drive"]),
+      sortOrder: 1,
+    },
+    {
+      groupId: gr.id, code: "QP-PHONG-SU-1", name: "Quay phóng sự 1 máy",
+      price: "6000000", costPrice: "0", printCost: "0", operatingCost: "300000", salePercent: "10",
+      serviceType: "quay_phim", photoCount: 1, includesMakeup: 0,
+      description: "Quay phóng sự phong cách điện ảnh — 1 cameraman chuyên nghiệp — dựng phim 15–20 phút.\n\nBao gồm: Quay toàn bộ lễ + tiệc, âm nhạc cảm xúc, màu sắc chuyên nghiệp.\n\nPhù hợp: Các cặp đôi muốn bộ phim mang phong cách hiện đại, kể chuyện theo cảm xúc.\n\nLưu ý: Giao phim 10–14 ngày sau sự kiện.",
+      notes: "Giao phim sau 10–14 ngày. Định dạng MP4 Full HD / 4K tùy yêu cầu.",
+      addons: JSON.stringify([
+        { key: "len_4k",      name: "Nâng chất lượng lên 4K",         price: 1000000 },
+        { key: "them_drone",  name: "Thêm flycam (drone)",             price: 2000000 },
+        { key: "phim_ngan",   name: "Thêm phim ngắn highlight 3 phút", price: 500000 },
+        { key: "them_cam2",   name: "Thêm cameraman thứ 2",            price: 2000000 },
+      ]),
+      products: JSON.stringify(["Phim hoàn chỉnh 15–20 phút (MP4 Full HD)", "USB lưu trữ", "Link Google Drive"]),
+      sortOrder: 2,
+    },
+    {
+      groupId: gr.id, code: "QP-PHONG-SU-DRONE", name: "Quay phóng sự + flycam",
+      price: "7800000", costPrice: "0", printCost: "0", operatingCost: "400000", salePercent: "10",
+      serviceType: "quay_phim", photoCount: 1, includesMakeup: 0,
+      description: "Quay phóng sự điện ảnh kết hợp flycam — 1 cameraman + 1 drone operator — dựng phim 15–25 phút.\n\nBao gồm: Quay mặt đất + cảnh flycam ngoài trời, dựng phim chuyên nghiệp với hiệu ứng màu điện ảnh.\n\nPhù hợp: Tiệc có sân ngoài trời, biệt thự, resort, địa điểm rộng.\n\nLưu ý: Chỉ bay flycam tại khu vực được phép. Giao phim 10–14 ngày.",
+      notes: "Cần xác nhận địa điểm cho phép bay drone trước sự kiện. Giao phim 10–14 ngày.",
+      addons: JSON.stringify([
+        { key: "len_4k",      name: "Nâng chất lượng lên 4K",         price: 1000000 },
+        { key: "phim_ngan",   name: "Thêm phim ngắn highlight 3 phút", price: 500000 },
+        { key: "them_cam2",   name: "Thêm cameraman thứ 2",            price: 2000000 },
+      ]),
+      products: JSON.stringify(["Phim hoàn chỉnh 15–25 phút (MP4 Full HD)", "Cảnh quay flycam", "USB lưu trữ", "Link Google Drive"]),
+      sortOrder: 3,
+    },
+  ]).returning();
+  await db.insert(packageItemsTable).values([
+    { packageId: p1.id, name: "Cameraman",            quantity: "1", unit: "người", sortOrder: 1 },
+    { packageId: p1.id, name: "Quay lễ + tiệc",       quantity: "1", unit: "buổi",  sortOrder: 2 },
+    { packageId: p1.id, name: "Dựng phim + âm nhạc",  quantity: "1", unit: "lần",   sortOrder: 3 },
+    { packageId: p2.id, name: "Cameraman phóng sự",   quantity: "1", unit: "người", sortOrder: 1 },
+    { packageId: p2.id, name: "Quay lễ + tiệc",       quantity: "1", unit: "buổi",  sortOrder: 2 },
+    { packageId: p2.id, name: "Dựng phim điện ảnh",   quantity: "1", unit: "lần",   sortOrder: 3 },
+    { packageId: p3.id, name: "Cameraman phóng sự",   quantity: "1", unit: "người", sortOrder: 1 },
+    { packageId: p3.id, name: "Drone operator",        quantity: "1", unit: "người", sortOrder: 2 },
+    { packageId: p3.id, name: "Quay lễ + tiệc + bay", quantity: "1", unit: "buổi",  sortOrder: 3 },
+    { packageId: p3.id, name: "Dựng phim điện ảnh",   quantity: "1", unit: "lần",   sortOrder: 4 },
+  ]);
+  console.log("[seed] QUAY PHIM — 3 gói đã thêm.");
+}
+
+async function seedBeautyIfMissing() {
+  const ex = await db.select().from(serviceGroupsTable).where(eq(serviceGroupsTable.name, "CHỤP BEAUTY")).limit(1);
+  if (ex.length > 0) return;
+  const [gr] = await db.insert(serviceGroupsTable).values([
+    { name: "CHỤP BEAUTY", description: "Gói chụp ảnh beauty cá nhân", sortOrder: 7 },
+  ]).returning();
+  const [p1, p2] = await db.insert(servicePackagesTable).values([
+    {
+      groupId: gr.id, code: "BT-CHUYEN-VIEN", name: "Chụp beauty chuyên viên",
+      price: "1400000", costPrice: "0", printCost: "0", operatingCost: "100000", salePercent: "10",
+      serviceType: "beauty", photoCount: 1, includesMakeup: 1,
+      description: "Buổi chụp ảnh beauty cơ bản — makeup chuyên viên — tại studio.\n\nBao gồm: 1 chuyên viên makeup, 1 photographer, 2–3 bộ trang phục (tự chuẩn bị), 50–80 ảnh đã chỉnh màu.\n\nPhù hợp: Chụp ảnh cá nhân, ảnh đại diện, ảnh kỷ niệm sinh nhật, kỷ niệm.\n\nLưu ý: Thời gian chụp 2–3 tiếng. Khách tự chuẩn bị trang phục.",
+      notes: "Thời gian 2–3 tiếng. Khách chuẩn bị trang phục. Giao ảnh sau 3–5 ngày.",
+      addons: JSON.stringify([
+        { key: "them_trang_phuc", name: "Thuê thêm trang phục studio", price: 300000 },
+        { key: "nang_master",     name: "Nâng lên makeup Master",       price: 600000 },
+        { key: "them_location",   name: "Thêm 1 địa điểm ngoại cảnh",  price: 500000 },
+      ]),
+      products: JSON.stringify(["50–80 ảnh đã chỉnh màu", "10 ảnh retouch kỹ", "File gốc USB / Google Drive"]),
+      sortOrder: 1,
+    },
+    {
+      groupId: gr.id, code: "BT-MASTER", name: "Chụp beauty master",
+      price: "2000000", costPrice: "0", printCost: "0", operatingCost: "100000", salePercent: "10",
+      serviceType: "beauty", photoCount: 1, includesMakeup: 1,
+      description: "Buổi chụp ảnh beauty cao cấp — makeup Master — tại studio hoặc ngoại cảnh.\n\nBao gồm: 1 makeup Master, 1 photographer, trang phục studio (1–2 bộ), 80–120 ảnh đã chỉnh màu.\n\nPhù hợp: Chụp ảnh nghệ thuật, profile chuyên nghiệp, thương hiệu cá nhân.\n\nLưu ý: Thời gian 3–4 tiếng. Trang phục studio được cung cấp 1–2 bộ.",
+      notes: "Thời gian 3–4 tiếng. Studio cung cấp 1–2 bộ trang phục. Giao ảnh 5–7 ngày.",
+      addons: JSON.stringify([
+        { key: "them_trang_phuc", name: "Thuê thêm trang phục studio", price: 300000 },
+        { key: "them_location",   name: "Thêm 1 địa điểm ngoại cảnh",  price: 500000 },
+        { key: "video_tease",     name: "Video teaser 30 giây",         price: 500000 },
+      ]),
+      products: JSON.stringify(["80–120 ảnh đã chỉnh màu", "20 ảnh retouch kỹ", "File gốc USB / Google Drive"]),
+      sortOrder: 2,
+    },
+  ]).returning();
+  await db.insert(packageItemsTable).values([
+    { packageId: p1.id, name: "Makeup chuyên viên",  quantity: "1", unit: "lần",   sortOrder: 1 },
+    { packageId: p1.id, name: "Photographer",         quantity: "1", unit: "người", sortOrder: 2 },
+    { packageId: p1.id, name: "Chụp tại studio",     quantity: "1", unit: "buổi",  sortOrder: 3 },
+    { packageId: p2.id, name: "Makeup Master",        quantity: "1", unit: "lần",   sortOrder: 1 },
+    { packageId: p2.id, name: "Photographer",         quantity: "1", unit: "người", sortOrder: 2 },
+    { packageId: p2.id, name: "Trang phục studio",   quantity: "1-2", unit: "bộ",  sortOrder: 3 },
+    { packageId: p2.id, name: "Chụp studio / ngoại", quantity: "1", unit: "buổi",  sortOrder: 4 },
+  ]);
+  console.log("[seed] CHỤP BEAUTY — 2 gói đã thêm.");
+}
+
+async function seedGiaDinhIfMissing() {
+  const ex = await db.select().from(serviceGroupsTable).where(eq(serviceGroupsTable.name, "CHỤP GIA ĐÌNH")).limit(1);
+  if (ex.length > 0) return;
+  const [gr] = await db.insert(serviceGroupsTable).values([
+    { name: "CHỤP GIA ĐÌNH", description: "Gói chụp ảnh gia đình", sortOrder: 8 },
+  ]).returning();
+  const [p1, p2, p3] = await db.insert(servicePackagesTable).values([
+    {
+      groupId: gr.id, code: "GD-BASIC", name: "Chụp gia đình Basic",
+      price: "1500000", costPrice: "0", printCost: "0", operatingCost: "100000", salePercent: "10",
+      serviceType: "gia_dinh", photoCount: 1, includesMakeup: 0,
+      description: "Buổi chụp ảnh gia đình tại studio — 1–2 tiếng — dành cho gia đình 3–5 người.\n\nBao gồm: 1 photographer, chụp tại studio, 2–3 bối cảnh, 50–70 ảnh đã chỉnh màu.\n\nPhù hợp: Ảnh gia đình hàng năm, ảnh tết, ảnh lưu niệm, ảnh treo tường.\n\nLưu ý: Thêm người (trên 5 người) phụ thu 200k/người.",
+      notes: "Phụ thu 200k/người nếu trên 5 người. Thời gian 1–2 tiếng.",
+      addons: JSON.stringify([
+        { key: "them_nguoi",   name: "Thêm người (>5 người)",          price: 200000 },
+        { key: "them_location",name: "Thêm ngoại cảnh",               price: 500000 },
+        { key: "in_anh_lon",   name: "In ảnh 40×60 cm",               price: 200000 },
+      ]),
+      products: JSON.stringify(["50–70 ảnh đã chỉnh màu", "File gốc USB / Google Drive"]),
+      sortOrder: 1,
+    },
+    {
+      groupId: gr.id, code: "GD-STANDARD", name: "Chụp gia đình Standard",
+      price: "1800000", costPrice: "0", printCost: "0", operatingCost: "100000", salePercent: "10",
+      serviceType: "gia_dinh", photoCount: 1, includesMakeup: 0,
+      description: "Buổi chụp ảnh gia đình studio + ngoại cảnh — 2–3 tiếng — dành cho gia đình 3–7 người.\n\nBao gồm: 1 photographer, studio + 1 địa điểm ngoại cảnh, 70–100 ảnh đã chỉnh màu.\n\nPhù hợp: Ảnh gia đình đa dạng cảnh, ảnh kỷ niệm đặc biệt.\n\nLưu ý: Thêm người trên 7 người phụ thu 200k/người.",
+      notes: "Phụ thu 200k/người nếu trên 7 người. Thời gian 2–3 tiếng.",
+      addons: JSON.stringify([
+        { key: "them_nguoi",   name: "Thêm người (>7 người)",          price: 200000 },
+        { key: "them_location",name: "Thêm địa điểm ngoại cảnh",      price: 500000 },
+        { key: "in_anh_lon",   name: "In ảnh 40×60 cm",               price: 200000 },
+      ]),
+      products: JSON.stringify(["70–100 ảnh đã chỉnh màu", "10 ảnh retouch kỹ", "File gốc USB / Google Drive"]),
+      sortOrder: 2,
+    },
+    {
+      groupId: gr.id, code: "GD-PREMIUM", name: "Chụp gia đình Premium",
+      price: "2500000", costPrice: "0", printCost: "0", operatingCost: "100000", salePercent: "10",
+      serviceType: "gia_dinh", photoCount: 1, includesMakeup: 0,
+      description: "Buổi chụp ảnh gia đình nửa ngày — 3–5 tiếng — dành cho gia đình đông người hoặc nhiều thế hệ.\n\nBao gồm: 1 photographer, 2 địa điểm ngoại cảnh / nhiều bối cảnh studio, 100–150 ảnh đã chỉnh màu, 15 ảnh retouch kỹ.\n\nPhù hợp: Ảnh đại gia đình, ảnh 3 thế hệ, ảnh kỷ niệm đặc biệt.\n\nLưu ý: Không giới hạn số người trong gia đình.",
+      notes: "Không giới hạn số người. Thời gian 3–5 tiếng. Giao ảnh 5–7 ngày.",
+      addons: JSON.stringify([
+        { key: "them_location",name: "Thêm địa điểm ngoại cảnh",      price: 500000 },
+        { key: "in_anh_lon",   name: "In ảnh 40×60 cm",               price: 200000 },
+        { key: "album_gia_dinh", name: "Album gia đình 20×30",        price: 800000 },
+      ]),
+      products: JSON.stringify(["100–150 ảnh đã chỉnh màu", "15 ảnh retouch kỹ", "File gốc USB / Google Drive"]),
+      sortOrder: 3,
+    },
+  ]).returning();
+  await db.insert(packageItemsTable).values([
+    { packageId: p1.id, name: "Photographer",     quantity: "1", unit: "người", sortOrder: 1 },
+    { packageId: p1.id, name: "Chụp tại studio", quantity: "1", unit: "buổi",  sortOrder: 2 },
+    { packageId: p2.id, name: "Photographer",     quantity: "1", unit: "người", sortOrder: 1 },
+    { packageId: p2.id, name: "Studio + ngoại cảnh", quantity: "1+1", unit: "bối cảnh", sortOrder: 2 },
+    { packageId: p3.id, name: "Photographer",     quantity: "1", unit: "người", sortOrder: 1 },
+    { packageId: p3.id, name: "Địa điểm",        quantity: "2", unit: "nơi",   sortOrder: 2 },
+    { packageId: p3.id, name: "Thời gian",        quantity: "3-5", unit: "tiếng", sortOrder: 3 },
+  ]);
+  console.log("[seed] CHỤP GIA ĐÌNH — 3 gói đã thêm.");
+}
+
+async function seedMakeupLeIfMissing() {
+  const ex = await db.select().from(serviceGroupsTable).where(eq(serviceGroupsTable.name, "MAKEUP LẺ")).limit(1);
+  if (ex.length > 0) return;
+  const [gr] = await db.insert(serviceGroupsTable).values([
+    { name: "MAKEUP LẺ", description: "Dịch vụ makeup riêng lẻ không kèm chụp ảnh", sortOrder: 9 },
+  ]).returning();
+  await db.insert(servicePackagesTable).values([
+    {
+      groupId: gr.id, code: "MK-CO-DAU-CV", name: "Makeup cô dâu chuyên viên",
+      price: "1500000", costPrice: "0", printCost: "0", operatingCost: "50000", salePercent: "10",
+      serviceType: "makeup_le", photoCount: 0, includesMakeup: 1,
+      description: "Dịch vụ makeup cô dâu by chuyên viên — 1 lần — tại studio hoặc tại nhà.\n\nBao gồm: Makeup hoàn chỉnh cô dâu, tóc cô dâu (1 kiểu), phụ kiện tóc cơ bản.\n\nPhù hợp: Cô dâu ngày tiệc, lễ gia tiên, lễ đính hôn.\n\nLưu ý: Di chuyển xa trên 10km phụ thu thêm.",
+      notes: "Phụ thu di chuyển xa > 10km. Thời gian makeup 1.5–2 tiếng.",
+      addons: JSON.stringify([
+        { key: "them_lan_makeup", name: "Thêm lần makeup",             price: 1000000 },
+        { key: "them_toc",        name: "Thêm 1 kiểu tóc",             price: 200000 },
+      ]),
+      products: JSON.stringify(["Makeup + tóc hoàn chỉnh 1 lần", "Phụ kiện tóc cơ bản"]),
+      sortOrder: 1,
+    },
+    {
+      groupId: gr.id, code: "MK-CO-DAU-MASTER", name: "Makeup cô dâu Master",
+      price: "2500000", costPrice: "0", printCost: "0", operatingCost: "50000", salePercent: "10",
+      serviceType: "makeup_le", photoCount: 0, includesMakeup: 1,
+      description: "Dịch vụ makeup cô dâu by Master — 1 lần — kỹ thuật cao cấp, chất liệu cao cấp.\n\nBao gồm: Makeup Master hoàn chỉnh, tóc sáng tạo (1 kiểu), phụ kiện tóc cao cấp.\n\nPhù hợp: Cô dâu muốn nét đẹp tinh tế, lâu trôi, phù hợp ảnh chụp chuyên nghiệp.\n\nLưu ý: Nên đặt trước 1–2 tuần để xác nhận lịch Master.",
+      notes: "Nên đặt trước 1–2 tuần. Thời gian makeup 2–2.5 tiếng.",
+      addons: JSON.stringify([
+        { key: "them_lan_makeup", name: "Thêm lần makeup",             price: 1500000 },
+        { key: "them_toc",        name: "Thêm 1 kiểu tóc",             price: 300000 },
+      ]),
+      products: JSON.stringify(["Makeup + tóc Master hoàn chỉnh 1 lần", "Phụ kiện tóc cao cấp"]),
+      sortOrder: 2,
+    },
+    {
+      groupId: gr.id, code: "MK-CHU-RE", name: "Makeup chú rể",
+      price: "500000", costPrice: "0", printCost: "0", operatingCost: "0", salePercent: "10",
+      serviceType: "makeup_le", photoCount: 0, includesMakeup: 1,
+      description: "Dịch vụ makeup & tạo kiểu cho chú rể — đơn giản, tự nhiên.\n\nBao gồm: Makeup căn bản làm mịn da, tạo kiểu tóc.\n\nPhù hợp: Chú rể trong ngày cưới hoặc sự kiện đặc biệt.\n\nLưu ý: Thời gian 20–30 phút.",
+      notes: "Thời gian 20–30 phút. Có thể kết hợp cùng gói cô dâu.",
+      addons: JSON.stringify([]),
+      products: JSON.stringify(["Makeup + tạo kiểu tóc chú rể"]),
+      sortOrder: 3,
+    },
+    {
+      groupId: gr.id, code: "MK-NGUOI-NHA-CO-BAN", name: "Makeup người nhà cơ bản",
+      price: "300000", costPrice: "0", printCost: "0", operatingCost: "0", salePercent: "10",
+      serviceType: "makeup_le", photoCount: 0, includesMakeup: 1,
+      description: "Makeup cơ bản cho người thân — nhẹ nhàng, tự nhiên.\n\nBao gồm: Makeup nhẹ + tạo kiểu tóc đơn giản.\n\nPhù hợp: Mẹ hai bên, phù dâu, người thân dự tiệc.\n\nLưu ý: Mỗi người 20–30 phút. Đặt số lượng trước ít nhất 3 ngày.",
+      notes: "20–30 phút/người. Đặt trước 3 ngày.",
+      addons: JSON.stringify([]),
+      products: JSON.stringify(["Makeup + tóc nhẹ nhàng"]),
+      sortOrder: 4,
+    },
+    {
+      groupId: gr.id, code: "MK-NGUOI-NHA-NANG", name: "Makeup người nhà nâng",
+      price: "600000", costPrice: "0", printCost: "0", operatingCost: "0", salePercent: "10",
+      serviceType: "makeup_le", photoCount: 0, includesMakeup: 1,
+      description: "Makeup nâng cao cho người thân — kỹ hơn, trang trọng hơn.\n\nBao gồm: Makeup đầy đủ + tóc búi hoặc uốn xoăn.\n\nPhù hợp: Mẹ cô dâu / chú rể, phù dâu chính, người quan trọng.\n\nLưu ý: Mỗi người 40–50 phút.",
+      notes: "40–50 phút/người. Phù hợp mẹ hai bên hoặc phù dâu chính.",
+      addons: JSON.stringify([]),
+      products: JSON.stringify(["Makeup đầy đủ + tóc trang trọng"]),
+      sortOrder: 5,
+    },
+  ]);
+  console.log("[seed] MAKEUP LẺ — 5 gói đã thêm.");
+}
+
+async function seedInAnhIfMissing() {
+  const ex = await db.select().from(serviceGroupsTable).where(eq(serviceGroupsTable.name, "IN ẢNH")).limit(1);
+  if (ex.length > 0) return;
+  const [gr] = await db.insert(serviceGroupsTable).values([
+    { name: "IN ẢNH", description: "Dịch vụ in ảnh theo size — giấy bóng / matte", sortOrder: 10 },
+  ]).returning();
+  await db.insert(servicePackagesTable).values([
+    { groupId: gr.id, code: "IN-10x15",  name: "In ảnh 10×15 cm",  price: "5000",   costPrice: "0", printCost: "0", operatingCost: "0", salePercent: "0", serviceType: "in_anh", photoCount: 0, includesMakeup: 0, description: "In ảnh size 10×15 cm — giấy bóng hoặc matte.\n\nPhù hợp: Ảnh mini, album lưu niệm nhỏ.\n\nLưu ý: Giá tính theo 1 ảnh. Đặt tối thiểu 10 ảnh.", notes: "Tối thiểu 10 ảnh/lần đặt. Giao ảnh sau 1–2 ngày.", addons: JSON.stringify([]), products: JSON.stringify(["Ảnh in giấy bóng hoặc matte"]), sortOrder: 1 },
+    { groupId: gr.id, code: "IN-13x18",  name: "In ảnh 13×18 cm",  price: "8000",   costPrice: "0", printCost: "0", operatingCost: "0", salePercent: "0", serviceType: "in_anh", photoCount: 0, includesMakeup: 0, description: "In ảnh size 13×18 cm — giấy bóng hoặc matte.\n\nPhù hợp: Ảnh để bàn, ảnh lồng khung nhỏ.\n\nLưu ý: Giá tính theo 1 ảnh.", notes: "Tối thiểu 5 ảnh/lần đặt. Giao ảnh sau 1–2 ngày.", addons: JSON.stringify([]), products: JSON.stringify(["Ảnh in giấy bóng hoặc matte"]), sortOrder: 2 },
+    { groupId: gr.id, code: "IN-20x30",  name: "In ảnh 20×30 cm",  price: "15000",  costPrice: "0", printCost: "0", operatingCost: "0", salePercent: "0", serviceType: "in_anh", photoCount: 0, includesMakeup: 0, description: "In ảnh size 20×30 cm — giấy bóng hoặc matte.\n\nPhù hợp: Ảnh treo tường nhỏ, ảnh để bàn.\n\nLưu ý: Giá tính theo 1 ảnh.", notes: "Tối thiểu 5 ảnh/lần đặt.", addons: JSON.stringify([]), products: JSON.stringify(["Ảnh in giấy bóng hoặc matte"]), sortOrder: 3 },
+    { groupId: gr.id, code: "IN-30x45",  name: "In ảnh 30×45 cm",  price: "25000",  costPrice: "0", printCost: "0", operatingCost: "0", salePercent: "0", serviceType: "in_anh", photoCount: 0, includesMakeup: 0, description: "In ảnh size 30×45 cm — giấy bóng hoặc matte.\n\nPhù hợp: Ảnh treo tường, ảnh trang trí phòng.\n\nLưu ý: Giá tính theo 1 ảnh.", notes: "Giao ảnh sau 1–2 ngày.", addons: JSON.stringify([]), products: JSON.stringify(["Ảnh in giấy bóng hoặc matte"]), sortOrder: 4 },
+    { groupId: gr.id, code: "IN-40x60",  name: "In ảnh 40×60 cm",  price: "40000",  costPrice: "0", printCost: "0", operatingCost: "0", salePercent: "0", serviceType: "in_anh", photoCount: 0, includesMakeup: 0, description: "In ảnh size 40×60 cm — giấy bóng hoặc matte.\n\nPhù hợp: Ảnh treo tường phòng khách, ảnh cưới.\n\nLưu ý: Giá tính theo 1 ảnh.", notes: "Giao ảnh sau 2–3 ngày.", addons: JSON.stringify([]), products: JSON.stringify(["Ảnh in giấy bóng hoặc matte"]), sortOrder: 5 },
+    { groupId: gr.id, code: "IN-60x90",  name: "In ảnh 60×90 cm",  price: "80000",  costPrice: "0", printCost: "0", operatingCost: "0", salePercent: "0", serviceType: "in_anh", photoCount: 0, includesMakeup: 0, description: "In ảnh size 60×90 cm — giấy bóng hoặc matte — khổ lớn.\n\nPhù hợp: Ảnh cưới treo phòng khách, backdrop trang trí.\n\nLưu ý: Giá tính theo 1 ảnh. Cần ảnh gốc độ phân giải cao.", notes: "Cần file ảnh gốc độ phân giải cao (>5MP). Giao sau 2–3 ngày.", addons: JSON.stringify([]), products: JSON.stringify(["Ảnh in khổ lớn giấy bóng hoặc matte"]), sortOrder: 6 },
+    { groupId: gr.id, code: "IN-80x120", name: "In ảnh 80×120 cm", price: "150000", costPrice: "0", printCost: "0", operatingCost: "0", salePercent: "0", serviceType: "in_anh", photoCount: 0, includesMakeup: 0, description: "In ảnh size 80×120 cm — giấy bóng hoặc matte — khổ đại.\n\nPhù hợp: Ảnh trưng bày, ảnh cưới treo tường lớn, backdrop sự kiện.\n\nLưu ý: Cần file ảnh gốc độ phân giải rất cao (>10MP).", notes: "Cần file gốc >10MP. Giao sau 3–5 ngày.", addons: JSON.stringify([]), products: JSON.stringify(["Ảnh in khổ đại giấy bóng hoặc matte"]), sortOrder: 7 },
+  ]);
+  console.log("[seed] IN ẢNH — 7 size đã thêm.");
+}
+
+seedQuayPhimIfMissing().catch(console.error);
+seedBeautyIfMissing().catch(console.error);
+seedGiaDinhIfMissing().catch(console.error);
+seedMakeupLeIfMissing().catch(console.error);
+seedInAnhIfMissing().catch(console.error);
+
 // ─── Service groups ─────────────────────────────────────────────────────────
 router.get("/service-groups", async (_req, res) => {
   const groups = await db.select().from(serviceGroupsTable).orderBy(asc(serviceGroupsTable.sortOrder));
