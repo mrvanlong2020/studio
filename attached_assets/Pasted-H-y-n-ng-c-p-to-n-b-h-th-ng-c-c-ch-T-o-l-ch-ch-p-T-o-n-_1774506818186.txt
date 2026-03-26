@@ -1,0 +1,128 @@
+Hãy nâng cấp toàn bộ hệ thống ở các chỗ:
+- Tạo lịch chụp
+- Tạo đơn hàng
+- Tạo show
+- Các form liên quan đến chọn dịch vụ / sản phẩm
+
+theo các yêu cầu sau:
+
+1. Ô CHỌN DỊCH VỤ / SẢN PHẨM PHẢI CÓ TÌM KIẾM
+- Không dùng dropdown kéo lướt thủ công như hiện tại nữa
+- Khi bấm vào ô chọn dịch vụ, phải có ô search ngay bên trên
+- Cho phép tìm bằng tên dịch vụ / tên gói
+- Gõ tới đâu lọc tới đó
+
+Ví dụ:
+- gõ “tiệc”
+→ hiện ra các gói chụp tiệc
+- gõ “beauty”
+→ hiện ra các gói beauty
+- gõ “album”
+→ hiện ra album studio / album ngoại cảnh
+
+2. PHẢI CÓ GỢI Ý DỊCH VỤ
+Khi chưa gõ gì, hệ thống phải xổ ra gợi ý:
+- các dịch vụ dùng gần đây
+- các gói phổ biến
+- các gói vừa tạo show gần nhất
+
+Mục tiêu:
+- chọn nhanh
+- không cần nhớ chính xác tên gói
+- không cần kéo quá nhiều
+
+3. KẾT QUẢ TÌM KIẾM PHẢI HIỂN THỊ RÕ
+Mỗi gói khi hiện ra phải thấy:
+- tên gói
+- nhóm dịch vụ
+- giá
+- nếu có thì hiện tag như:
+  + có makeup
+  + không makeup
+  + album
+  + tiệc
+  + beauty
+  + add-on
+
+Ví dụ:
+Chụp tiệc phóng sự — 4.500.000đ
+Album studio Basic — 6.500.000đ
+Combo cưới Luxury (có makeup) — 13.000.000đ
+
+4. THÊM PHẦN NHẬP TAY PHÁT SINH / PHỤ THU
+Trong mọi form tạo show / đơn hàng / lịch chụp liên quan đến dịch vụ, phải có 1 khu vực riêng:
+“Chi phí thêm / Phụ thu / Phát sinh”
+
+Khu vực này cho phép nhập tay nhiều dòng.
+
+Mỗi dòng gồm:
+- tên nội dung phát sinh
+- số tiền
+
+Ví dụ:
+- Phụ thu xa: 500000
+- Thêm giờ: 1000000
+- Chụp thêm bàn tiệc: 300000
+- Khách yêu cầu thêm file nhanh: 200000
+
+5. CHO PHÉP THÊM NHIỀU DÒNG PHÁT SINH
+- Có nút “+ Thêm dòng”
+- Có thể xoá từng dòng
+- Có thể sửa tên và số tiền từng dòng
+- Không giới hạn số dòng phát sinh
+
+6. TỰ ĐỘNG CỘNG VÀO TỔNG TIỀN
+Khi nhập phát sinh:
+- hệ thống tự cộng vào tổng tiền đơn hàng / show
+- cập nhật luôn phần:
+  + tổng doanh thu
+  + dự tính lợi nhuận
+  + số tiền cần thu
+  + còn lại
+
+7. ĐỒNG BỘ TOÀN HỆ THỐNG
+Phần dịch vụ và phần phát sinh phải đồng bộ ở các nơi:
+- Tạo lịch chụp
+- Tạo show
+- Tạo đơn hàng
+- Báo giá
+- Hợp đồng
+- Thu tiền
+
+Ví dụ:
+- tạo show có phát sinh phụ thu 500k
+→ đơn hàng phải thấy
+→ báo giá phải thấy
+→ hợp đồng phải thấy
+→ thu tiền phải tính đúng tổng mới
+
+8. TÁCH RÕ GIỮA:
+- giá gói cố định của tiệm
+- chi phí phát sinh nhập tay
+- chi phí sản xuất
+- lợi nhuận
+
+Logic:
+Tổng tiền khách phải trả
+= giá gói cố định
++ phụ thu / phát sinh / add-on nhập tay
+
+Lợi nhuận
+= tổng tiền khách trả
+- chi phí sản xuất
+- cast nhân sự
+- sale
+- in ấn
+- chi phí vận hành
+
+9. UX PHẢI DÙNG NHANH TRÊN ĐIỆN THOẠI
+- ô chọn dịch vụ dễ gõ
+- gợi ý hiện rõ
+- bấm chọn nhanh
+- phát sinh nhập tay gọn, không rối
+- tối ưu cho thao tác ngoài đường, đang bận vẫn dùng được
+
+10. MỤC TIÊU
+Tôi cần hệ thống chọn dịch vụ thật nhanh, không phải kéo tay tìm từng gói.
+Đồng thời mọi gói đều phải cho phép thêm phụ thu / phát sinh nhập tay để dùng linh hoạt theo từng khách.
+Toàn bộ dữ liệu phải liên kết với nhau giữa lịch chụp, đơn hàng, báo giá, hợp đồng và thu tiền.

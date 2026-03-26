@@ -44,6 +44,7 @@ router.get("/bookings", async (req, res) => {
       location: bookingsTable.location,
       status: bookingsTable.status,
       items: bookingsTable.items,
+      surcharges: bookingsTable.surcharges,
       totalAmount: bookingsTable.totalAmount,
       depositAmount: bookingsTable.depositAmount,
       paidAmount: bookingsTable.paidAmount,
@@ -83,7 +84,7 @@ router.get("/bookings", async (req, res) => {
 });
 
 router.post("/bookings", async (req, res) => {
-  const { customerId, shootDate, shootTime, serviceCategory, packageType, location, totalAmount, depositAmount, discountAmount, items, notes, internalNotes, assignedStaff } = req.body;
+  const { customerId, shootDate, shootTime, serviceCategory, packageType, location, totalAmount, depositAmount, discountAmount, items, surcharges, notes, internalNotes, assignedStaff } = req.body;
   const count = await db.select().from(bookingsTable);
   const orderCode = `DH${String(count.length + 1).padStart(4, "0")}`;
   const [booking] = await db
@@ -101,6 +102,7 @@ router.post("/bookings", async (req, res) => {
       discountAmount: String(discountAmount || 0),
       paidAmount: String(depositAmount || 0),
       items: items || [],
+      surcharges: surcharges || [],
       notes,
       internalNotes,
       assignedStaff: assignedStaff || [],
@@ -148,6 +150,7 @@ router.get("/bookings/:id", async (req, res) => {
       location: bookingsTable.location,
       status: bookingsTable.status,
       items: bookingsTable.items,
+      surcharges: bookingsTable.surcharges,
       totalAmount: bookingsTable.totalAmount,
       depositAmount: bookingsTable.depositAmount,
       paidAmount: bookingsTable.paidAmount,
@@ -196,7 +199,7 @@ router.get("/bookings/:id", async (req, res) => {
 
 router.put("/bookings/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  const { shootDate, shootTime, serviceCategory, packageType, location, status, totalAmount, depositAmount, discountAmount, items, notes, internalNotes, assignedStaff } = req.body;
+  const { shootDate, shootTime, serviceCategory, packageType, location, status, totalAmount, depositAmount, discountAmount, items, surcharges, notes, internalNotes, assignedStaff } = req.body;
 
   const updateData: Record<string, unknown> = {};
   if (shootDate !== undefined) updateData.shootDate = shootDate;
@@ -209,6 +212,7 @@ router.put("/bookings/:id", async (req, res) => {
   if (depositAmount !== undefined) updateData.depositAmount = String(depositAmount);
   if (discountAmount !== undefined) updateData.discountAmount = String(discountAmount);
   if (items !== undefined) updateData.items = items;
+  if (surcharges !== undefined) updateData.surcharges = surcharges;
   if (notes !== undefined) updateData.notes = notes;
   if (internalNotes !== undefined) updateData.internalNotes = internalNotes;
   if (assignedStaff !== undefined) updateData.assignedStaff = assignedStaff;

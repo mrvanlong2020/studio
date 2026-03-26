@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatVND, formatDate } from "@/lib/utils";
 import { Button, Input, Select, Textarea, Badge, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui";
@@ -7,6 +7,8 @@ import {
   CreditCard, AlertCircle, FileText, Users, DollarSign, Receipt, ListChecks,
   Trash2, Edit2, Printer, Download
 } from "lucide-react";
+import { ServiceSearchBox, type ServiceOption } from "@/components/service-search-box";
+import { SurchargeEditor, type SurchargeItem } from "@/components/surcharge-editor";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -626,27 +628,51 @@ function CreateBookingForm({ customers, onSuccess, onCancel }: {
 }) {
   const [form, setForm] = useState({
     customerId: "", shootDate: "", shootTime: "08:00", serviceCategory: "wedding",
-    packageType: "", location: "", totalAmount: "", depositAmount: "", discountAmount: "0", notes: "",
+    packageType: "", location: "", depositAmount: "", discountAmount: "0", notes: "",
   });
+  const [selectedService, setSelectedService] = useState<ServiceOption | null>(null);
+  const [surcharges, setSurcharges] = useState<SurchargeItem[]>([]);
+  const [manualTotal, setManualTotal] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [showNewCustomer, setShowNewCustomer] = useState(false);
-  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+  // Auto-compute total from service price + surcharges
+  const surchargesTotal = surcharges.reduce((s, i) => s + (i.amount || 0), 0);
+  const autoTotal = (selectedService?.price ?? 0) + surchargesTotal;
+  const displayTotal = manualTotal !== "" ? parseFloat(manualTotal) || 0 : autoTotal;
+
+  // When service changes, clear manual total so auto takes over
+  useEffect(() => { setManualTotal(""); }, [selectedService?.key]);
 
   const handleSubmit = async () => {
-    if (!form.customerId || !form.shootDate || !form.packageType || !form.totalAmount) return alert("Vui lòng điền đầy đủ thông tin bắt buộc");
+    const packageName = selectedService?.name || form.packageType;
+    if (!form.customerId || !form.shootDate || !packageName) return alert("Vui lòng chọn khách hàng, ngày chụp và gói dịch vụ");
+    if (displayTotal <= 0) return alert("Tổng tiền phải lớn hơn 0");
     setLoading(true);
     try {
+      const cleanedSurcharges = surcharges
+        .filter(s => s.name.trim() && s.amount > 0)
+        .map(({ name, amount }) => ({ name, amount }));
       await fetch(`${BASE}/api/bookings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, customerId: parseInt(form.customerId), totalAmount: parseFloat(form.totalAmount), depositAmount: parseFloat(form.depositAmount || "0"), discountAmount: parseFloat(form.discountAmount || "0") }),
+        body: JSON.stringify({
+          ...form,
+          packageType: packageName,
+          customerId: parseInt(form.customerId),
+          totalAmount: displayTotal,
+          depositAmount: parseFloat(form.depositAmount || "0"),
+          discountAmount: parseFloat(form.discountAmount || "0"),
+          surcharges: cleanedSurcharges,
+        }),
       });
       onSuccess();
-    } catch (e) { alert("Lỗi tạo đơn hàng"); } finally { setLoading(false); }
+    } catch { alert("Lỗi tạo đơn hàng"); } finally { setLoading(false); }
   };
 
   return (
-    <div className="space-y-3 max-h-[70vh] overflow-y-auto">
+    <div className="space-y-3.5 max-h-[75vh] overflow-y-auto pr-1">
+      {/* Khách hàng */}
       <div>
         <label className="text-xs font-medium text-muted-foreground">Khách hàng *</label>
         <CustomerSearchBox
@@ -661,27 +687,107 @@ function CreateBookingForm({ customers, onSuccess, onCancel }: {
           </div>
         )}
       </div>
+
+      {/* Ngày + Giờ */}
       <div className="grid grid-cols-2 gap-3">
         <div><label className="text-xs font-medium text-muted-foreground">Ngày chụp *</label><Input type="date" value={form.shootDate} onChange={e => setForm(f => ({ ...f, shootDate: e.target.value }))} /></div>
         <div><label className="text-xs font-medium text-muted-foreground">Giờ chụp</label><Input type="time" value={form.shootTime} onChange={e => setForm(f => ({ ...f, shootTime: e.target.value }))} /></div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-medium text-muted-foreground">Loại dịch vụ *</label>
-          <Select value={form.serviceCategory} onChange={e => setForm(f => ({ ...f, serviceCategory: e.target.value }))}>
-            {Object.entries(SERVICE_CAT).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </Select>
-        </div>
-        <div><label className="text-xs font-medium text-muted-foreground">Tên gói *</label><Input placeholder="VD: Gói VIP Cưới" value={form.packageType} onChange={e => setForm(f => ({ ...f, packageType: e.target.value }))} /></div>
+
+      {/* Loại dịch vụ */}
+      <div>
+        <label className="text-xs font-medium text-muted-foreground">Loại dịch vụ *</label>
+        <Select value={form.serviceCategory} onChange={e => setForm(f => ({ ...f, serviceCategory: e.target.value }))}>
+          {Object.entries(SERVICE_CAT).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </Select>
       </div>
+
+      {/* Gói dịch vụ — ServiceSearchBox */}
+      <div>
+        <label className="text-xs font-medium text-muted-foreground">Gói dịch vụ *</label>
+        <ServiceSearchBox
+          value={selectedService}
+          onChange={svc => {
+            setSelectedService(svc);
+            if (svc) setForm(f => ({ ...f, packageType: svc.name }));
+            else setForm(f => ({ ...f, packageType: "" }));
+          }}
+          allowCustom
+          onCustom={() => {
+            setSelectedService(null);
+            setForm(f => ({ ...f, packageType: "" }));
+          }}
+        />
+        {/* Manual package name if no service selected */}
+        {!selectedService && (
+          <Input
+            className="mt-1.5"
+            placeholder="Hoặc nhập tên gói tự do..."
+            value={form.packageType}
+            onChange={e => setForm(f => ({ ...f, packageType: e.target.value }))}
+          />
+        )}
+      </div>
+
+      {/* Phụ thu / phát sinh */}
+      <div className="p-3 bg-amber-50/60 border border-amber-200/60 rounded-xl">
+        <SurchargeEditor value={surcharges} onChange={setSurcharges} />
+      </div>
+
+      {/* Địa điểm */}
       <div><label className="text-xs font-medium text-muted-foreground">Địa điểm</label><Input placeholder="Địa điểm chụp..." value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} /></div>
-      <div className="grid grid-cols-3 gap-3">
-        <div><label className="text-xs font-medium text-muted-foreground">Tổng tiền *</label><Input type="number" placeholder="0" value={form.totalAmount} onChange={e => setForm(f => ({ ...f, totalAmount: e.target.value }))} /></div>
-        <div><label className="text-xs font-medium text-muted-foreground">Tiền cọc</label><Input type="number" placeholder="0" value={form.depositAmount} onChange={e => setForm(f => ({ ...f, depositAmount: e.target.value }))} /></div>
-        <div><label className="text-xs font-medium text-muted-foreground">Giảm giá</label><Input type="number" placeholder="0" value={form.discountAmount} onChange={e => setForm(f => ({ ...f, discountAmount: e.target.value }))} /></div>
+
+      {/* Tổng tiền tự động */}
+      <div className="bg-muted/30 rounded-xl p-3 space-y-2.5 border border-border/50">
+        {selectedService && (
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Giá gói</span>
+            <span className="font-medium">{formatVND(selectedService.price)}</span>
+          </div>
+        )}
+        {surchargesTotal > 0 && (
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Phụ thu / phát sinh</span>
+            <span className="font-medium text-amber-600">+{formatVND(surchargesTotal)}</span>
+          </div>
+        )}
+        <div className="flex justify-between items-center border-t border-border/50 pt-2">
+          <span className="text-sm font-semibold">Tổng tiền *</span>
+          <Input
+            type="number"
+            className="h-8 w-40 text-right text-sm font-bold"
+            placeholder={String(autoTotal || "")}
+            value={manualTotal !== "" ? manualTotal : autoTotal > 0 ? String(autoTotal) : ""}
+            onChange={e => setManualTotal(e.target.value)}
+          />
+        </div>
+        {manualTotal !== "" && autoTotal > 0 && parseFloat(manualTotal) !== autoTotal && (
+          <p className="text-[10px] text-amber-600 text-right">
+            Tự nhập. Tự động: {formatVND(autoTotal)}
+            <button className="ml-1.5 underline" onClick={() => setManualTotal("")}>Khôi phục</button>
+          </p>
+        )}
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-muted-foreground">Đặt cọc</span>
+          <Input type="number" className="h-8 w-40 text-right text-sm" placeholder="0" value={form.depositAmount} onChange={e => setForm(f => ({ ...f, depositAmount: e.target.value }))} />
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-muted-foreground">Giảm giá</span>
+          <Input type="number" className="h-8 w-40 text-right text-sm" placeholder="0" value={form.discountAmount} onChange={e => setForm(f => ({ ...f, discountAmount: e.target.value }))} />
+        </div>
+        {displayTotal > 0 && (
+          <div className="flex justify-between items-center border-t border-border/50 pt-2">
+            <span className="text-sm font-semibold text-destructive">Còn lại</span>
+            <span className="text-sm font-bold text-destructive">
+              {formatVND(Math.max(0, displayTotal - (parseFloat(form.depositAmount || "0")) - (parseFloat(form.discountAmount || "0"))))}
+            </span>
+          </div>
+        )}
       </div>
+
       <div><label className="text-xs font-medium text-muted-foreground">Ghi chú</label><Textarea rows={2} placeholder="Ghi chú thêm..." value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} /></div>
-      <div className="flex gap-2 pt-2">
+
+      <div className="flex gap-2 pt-1">
         <Button onClick={handleSubmit} disabled={loading} className="flex-1">{loading ? "Đang tạo..." : "Tạo đơn hàng"}</Button>
         <Button variant="outline" onClick={onCancel}>Hủy</Button>
       </div>

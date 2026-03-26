@@ -14,6 +14,7 @@ export const bookingsTable = pgTable("bookings", {
   location: text("location"),
   status: text("status").notNull().default("pending"),
   items: jsonb("items").notNull().default([]),
+  surcharges: jsonb("surcharges").notNull().default([]),
   totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
   depositAmount: numeric("deposit_amount", { precision: 12, scale: 2 }).notNull(),
   paidAmount: numeric("paid_amount", { precision: 12, scale: 2 }).notNull().default("0"),

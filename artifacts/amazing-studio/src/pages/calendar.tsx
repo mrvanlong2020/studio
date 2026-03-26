@@ -16,6 +16,8 @@ import {
   ChevronDown, Trash2, Save, MapPin, CreditCard, ArrowLeft,
 } from "lucide-react";
 import { Button, Input } from "@/components/ui";
+import { ServiceSearchBox } from "@/components/service-search-box";
+import { SurchargeEditor, type SurchargeItem } from "@/components/surcharge-editor";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -24,7 +26,8 @@ type Booking = {
   id: number; orderCode: string; customerId: number; customerName: string;
   customerPhone: string; shootDate: string; shootTime: string;
   serviceCategory: string; packageType: string; location: string | null;
-  status: string; items: OrderLine[]; totalAmount: number; depositAmount: number;
+  status: string; items: OrderLine[]; surcharges?: { name: string; amount: number }[];
+  totalAmount: number; depositAmount: number;
   paidAmount: number; remainingAmount: number; assignedStaff: number[];
   notes: string | null;
 };
@@ -213,38 +216,49 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
     onChange({ ...line, selectedAddons: next, price: (line.basePrice || 0) + newAddonTotal });
   }
 
+  // Build a ServiceOption from current line for controlled state
+  const currentServiceValue = selectedSvc ? {
+    key: selectedSvc.key,
+    id: line.serviceId ?? 0,
+    name: selectedSvc.name,
+    groupName: "",
+    price: selectedSvc.price,
+    serviceType: selectedSvc.serviceType,
+    includesMakeup: selectedSvc.includesMakeup,
+    photoCount: selectedSvc.photoCount,
+    printCost: selectedSvc.printCost,
+    operatingCost: selectedSvc.operatingCost,
+    salePercent: selectedSvc.salePercent,
+    addons: selectedSvc.addons,
+    items: selectedSvc.items,
+    products: selectedSvc.products,
+    description: selectedSvc.description,
+    notes: selectedSvc.notes,
+  } : null;
+
   return (
     <div className="p-2.5 bg-muted/30 rounded-xl border border-border/50 space-y-2">
-      {/* Chọn dịch vụ / gói */}
-      <div className="flex gap-1.5 items-center">
-        <select
-          className="flex-1 h-9 border border-input rounded-lg px-2 text-sm bg-background"
-          value={line.serviceKey && line.serviceKey !== "" ? line.serviceKey : useCustom ? "_custom" : ""}
-          onChange={e => {
-            if (e.target.value === "_custom") { setUseCustom(true); onChange({ ...line, serviceId: null, serviceKey: "", serviceName: "", basePrice: 0, selectedAddons: [] }); return; }
-            handleSelectPackage(e.target.value);
-          }}
-        >
-          <option value="">— Chọn gói / dịch vụ —</option>
-          <optgroup label="📦 Gói chụp">
-            {services.filter(s => s.key.startsWith("pkg-")).map(s => (
-              <option key={s.key} value={s.key}>{s.name} — {s.price.toLocaleString("vi-VN")}đ</option>
-            ))}
-          </optgroup>
-          <optgroup label="🎯 Dịch vụ đơn lẻ">
-            {services.filter(s => s.key.startsWith("svc-")).map(s => (
-              <option key={s.key} value={s.key}>{s.name} — {s.price.toLocaleString("vi-VN")}đ</option>
-            ))}
-          </optgroup>
-          <option value="_custom">✏️ Tự nhập tên...</option>
-        </select>
-        <button onClick={onRemove} className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors flex-shrink-0">
+      {/* Chọn dịch vụ / gói — ServiceSearchBox */}
+      <div className="flex gap-1.5 items-start">
+        <div className="flex-1 min-w-0">
+          <ServiceSearchBox
+            value={useCustom ? null : currentServiceValue}
+            onChange={svc => {
+              if (!svc) { setUseCustom(false); onChange({ ...line, serviceId: null, serviceKey: "", serviceName: "", basePrice: 0, selectedAddons: [] }); return; }
+              handleSelectPackage(svc.key);
+            }}
+            placeholder="Tìm gói / dịch vụ..."
+            allowCustom
+            onCustom={() => { setUseCustom(true); onChange({ ...line, serviceId: null, serviceKey: "", serviceName: "", basePrice: 0, selectedAddons: [] }); }}
+          />
+          {useCustom && (
+            <Input className="h-9 text-sm mt-1.5" placeholder="Tên dịch vụ tự nhập..." value={line.serviceName} onChange={e => onChange({ ...line, serviceName: e.target.value })} />
+          )}
+        </div>
+        <button onClick={onRemove} className="p-1.5 mt-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors flex-shrink-0">
           <X className="w-4 h-4" />
         </button>
       </div>
-      {useCustom && (
-        <Input className="h-9 text-sm" placeholder="Tên dịch vụ..." value={line.serviceName} onChange={e => onChange({ ...line, serviceName: e.target.value })} />
-      )}
 
       {/* Gói: badge loại dịch vụ + số photo — chỉ hiện khi có serviceType */}
       {isPkg && selectedSvc?.serviceType && (() => {
@@ -560,6 +574,10 @@ function ShowFormPanel({
 
   const [deposit, setDeposit] = useState(booking?.depositAmount?.toString() ?? "0");
   const [notes, setNotes] = useState(booking?.notes ?? "");
+  const [surcharges, setSurcharges] = useState<SurchargeItem[]>(() => {
+    const raw = booking?.surcharges ?? [];
+    return raw.map((s: { name: string; amount: number }, i: number) => ({ id: `s${i}`, ...s }));
+  });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -603,7 +621,9 @@ function ShowFormPanel({
     })),
   ];
 
-  const totalAmount = lines.reduce((s, l) => s + (l.price || 0), 0);
+  const linesTotal = lines.reduce((s, l) => s + (l.price || 0), 0);
+  const surchargesTotal = surcharges.reduce((s, i) => s + (i.amount || 0), 0);
+  const totalAmount = linesTotal + surchargesTotal;
   const depositNum = parseFloat(deposit) || 0;
   const remaining = Math.max(0, totalAmount - depositNum);
 
@@ -663,14 +683,18 @@ function ShowFormPanel({
         : "Chưa chốt dịch vụ";
 
       const finalStatus = hasServices ? status : (status === "confirmed" || status === "in_progress" || status === "completed" ? status : "pending_service");
-      const finalTotal = hasServices ? totalAmount : 0;
-      const finalDeposit = hasServices ? depositNum : 0;
+      const finalTotal = hasServices ? totalAmount : surchargesTotal;
+      const finalDeposit = (hasServices || surchargesTotal > 0) ? depositNum : 0;
 
       // Build role-keyed assignedStaff object for payroll auto-compute
       // Include task keys so earnings compute can look up the right price
       const assignedStaff: Record<string, unknown> = {};
       if (saleId) { assignedStaff.sale = saleId; assignedStaff.saleTask = saleTask || "mac_dinh"; }
       if (photoshopId) { assignedStaff.photoshop = photoshopId; assignedStaff.photoshopTask = photoshopTask || "mac_dinh"; }
+
+      const cleanedSurcharges = surcharges
+        .filter(s => s.name.trim() && s.amount > 0)
+        .map(({ name, amount }) => ({ name, amount }));
 
       const body = {
         customerId: cid, shootDate, shootTime: timeStart,
@@ -679,6 +703,7 @@ function ShowFormPanel({
         totalAmount: finalTotal, depositAmount: finalDeposit,
         discountAmount: 0,
         items: hasServices ? validLines.map(({ tempId: _t, ...rest }) => rest) : [],
+        surcharges: cleanedSurcharges,
         assignedStaff, notes: notes || null,
       };
 
@@ -853,6 +878,13 @@ function ShowFormPanel({
                   onRemove={() => setLines(p => p.filter(l => l.tempId !== line.tempId))}
                 />
               ))}
+            </div>
+          </section>
+
+          {/* C2. Phụ thu / phát sinh */}
+          <section className="space-y-2">
+            <div className="p-3 bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/60 rounded-xl">
+              <SurchargeEditor value={surcharges} onChange={setSurcharges} />
             </div>
           </section>
 

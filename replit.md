@@ -16,6 +16,9 @@ A wedding photography studio and wedding dress rental management system for "Ama
 - **Cho thuê váy (Rentals)**: Dress rental management with return tracking
 - **Thanh toán (Payments)**: Payment tracking (cash, bank transfer, MoMo, ZaloPay)
 - **Bảng giá (Pricing)**: Full pricing catalog — service groups, packages with detailed items, surcharges CRUD; 4 DB tables: service_groups, service_packages, package_items, surcharges; seed data with 11 groups, 15 packages, 10 surcharges
+- **ServiceSearchBox** (`src/components/service-search-box.tsx`): Shared searchable package picker — live filtering, smart suggestions from localStorage recent, shows tags (serviceType, makeup, addon, album). Used in booking forms and calendar.
+- **SurchargeEditor** (`src/components/surcharge-editor.tsx`): Shared multi-line phát sinh/phụ thu editor. Each row: name + amount, auto-sum. Stores as JSONB `surcharges` column on bookings table.
+- **Booking surcharges**: `surcharges` JSONB column on `bookingsTable` (`[{name, amount}]`). POST/PUT /bookings accept `surcharges`. Total = sum(line items) + sum(surcharges). Auto-computed in form when package selected.
 - **Nhân sự & Lương (Staff & Payroll)** `/staff`: Full HR system with multi-role staff + freelancer support
   - `staffType` field: "official" (nhân viên chính thức) or "freelancer" (CTV)
   - Roles: admin, photographer, makeup, sale, photoshop, assistant, marketing (jsonb array)
