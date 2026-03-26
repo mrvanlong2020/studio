@@ -23,6 +23,8 @@ export const servicePackagesTable = pgTable("service_packages", {
   salePercent: numeric("sale_percent", { precision: 5, scale: 2 }).notNull().default("0"),
   description: text("description"),
   notes: text("notes"),
+  addons: text("addons"),
+  products: text("products"),
   isActive: integer("is_active").notNull().default(1),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),

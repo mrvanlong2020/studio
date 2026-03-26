@@ -35,9 +35,20 @@ type Customer = {
 type Staff = { id: number; name: string; role: string; roles: string[]; isActive: boolean; staffType?: string };
 type ServiceSplit = { role: string; amount: number; rateType: "fixed" | "percent" };
 type Service = { id: number; name: string; price: number; category: string; code: string; splits?: ServiceSplit[] };
-type ServiceOption = { key: string; name: string; price: number; splits?: ServiceSplit[]; printCost?: number; operatingCost?: number; salePercent?: number };
+type Addon = { key: string; name: string; price: number };
+type PkgItem = { name: string; quantity: string; unit?: string; notes?: string };
+type ServiceOption = {
+  key: string; name: string; price: number;
+  splits?: ServiceSplit[];
+  printCost?: number; operatingCost?: number; salePercent?: number;
+  items?: PkgItem[];
+  addons?: Addon[];
+  products?: string[];
+};
 type OrderLine = {
   tempId: string; serviceName: string; serviceId: number | null; serviceKey: string; price: number;
+  basePrice: number;
+  selectedAddons: string[];
   photoId: number | null; photoName: string; photoTask: string;
   makeupId: number | null; makeupName: string; makeupTask: string;
 };
@@ -142,9 +153,8 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
 }) {
   const [useCustom, setUseCustom] = useState(!line.serviceId && !line.serviceKey && !!line.serviceName);
 
-  // Find the selected service/package
   const selectedSvc = line.serviceKey ? services.find(s => s.key === line.serviceKey) : null;
-  const isPkg = selectedSvc?.key?.startsWith("pkg-");
+  const isPkg = !!selectedSvc?.key?.startsWith("pkg-");
 
   // Cast nhân sự từ bảng giá riêng
   const photoCast = lookupRate(line.photoId, "photographer", line.photoTask || "mac_dinh", allStaffRates);
@@ -158,13 +168,33 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
   const totalCost = printCost + operatingCost + saleAmt + photoCast + makeupCast;
   const profit = line.price - totalCost;
 
-  // Cho dịch vụ (không phải gói), dùng splits cũ
+  // Addon state — computed from line.selectedAddons + selectedSvc.addons
+  const availableAddons: Addon[] = selectedSvc?.addons || [];
+  const selectedAddonObjs = availableAddons.filter(a => line.selectedAddons?.includes(a.key));
+  const addonTotal = selectedAddonObjs.reduce((s, a) => s + a.price, 0);
+
+  // Dịch vụ đơn: splits cũ
   const splits = (selectedSvc?.splits || []).filter(() => !isPkg);
   const photoSplit = splits.find(sp => sp.role === "photographer");
   const makeupSplit = splits.find(sp => sp.role === "makeup");
   function calcSplit(sp: ServiceSplit | undefined) {
     if (!sp) return 0;
     return sp.rateType === "percent" ? (line.price * sp.amount / 100) : sp.amount;
+  }
+
+  function handleSelectPackage(key: string) {
+    setUseCustom(false);
+    const svc = services.find(s => s.key === key);
+    const idNum = key.startsWith("svc-") ? parseInt(key.replace("svc-", "")) : null;
+    onChange({ ...line, serviceId: idNum, serviceKey: key, serviceName: svc?.name ?? "", price: svc?.price ?? 0, basePrice: svc?.price ?? 0, selectedAddons: [] });
+  }
+
+  function handleToggleAddon(addonKey: string, addonPrice: number) {
+    const current = line.selectedAddons || [];
+    const isSelected = current.includes(addonKey);
+    const next = isSelected ? current.filter(k => k !== addonKey) : [...current, addonKey];
+    const newAddonTotal = availableAddons.filter(a => next.includes(a.key)).reduce((s, a) => s + a.price, 0);
+    onChange({ ...line, selectedAddons: next, price: (line.basePrice || 0) + newAddonTotal });
   }
 
   return (
@@ -175,19 +205,20 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
           className="flex-1 h-9 border border-input rounded-lg px-2 text-sm bg-background"
           value={line.serviceKey && line.serviceKey !== "" ? line.serviceKey : useCustom ? "_custom" : ""}
           onChange={e => {
-            if (e.target.value === "_custom") { setUseCustom(true); onChange({ ...line, serviceId: null, serviceKey: "", serviceName: "" }); return; }
-            setUseCustom(false);
-            const svc = services.find(s => s.key === e.target.value);
-            const idNum = e.target.value.startsWith("svc-") ? parseInt(e.target.value.replace("svc-", "")) : null;
-            onChange({ ...line, serviceId: idNum, serviceKey: e.target.value, serviceName: svc?.name ?? "", price: svc ? svc.price : line.price });
+            if (e.target.value === "_custom") { setUseCustom(true); onChange({ ...line, serviceId: null, serviceKey: "", serviceName: "", basePrice: 0, selectedAddons: [] }); return; }
+            handleSelectPackage(e.target.value);
           }}
         >
-          <option value="">— Chọn dịch vụ / gói —</option>
+          <option value="">— Chọn gói / dịch vụ —</option>
           <optgroup label="📦 Gói chụp">
-            {services.filter(s => s.key.startsWith("pkg-")).map(s => <option key={s.key} value={s.key}>{s.name} — {s.price.toLocaleString("vi-VN")}đ</option>)}
+            {services.filter(s => s.key.startsWith("pkg-")).map(s => (
+              <option key={s.key} value={s.key}>{s.name} — {s.price.toLocaleString("vi-VN")}đ</option>
+            ))}
           </optgroup>
           <optgroup label="🎯 Dịch vụ đơn lẻ">
-            {services.filter(s => s.key.startsWith("svc-")).map(s => <option key={s.key} value={s.key}>{s.name} — {s.price.toLocaleString("vi-VN")}đ</option>)}
+            {services.filter(s => s.key.startsWith("svc-")).map(s => (
+              <option key={s.key} value={s.key}>{s.name} — {s.price.toLocaleString("vi-VN")}đ</option>
+            ))}
           </optgroup>
           <option value="_custom">✏️ Tự nhập tên...</option>
         </select>
@@ -197,6 +228,35 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
       </div>
       {useCustom && (
         <Input className="h-9 text-sm" placeholder="Tên dịch vụ..." value={line.serviceName} onChange={e => onChange({ ...line, serviceName: e.target.value })} />
+      )}
+
+      {/* Gói: hiện "Bao gồm" */}
+      {isPkg && selectedSvc?.items && selectedSvc.items.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-2">
+          <p className="text-[10px] font-semibold text-blue-800 mb-1">✅ Bao gồm</p>
+          <div className="space-y-0.5">
+            {selectedSvc.items.map((item, i) => (
+              <div key={i} className="text-[10px] text-blue-700 flex gap-1">
+                <span className="text-blue-400">•</span>
+                <span>{item.quantity} {item.unit} {item.name}{item.notes ? ` (${item.notes})` : ""}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Gói: sản phẩm đầu ra */}
+      {isPkg && selectedSvc?.products && selectedSvc.products.length > 0 && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg px-2.5 py-2">
+          <p className="text-[10px] font-semibold text-purple-800 mb-1">🎁 Sản phẩm nhận được</p>
+          <div className="space-y-0.5">
+            {selectedSvc.products.map((p, i) => (
+              <div key={i} className="text-[10px] text-purple-700 flex gap-1">
+                <span className="text-purple-400">•</span><span>{p}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Chọn nhân sự */}
@@ -228,7 +288,6 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
               <option value="mac_dinh">Mặc định</option>
             </select>
           )}
-          {/* Cast photo từ bảng giá riêng */}
           {line.photoId && photoCast > 0 && (
             <div className="mt-1 text-[10px] bg-blue-50 text-blue-700 rounded px-2 py-1 flex justify-between">
               <span>💰 Cast {photographers.find(p => p.id === line.photoId)?.name}</span>
@@ -236,7 +295,7 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
             </div>
           )}
           {line.photoId && photoCast === 0 && (
-            <div className="mt-1 text-[10px] bg-orange-50 text-orange-600 rounded px-2 py-1">⚠️ Chưa có cast (vào Nhân sự để thêm)</div>
+            <div className="mt-1 text-[10px] bg-orange-50 text-orange-600 rounded px-2 py-1">⚠️ Chưa có cast</div>
           )}
         </div>
         <div>
@@ -262,7 +321,6 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
               <option value="mac_dinh">Mặc định</option>
             </select>
           )}
-          {/* Cast makeup từ bảng giá riêng */}
           {line.makeupId && makeupCast > 0 && (
             <div className="mt-1 text-[10px] bg-pink-50 text-pink-700 rounded px-2 py-1 flex justify-between">
               <span>💰 Cast {makeupArtists.find(m => m.id === line.makeupId)?.name}</span>
@@ -270,18 +328,58 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
             </div>
           )}
           {line.makeupId && makeupCast === 0 && (
-            <div className="mt-1 text-[10px] bg-orange-50 text-orange-600 rounded px-2 py-1">⚠️ Chưa có cast (vào Nhân sự để thêm)</div>
+            <div className="mt-1 text-[10px] bg-orange-50 text-orange-600 rounded px-2 py-1">⚠️ Chưa có cast</div>
           )}
         </div>
       </div>
 
-      {/* Giá bán */}
+      {/* Addon */}
+      {isPkg && availableAddons.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
+          <p className="text-[10px] font-semibold text-amber-800 mb-1.5">➕ Dịch vụ cộng thêm (addon)</p>
+          <div className="space-y-1">
+            {availableAddons.map(addon => {
+              const checked = line.selectedAddons?.includes(addon.key) ?? false;
+              return (
+                <label key={addon.key} className="flex items-center gap-2 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => handleToggleAddon(addon.key, addon.price)}
+                    className="w-3.5 h-3.5 accent-amber-600 cursor-pointer"
+                  />
+                  <span className={`text-[10px] flex-1 ${checked ? "text-amber-900 font-semibold" : "text-amber-700"}`}>{addon.name}</span>
+                  <span className="text-[10px] text-amber-700 font-medium">+{fmtVND(addon.price)}</span>
+                </label>
+              );
+            })}
+          </div>
+          {addonTotal > 0 && (
+            <div className="mt-1.5 pt-1.5 border-t border-amber-200 flex justify-between text-[10px] font-semibold text-amber-800">
+              <span>Addon cộng thêm</span><span>+{fmtVND(addonTotal)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Giá bán — khóa với gói, cho sửa với dịch vụ đơn */}
       <div className="flex items-end gap-3">
         <div>
-          <p className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><CreditCard className="w-3 h-3" /> Giá bán (đ)</p>
-          <Input type="number" className="h-8 text-sm w-40" value={line.price || ""} placeholder="0" onChange={e => onChange({ ...line, price: parseFloat(e.target.value) || 0 })} />
+          <p className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1">
+            <CreditCard className="w-3 h-3" /> Giá {isPkg ? "tổng" : "bán"} (đ)
+            {isPkg && <span className="ml-1 bg-green-100 text-green-700 text-[9px] px-1 py-0.5 rounded font-semibold">Cố định tiệm</span>}
+          </p>
+          {isPkg ? (
+            <div className="h-8 flex items-center px-3 bg-green-50 border border-green-200 rounded-lg text-sm font-bold text-green-700">
+              {fmtVND(line.price)}
+              {addonTotal > 0 && <span className="ml-2 text-[10px] text-amber-600 font-normal">({fmtVND(line.basePrice || 0)} + addon)</span>}
+            </div>
+          ) : (
+            <Input type="number" className="h-8 text-sm w-40" value={line.price || ""} placeholder="0"
+              onChange={e => onChange({ ...line, price: parseFloat(e.target.value) || 0 })} />
+          )}
         </div>
-        {/* Với dịch vụ đơn (svc-): hiển thị studio giữ theo splits cũ */}
+        {/* Dịch vụ đơn: studio giữ */}
         {!isPkg && line.price > 0 && splits.length > 0 && (
           <div className="text-[10px] text-muted-foreground pb-1">
             Studio giữ: <span className="font-semibold text-green-600">
@@ -291,52 +389,42 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
         )}
       </div>
 
-      {/* ── Panel lợi nhuận (chỉ hiện khi chọn gói + có giá) ── */}
+      {/* Panel lợi nhuận (chỉ hiện khi gói được chọn) */}
       {isPkg && line.price > 0 && (
         <div className="text-[11px] rounded-lg border overflow-hidden">
-          {/* Header */}
-          <div className="bg-green-600 text-white px-3 py-1.5 flex justify-between items-center">
+          <div className="bg-emerald-600 text-white px-3 py-1.5 flex justify-between items-center">
             <span className="font-bold">📊 Dự tính lợi nhuận</span>
-            <span className={`font-bold text-sm ${profit >= 0 ? "text-green-100" : "text-red-200"}`}>
+            <span className={`font-bold text-sm ${profit >= 0 ? "text-emerald-100" : "text-red-200"}`}>
               {profit >= 0 ? "+" : ""}{fmtVND(profit)}
             </span>
           </div>
-          {/* Doanh thu */}
-          <div className="bg-white px-3 py-1.5 border-b">
-            <div className="flex justify-between font-semibold text-green-700">
+          <div className="bg-white px-3 py-1">
+            <div className="flex justify-between font-semibold text-emerald-700 text-[10px]">
               <span>💵 Doanh thu</span><span>{fmtVND(line.price)}</span>
             </div>
           </div>
-          {/* Chi phí */}
-          <div className="bg-red-50 px-3 py-1.5 space-y-0.5">
-            <p className="font-semibold text-red-800 mb-0.5">(-) Chi phí sản xuất</p>
-            {printCost > 0 && (
-              <div className="flex justify-between text-red-700"><span>🖨️ In ấn</span><span>{fmtVND(printCost)}</span></div>
-            )}
-            {operatingCost > 0 && (
-              <div className="flex justify-between text-red-700"><span>⚡ Vận hành</span><span>{fmtVND(operatingCost)}</span></div>
-            )}
-            {saleAmt > 0 && (
-              <div className="flex justify-between text-red-700"><span>💼 Sale {salePercent}%</span><span>{fmtVND(saleAmt)}</span></div>
-            )}
+          <div className="bg-red-50 px-3 py-1.5 space-y-0.5 text-[10px]">
+            <p className="font-semibold text-red-800">(-) Chi phí sản xuất</p>
+            {printCost > 0 && <div className="flex justify-between text-red-700"><span>🖨️ In ấn</span><span>{fmtVND(printCost)}</span></div>}
+            {operatingCost > 0 && <div className="flex justify-between text-red-700"><span>⚡ Vận hành</span><span>{fmtVND(operatingCost)}</span></div>}
+            {saleAmt > 0 && <div className="flex justify-between text-red-700"><span>💼 Sale {salePercent}%</span><span>{fmtVND(saleAmt)}</span></div>}
             {line.photoId && (
               <div className="flex justify-between text-blue-700">
-                <span>📷 Cast {photographers.find(p => p.id === line.photoId)?.name ?? "Nhiếp ảnh"}</span>
+                <span>📷 Cast {photographers.find(p => p.id === line.photoId)?.name}</span>
                 <span>{photoCast > 0 ? fmtVND(photoCast) : <span className="text-orange-500 italic">chưa có</span>}</span>
               </div>
             )}
             {line.makeupId && (
               <div className="flex justify-between text-pink-700">
-                <span>💄 Cast {makeupArtists.find(m => m.id === line.makeupId)?.name ?? "Makeup"}</span>
+                <span>💄 Cast {makeupArtists.find(m => m.id === line.makeupId)?.name}</span>
                 <span>{makeupCast > 0 ? fmtVND(makeupCast) : <span className="text-orange-500 italic">chưa có</span>}</span>
               </div>
             )}
-            <div className="flex justify-between font-semibold text-red-800 border-t border-red-200 pt-0.5 mt-0.5">
+            <div className="flex justify-between font-semibold text-red-800 border-t border-red-200 pt-0.5">
               <span>Tổng chi phí</span><span>{fmtVND(totalCost)}</span>
             </div>
           </div>
-          {/* Lợi nhuận */}
-          <div className={`px-3 py-1.5 flex justify-between font-bold ${profit >= 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+          <div className={`px-3 py-1.5 flex justify-between font-bold text-[11px] ${profit >= 0 ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>
             <span>= Lợi nhuận</span>
             <span>{profit >= 0 ? "+" : ""}{fmtVND(profit)}</span>
           </div>
@@ -391,8 +479,8 @@ function ShowFormPanel({
   };
 
   const [lines, setLines] = useState<OrderLine[]>(() => {
-    if (booking?.items?.length) return booking.items.map(i => ({ photoTask: "", makeupTask: "", serviceKey: "", ...i, tempId: genId() }));
-    return [{ tempId: genId(), serviceName: "", serviceId: null, serviceKey: "", price: 0, photoId: null, photoName: "", photoTask: "", makeupId: null, makeupName: "", makeupTask: "" }];
+    if (booking?.items?.length) return booking.items.map(i => ({ photoTask: "", makeupTask: "", serviceKey: "", basePrice: 0, selectedAddons: [], ...i, tempId: genId() }));
+    return [{ tempId: genId(), serviceName: "", serviceId: null, serviceKey: "", price: 0, basePrice: 0, selectedAddons: [], photoId: null, photoName: "", photoTask: "", makeupId: null, makeupName: "", makeupTask: "" }];
   });
 
   const [deposit, setDeposit] = useState(booking?.depositAmount?.toString() ?? "0");
@@ -402,7 +490,10 @@ function ShowFormPanel({
 
   const { data: allStaff = [] } = useQuery<Staff[]>({ queryKey: ["staff"], queryFn: () => fetch(`${BASE}/api/staff`).then(r => r.json()) });
   const { data: services = [] } = useQuery<Service[]>({ queryKey: ["services"], queryFn: () => fetch(`${BASE}/api/services`).then(r => r.json()) });
-  const { data: pricingPackages = [] } = useQuery<{ id: number; name: string; price: number; printCost: number; operatingCost: number; salePercent: number }[]>({ queryKey: ["service-packages"], queryFn: () => fetch(`${BASE}/api/service-packages`).then(r => r.json()) });
+  const { data: pricingPackages = [] } = useQuery<{
+    id: number; name: string; price: number; printCost: number; operatingCost: number; salePercent: number;
+    items?: PkgItem[]; addons?: Addon[]; products?: string[]; description?: string;
+  }[]>({ queryKey: ["service-packages"], queryFn: () => fetch(`${BASE}/api/service-packages`).then(r => r.json()) });
   const { data: allStaffRates = [] } = useQuery<StaffRate[]>({ queryKey: ["staff-rates"], queryFn: () => fetch(`${BASE}/api/staff-rates`).then(r => r.json()) });
 
   // Support both old single-role and new multi-role staff
@@ -424,7 +515,11 @@ function ShowFormPanel({
   const [photoshopTask, setPhotoshopTask] = useState<string>(() => String(getAssignedObj().photoshopTask ?? "mac_dinh"));
   const allServices: ServiceOption[] = [
     ...services.map(s => ({ key: `svc-${s.id}`, name: s.name, price: s.price, splits: s.splits || [] })),
-    ...pricingPackages.map(p => ({ key: `pkg-${p.id}`, name: p.name, price: p.price, splits: [], printCost: p.printCost || 0, operatingCost: p.operatingCost || 0, salePercent: p.salePercent || 0 })),
+    ...pricingPackages.map(p => ({
+      key: `pkg-${p.id}`, name: p.name, price: p.price, splits: [],
+      printCost: p.printCost || 0, operatingCost: p.operatingCost || 0, salePercent: p.salePercent || 0,
+      items: p.items || [], addons: p.addons || [], products: p.products || [],
+    })),
   ];
 
   const totalAmount = lines.reduce((s, l) => s + (l.price || 0), 0);
@@ -664,7 +759,7 @@ function ShowFormPanel({
                 <span className="normal-case text-[10px] font-normal text-muted-foreground/60">(tuỳ chọn)</span>
               </h4>
               <button
-                onClick={() => setLines(p => [...p, { tempId: genId(), serviceName: "", serviceId: null, serviceKey: "", price: 0, photoId: null, photoName: "", photoTask: "", makeupId: null, makeupName: "", makeupTask: "" }])}
+                onClick={() => setLines(p => [...p, { tempId: genId(), serviceName: "", serviceId: null, serviceKey: "", price: 0, basePrice: 0, selectedAddons: [], photoId: null, photoName: "", photoTask: "", makeupId: null, makeupName: "", makeupTask: "" }])}
                 className="flex items-center gap-1 text-xs text-primary hover:underline font-medium"
               >
                 <Plus className="w-3 h-3" /> Thêm dòng
