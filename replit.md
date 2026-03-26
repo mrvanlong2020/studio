@@ -11,7 +11,12 @@ A wedding photography studio and wedding dress rental management system for "Ama
 ### Features
 - **Tổng quan (Dashboard)**: Real-time stats, revenue chart, upcoming bookings
 - **Khách hàng (Customers)**: CRUD customer management with search
-- **Lịch chụp (Bookings)**: Booking management with status tracking, package types
+- **Lịch chụp (Calendar)**: Google Calendar-style 3-view system:
+  - **Month view**: 30-day grid with booking chips (color-coded by status), solar+lunar calendar
+  - **Day view**: 24h timeline, click hour slot → create show form; role toggle "Admin/NV" button in header
+  - **Detail view** (`ShowDetailPanel`): Read-only Google Calendar-style panel when tapping any booking. Shows: customer, date/time, services (with package items/products/description), surcharges, staff, payment info. Admin sees finances + pencil+trash; staff sees only work info.
+  - **Form view** (`ShowFormPanel`): Edit/create — opens from detail's pencil button or "Tạo show"
+  - **Role toggle**: "Admin" ↔ "Nhân viên" button in month + day view headers; persisted to localStorage `cal_view_mode`. Admin sees all; staff hides finances, edit/delete
 - **Váy cưới (Dresses)**: Wedding dress inventory management
 - **Cho thuê váy (Rentals)**: Dress rental management with return tracking
 - **Thanh toán (Payments)**: Payment tracking (cash, bank transfer, MoMo, ZaloPay)

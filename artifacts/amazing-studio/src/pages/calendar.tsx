@@ -14,6 +14,7 @@ import {
   ChevronLeft, ChevronRight, Calendar, Clock, Phone, Package2, Sun, Moon,
   AlertCircle, Plus, X, Check, Camera, User, Sparkles,
   ChevronDown, Trash2, Save, MapPin, CreditCard, ArrowLeft,
+  Pencil, ShieldCheck, Eye,
 } from "lucide-react";
 import { Button, Input } from "@/components/ui";
 import { ServiceSearchBox } from "@/components/service-search-box";
@@ -995,6 +996,359 @@ function ShowFormPanel({
   );
 }
 
+// ─── Show Detail Panel (read-only, Google Calendar style) ─────────────────────
+type DetailAddon = { key: string; name: string; price: number };
+type DetailPackage = { id: number; code: string; addons?: DetailAddon[]; products?: string[]; items?: PkgItem[]; description?: string | null; notes?: string | null };
+
+function ShowDetailPanel({
+  booking, onClose, onEdit, onDeleteDone, isAdmin,
+}: {
+  booking: Booking;
+  onClose: () => void;
+  onEdit: () => void;
+  onDeleteDone: () => void;
+  isAdmin: boolean;
+}) {
+  const qc = useQueryClient();
+  const { data: allStaff = [] } = useQuery<Staff[]>({
+    queryKey: ["staff"],
+    queryFn: () => fetch(`${BASE}/api/staff`).then(r => r.json()),
+    staleTime: 60_000,
+  });
+  const { data: allPackages = [] } = useQuery<DetailPackage[]>({
+    queryKey: ["service-packages"],
+    queryFn: () => fetch(`${BASE}/api/service-packages`).then(r => r.json()),
+    staleTime: 60_000,
+  });
+
+  const [deleting, setDeleting] = useState(false);
+
+  const st = STATUS[booking.status as keyof typeof STATUS] ?? STATUS.pending;
+
+  // Parse assignedStaff — might be object or array
+  const assignedObj: Record<string, unknown> =
+    booking.assignedStaff && !Array.isArray(booking.assignedStaff) && typeof booking.assignedStaff === "object"
+      ? (booking.assignedStaff as Record<string, unknown>)
+      : {};
+  const saleStaffId = assignedObj.sale as number | undefined;
+  const photoshopStaffId = assignedObj.photoshop as number | undefined;
+  const saleStaffName = saleStaffId ? allStaff.find(s => s.id === saleStaffId)?.name : null;
+  const photoshopStaffName = photoshopStaffId ? allStaff.find(s => s.id === photoshopStaffId)?.name : null;
+
+  const surcharges = booking.surcharges ?? [];
+  const surchargesTotal = surcharges.reduce((s, i) => s + (i.amount || 0), 0);
+
+  const shootDateObj = useMemo(() => {
+    try { const d = parseISO(booking.shootDate); return isNaN(d.getTime()) ? new Date() : d; } catch { return new Date(); }
+  }, [booking.shootDate]);
+
+  // Resolve package addons → names
+  function resolveAddons(item: OrderLine): string[] {
+    if (!item.selectedAddons?.length) return [];
+    const pkgId = item.serviceKey?.startsWith("pkg-") ? parseInt(item.serviceKey.replace("pkg-", "")) : null;
+    if (!pkgId) return item.selectedAddons;
+    const pkg = allPackages.find(p => p.id === pkgId);
+    if (!pkg?.addons) return item.selectedAddons;
+    return item.selectedAddons.map(k => pkg.addons!.find(a => a.key === k)?.name ?? k);
+  }
+
+  // Resolve package products/description for first item
+  function getPackageDetail(item: OrderLine): { description?: string | null; notes?: string | null; products?: string[]; items?: PkgItem[] } {
+    const pkgId = item.serviceKey?.startsWith("pkg-") ? parseInt(item.serviceKey.replace("pkg-", "")) : null;
+    if (!pkgId) return {};
+    const pkg = allPackages.find(p => p.id === pkgId);
+    return pkg ? { description: pkg.description, notes: pkg.notes, products: pkg.products, items: pkg.items } : {};
+  }
+
+  const handleDelete = async () => {
+    if (!confirm("Xoá show này? Hành động không thể hoàn tác.")) return;
+    setDeleting(true);
+    try {
+      await fetch(`${BASE}/api/bookings/${booking.id}`, { method: "DELETE" });
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+      onDeleteDone();
+    } finally { setDeleting(false); }
+  };
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden bg-background">
+      {/* ── Header bar ── */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b flex-shrink-0 bg-gradient-to-r from-primary/5 to-transparent">
+        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors flex-shrink-0">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div className="flex-1 min-w-0">
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${st.color}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
+            {st.label}
+          </span>
+        </div>
+        {/* Role indicator */}
+        <div className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded-full ${isAdmin ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+          {isAdmin ? <ShieldCheck className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+          {isAdmin ? "Admin" : "Nhân viên"}
+        </div>
+        {isAdmin && (
+          <>
+            <button onClick={handleDelete} disabled={deleting} className="p-1.5 rounded-lg text-destructive/50 hover:text-destructive hover:bg-destructive/10 transition-colors flex-shrink-0" title="Xoá show">
+              <Trash2 className="w-4 h-4" />
+            </button>
+            <button onClick={onEdit} className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors flex-shrink-0" title="Chỉnh sửa">
+              <Pencil className="w-4 h-4" />
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* ── Body ── */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4 space-y-4 max-w-2xl mx-auto">
+
+          {/* 1. Khách hàng */}
+          <div className="flex items-start gap-3">
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20 flex items-center justify-center flex-shrink-0 text-primary font-bold text-xl">
+              {booking.customerName?.trim().split(" ").pop()?.charAt(0).toUpperCase() ?? "?"}
+            </div>
+            <div className="flex-1 min-w-0 pt-0.5">
+              <h2 className="font-bold text-xl leading-tight truncate">{booking.customerName}</h2>
+              <a href={`tel:${booking.customerPhone}`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary mt-0.5">
+                <Phone className="w-3.5 h-3.5" />{booking.customerPhone}
+              </a>
+            </div>
+          </div>
+
+          <div className="border-t border-border/40" />
+
+          {/* 2. Ngày giờ địa điểm */}
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-2.5 text-sm">
+              <Calendar className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              <span className="font-medium capitalize">{format(shootDateObj, "EEEE, dd/MM/yyyy", { locale: vi })}</span>
+              <span className="text-muted-foreground">·</span>
+              <Clock className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              <span className="font-bold text-primary">{booking.shootTime?.slice(0, 5)}</span>
+            </div>
+            {booking.location && (
+              <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
+                <MapPin className="w-4 h-4 flex-shrink-0" />
+                <span>{booking.location}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-border/40" />
+
+          {/* 3. Dịch vụ */}
+          {booking.items && booking.items.length > 0 ? (
+            <div className="space-y-3">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Package2 className="w-3.5 h-3.5" /> Dịch vụ đặt chụp
+              </p>
+              {booking.items.map((item, idx) => {
+                const pkgDetail = getPackageDetail(item);
+                const addonNames = resolveAddons(item);
+                return (
+                  <div key={idx} className="rounded-xl border border-border/50 overflow-hidden">
+                    {/* Service header */}
+                    <div className="flex items-center justify-between px-3 py-2.5 bg-muted/30">
+                      <span className="font-semibold text-sm">{item.serviceName || "Dịch vụ"}</span>
+                      {isAdmin && item.price > 0 && (
+                        <span className="text-sm font-bold text-primary">{fmtVND(item.price)}</span>
+                      )}
+                    </div>
+
+                    {/* Description */}
+                    {pkgDetail.description && (
+                      <div className="px-3 py-2 bg-amber-50/50 dark:bg-amber-950/10 border-t border-border/30">
+                        {pkgDetail.description.split("\n").filter(Boolean).map((line, i) => (
+                          <p key={i} className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">{line}</p>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Package items (bao gồm) */}
+                    {pkgDetail.items && pkgDetail.items.length > 0 && (
+                      <div className="px-3 py-2 bg-blue-50/40 dark:bg-blue-950/10 border-t border-border/30">
+                        <p className="text-[10px] font-bold text-blue-700 dark:text-blue-300 mb-1.5">✅ Bao gồm</p>
+                        <div className="space-y-0.5">
+                          {pkgDetail.items.map((pi, i) => (
+                            <div key={i} className="text-xs text-blue-700 dark:text-blue-400 flex gap-1">
+                              <span className="text-blue-400">•</span>
+                              <span>{pi.quantity} {pi.unit} {pi.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Products */}
+                    {pkgDetail.products && pkgDetail.products.length > 0 && (
+                      <div className="px-3 py-2 bg-purple-50/40 dark:bg-purple-950/10 border-t border-border/30">
+                        <p className="text-[10px] font-bold text-purple-700 dark:text-purple-300 mb-1.5">🎁 Sản phẩm nhận được</p>
+                        <div className="space-y-0.5">
+                          {pkgDetail.products.map((p, i) => (
+                            <div key={i} className="text-xs text-purple-700 dark:text-purple-400 flex gap-1">
+                              <span className="text-purple-400">•</span><span>{p}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Selected addons */}
+                    {addonNames.length > 0 && (
+                      <div className="px-3 py-2 bg-orange-50/40 dark:bg-orange-950/10 border-t border-border/30">
+                        <p className="text-[10px] font-bold text-orange-700 dark:text-orange-300 mb-1.5">➕ Addon đã chọn</p>
+                        {addonNames.map((n, i) => (
+                          <div key={i} className="text-xs text-orange-700 dark:text-orange-400 flex gap-1">
+                            <span className="text-orange-400">•</span><span>{n}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Staff assignments */}
+                    {(item.photoName || item.makeupName) && (
+                      <div className="px-3 py-2 border-t border-border/30 space-y-1">
+                        {item.photoName && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <Camera className="w-3.5 h-3.5 text-sky-500 flex-shrink-0" />
+                            <span className="text-muted-foreground">Nhiếp ảnh:</span>
+                            <span className="font-medium">{item.photoName}</span>
+                          </div>
+                        )}
+                        {item.makeupName && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <Sparkles className="w-3.5 h-3.5 text-pink-500 flex-shrink-0" />
+                            <span className="text-muted-foreground">Makeup:</span>
+                            <span className="font-medium">{item.makeupName}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground italic py-2">
+              <Package2 className="w-4 h-4" /> Chưa chốt dịch vụ
+            </div>
+          )}
+
+          {/* 4. Sale / Photoshop — admin only (booking-level) */}
+          {isAdmin && (saleStaffName || photoshopStaffName) && (
+            <>
+              <div className="border-t border-border/40" />
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5" /> Phân công thêm
+                </p>
+                {saleStaffName && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-base flex-shrink-0">💼</span>
+                    <span className="font-medium">{saleStaffName}</span>
+                    <span className="text-xs text-muted-foreground">(Sale)</span>
+                  </div>
+                )}
+                {photoshopStaffName && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-base flex-shrink-0">🖥️</span>
+                    <span className="font-medium">{photoshopStaffName}</span>
+                    <span className="text-xs text-muted-foreground">(Photoshop)</span>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* 5. Phụ thu / phát sinh */}
+          {surcharges.length > 0 && (
+            <>
+              <div className="border-t border-border/40" />
+              <div className="space-y-2">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">➕ Phụ thu / phát sinh</p>
+                <div className="rounded-xl border border-amber-200/60 overflow-hidden">
+                  {surcharges.map((s, i) => (
+                    <div key={i} className={`flex justify-between items-center px-3 py-2 text-sm ${i > 0 ? "border-t border-amber-100" : ""} bg-amber-50/40`}>
+                      <span className="text-amber-800 dark:text-amber-300">{s.name}</span>
+                      {isAdmin && <span className="font-semibold text-amber-900 dark:text-amber-200">{fmtVND(s.amount)}</span>}
+                    </div>
+                  ))}
+                  {isAdmin && surchargesTotal > 0 && (
+                    <div className="flex justify-between items-center px-3 py-2 text-sm font-bold bg-amber-100/60 border-t border-amber-200">
+                      <span className="text-amber-900">Tổng phụ thu</span>
+                      <span className="text-amber-900">{fmtVND(surchargesTotal)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* 6. Thanh toán — admin only */}
+          {isAdmin && (
+            <>
+              <div className="border-t border-border/40" />
+              <div className="space-y-2">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <CreditCard className="w-3.5 h-3.5" /> Thanh toán
+                </p>
+                <div className="rounded-xl border border-border/50 overflow-hidden divide-y divide-border/40">
+                  <div className="flex justify-between items-center px-3 py-2.5">
+                    <span className="text-sm text-muted-foreground">Tổng tiền</span>
+                    <span className="font-bold text-base">{formatVND(booking.totalAmount)}</span>
+                  </div>
+                  <div className="flex justify-between items-center px-3 py-2.5">
+                    <span className="text-sm text-muted-foreground">Đã thanh toán</span>
+                    <span className="font-semibold text-emerald-600">{formatVND(booking.paidAmount)}</span>
+                  </div>
+                  <div className={`flex justify-between items-center px-3 py-2.5 ${booking.remainingAmount > 0 ? "bg-destructive/5" : "bg-emerald-50/40"}`}>
+                    <span className="text-sm font-semibold">Còn lại</span>
+                    <span className={`font-bold text-base ${booking.remainingAmount > 0 ? "text-destructive" : "text-emerald-600"}`}>
+                      {booking.remainingAmount > 0 && <span className="mr-1">⚠️</span>}
+                      {formatVND(booking.remainingAmount)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* 7. Ghi chú */}
+          {booking.notes && (
+            <>
+              <div className="border-t border-border/40" />
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">📝 Ghi chú nội bộ</p>
+                <p className="text-sm text-muted-foreground bg-muted/30 rounded-xl px-3 py-2 leading-relaxed">{booking.notes}</p>
+              </div>
+            </>
+          )}
+
+          {/* 8. Quick links — admin */}
+          {isAdmin && (
+            <>
+              <div className="border-t border-border/40" />
+              <div className="flex gap-2 flex-wrap">
+                <a href="/bookings" className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-sm hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
+                  📋 Xem đơn hàng
+                </a>
+                <a href="/payments" className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-sm hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
+                  💳 Thu tiền
+                </a>
+              </div>
+            </>
+          )}
+
+          {/* Order code footer */}
+          <p className="text-center text-xs text-muted-foreground/60 pb-2">#{booking.orderCode}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Month day cell ────────────────────────────────────────────────────────────
 const HOUR_PX = 64; // px per hour in day view
 
@@ -1108,10 +1462,12 @@ function DayView({
   date, bookings, isLoading,
   onBack, onPrevDay, onNextDay,
   onTimeClick, onEventClick,
+  isAdmin, onToggleMode,
 }: {
   date: Date; bookings: Booking[]; isLoading: boolean;
   onBack: () => void; onPrevDay: () => void; onNextDay: () => void;
   onTimeClick: (time: string) => void; onEventClick: (b: Booking) => void;
+  isAdmin: boolean; onToggleMode: () => void;
 }) {
   const { lunar, tietKhi, solarHoliday, lunarHoliday } = useMemo(() => getLunarInfo(date), [date]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1164,6 +1520,14 @@ function DayView({
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <button
+              onClick={onToggleMode}
+              title={isAdmin ? "Admin mode — Bấm để xem chế độ nhân viên" : "Nhân viên mode — Bấm để xem chế độ admin"}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-medium transition-all ${isAdmin ? "border-emerald-400 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400" : "border-orange-300 bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400"}`}
+            >
+              {isAdmin ? <ShieldCheck className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+              {isAdmin ? "Admin" : "NV"}
+            </button>
             <button onClick={onPrevDay} className="p-2 rounded-lg hover:bg-muted transition-colors"><ChevronLeft className="w-4 h-4" /></button>
             <button onClick={onNextDay} className="p-2 rounded-lg hover:bg-muted transition-colors"><ChevronRight className="w-4 h-4" /></button>
           </div>
@@ -1265,7 +1629,20 @@ function DayView({
 }
 
 // ─── Main Calendar Page ────────────────────────────────────────────────────────
-type CalView = "month" | "day" | "form";
+type CalView = "month" | "day" | "detail" | "form";
+
+// Simple role management — persisted to localStorage
+function useViewMode() {
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    try { return localStorage.getItem("cal_view_mode") !== "staff"; } catch { return true; }
+  });
+  const toggle = () => setIsAdmin(prev => {
+    const next = !prev;
+    try { localStorage.setItem("cal_view_mode", next ? "admin" : "staff"); } catch { /* ignore */ }
+    return next;
+  });
+  return { isAdmin, toggle };
+}
 
 export default function CalendarPage() {
   const [calView, setCalView] = useState<CalView>("month");
@@ -1273,7 +1650,9 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTime, setSelectedTime] = useState("07:00");
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
+  const [viewingBooking, setViewingBooking] = useState<Booking | null>(null);
   const [showLunar, setShowLunar] = useState(true);
+  const { isAdmin, toggle: toggleAdminMode } = useViewMode();
 
   const { data: bookings = [], isLoading } = useQuery<Booking[]>({
     queryKey: ["bookings"],
@@ -1303,45 +1682,89 @@ export default function CalendarPage() {
     setCalView("day");
   }, []);
 
+  // Click event on month → open detail panel
   const handleEventClickFromMonth = useCallback((b: Booking) => {
     setSelectedDate(new Date(b.shootDate));
     setCurrentDate(new Date(b.shootDate));
-    setEditingBooking(b);
-    setCalView("form");
+    setViewingBooking(b);
+    setCalView("detail");
   }, []);
 
   // Handlers — day view
   const handleTimeClick = useCallback((time: string) => {
     setSelectedTime(time);
     setEditingBooking(null);
+    setViewingBooking(null);
     setCalView("form");
   }, []);
 
+  // Click event on day → open detail panel
   const handleEventClickFromDay = useCallback((b: Booking) => {
-    setEditingBooking(b);
+    setViewingBooking(b);
     setSelectedTime(b.shootTime ?? "07:00");
+    setCalView("detail");
+  }, []);
+
+  // Detail → back
+  const handleDetailClose = useCallback(() => {
+    // Go back to day or month depending on where we came from
+    setCalView("day");
+    setViewingBooking(null);
+  }, []);
+
+  // Detail → edit form (pencil)
+  const handleDetailEdit = useCallback(() => {
+    if (!viewingBooking) return;
+    setEditingBooking(viewingBooking);
+    setSelectedTime(viewingBooking.shootTime ?? "07:00");
     setCalView("form");
+  }, [viewingBooking]);
+
+  // Detail → deleted
+  const handleDetailDeleteDone = useCallback(() => {
+    setCalView("day");
+    setViewingBooking(null);
+    setEditingBooking(null);
   }, []);
 
   const handleBackToMonth = useCallback(() => {
     setCalView("month");
     setEditingBooking(null);
+    setViewingBooking(null);
   }, []);
 
   const handleBackToDay = useCallback(() => {
     setCalView("day");
     setEditingBooking(null);
+    setViewingBooking(null);
   }, []);
 
   const handleFormSaved = useCallback(() => {
     setCalView("day");
     setEditingBooking(null);
+    setViewingBooking(null);
   }, []);
 
   const prevMonth = () => setCurrentDate(subMonths(currentDate, 1));
   const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
   const prevDay = () => { const d = subDays(selectedDate, 1); setSelectedDate(d); setCurrentDate(d); };
   const nextDay = () => { const d = addDays(selectedDate, 1); setSelectedDate(d); setCurrentDate(d); };
+
+  // ── DETAIL VIEW (full screen) ──
+  if (calView === "detail" && viewingBooking) {
+    return (
+      <div className="flex flex-col -m-4 sm:-m-6" style={{ height: "calc(100vh - 60px)" }}>
+        <ShowDetailPanel
+          key={viewingBooking.id}
+          booking={viewingBooking}
+          onClose={handleDetailClose}
+          onEdit={handleDetailEdit}
+          onDeleteDone={handleDetailDeleteDone}
+          isAdmin={isAdmin}
+        />
+      </div>
+    );
+  }
 
   // ── FORM VIEW (full screen) ──
   if (calView === "form") {
@@ -1353,7 +1776,7 @@ export default function CalendarPage() {
           initialTime={selectedTime}
           onDateChange={d => { setSelectedDate(d); setCurrentDate(d); }}
           booking={editingBooking}
-          onClose={handleBackToDay}
+          onClose={editingBooking && viewingBooking ? () => { setCalView("detail"); setEditingBooking(null); } : handleBackToDay}
           onSaved={handleFormSaved}
         />
       </div>
@@ -1373,6 +1796,8 @@ export default function CalendarPage() {
           onNextDay={nextDay}
           onTimeClick={handleTimeClick}
           onEventClick={handleEventClickFromDay}
+          isAdmin={isAdmin}
+          onToggleMode={toggleAdminMode}
         />
       </div>
     );
@@ -1396,7 +1821,16 @@ export default function CalendarPage() {
           >
             <Moon className="w-3.5 h-3.5" /> Âm lịch
           </button>
-          <Button onClick={() => { setEditingBooking(null); setSelectedTime("07:00"); setCalView("form"); }} className="gap-2 h-9">
+          {/* Role toggle */}
+          <button
+            onClick={toggleAdminMode}
+            title={isAdmin ? "Đang xem chế độ Admin — Bấm để chuyển sang Nhân viên" : "Đang xem chế độ Nhân viên — Bấm để chuyển sang Admin"}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all ${isAdmin ? "border-emerald-400 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400" : "border-orange-300 bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400"}`}
+          >
+            {isAdmin ? <ShieldCheck className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            {isAdmin ? "Admin" : "Nhân viên"}
+          </button>
+          <Button onClick={() => { setEditingBooking(null); setViewingBooking(null); setSelectedTime("07:00"); setCalView("form"); }} className="gap-2 h-9">
             <Plus className="w-4 h-4" /> Tạo show
           </Button>
         </div>

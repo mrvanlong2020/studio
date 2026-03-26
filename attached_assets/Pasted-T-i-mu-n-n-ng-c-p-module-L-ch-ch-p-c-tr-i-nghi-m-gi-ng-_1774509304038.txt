@@ -1,0 +1,182 @@
+Tôi muốn nâng cấp module Lịch chụp để có trải nghiệm giống Google Calendar trên điện thoại.
+
+Yêu cầu tổng thể:
+- Giao diện dùng theo flow giống Google Calendar
+- Dễ tạo show nhanh theo ngày và giờ
+- Dễ xem chi tiết
+- Chỉ khi bấm bút mới chỉnh sửa
+- Có phân quyền rõ giữa chủ tiệm và nhân viên
+
+1. FLOW TẠO SHOW GIỐNG GOOGLE CALENDAR
+
+Bước 1:
+- Mở lịch tháng 30 ngày
+- Hiển thị giống kiểu Google Calendar
+- Bấm vào 1 ngày bất kỳ để mở lịch 24 giờ của ngày đó
+
+Bước 2:
+- Trong lịch 24 giờ, bấm vào 1 mốc giờ cụ thể
+- Ví dụ 07:00, 09:00, 14:00...
+- Khi bấm vào giờ thì mở form “Tạo show”
+
+Bước 3:
+- Trong form Tạo show:
+  + tạo hoặc chọn khách hàng
+  + chọn dịch vụ / gói chụp
+  + chọn nhân sự
+  + thêm phụ thu / phát sinh nếu có
+  + tính tổng tiền / cọc / còn lại
+- bấm nút “Xong” hoặc “Lưu & tạo show”
+
+Kết quả:
+- show mới phải xuất hiện ngay trên lịch
+- hiển thị đúng khung giờ vừa chọn
+
+2. CÁCH HIỂN THỊ SHOW TRÊN LỊCH
+
+Trên lịch tháng:
+- mỗi show hiển thị gọn:
+  + giờ
+  + tên khách
+  + tên gói dịch vụ ngắn
+  + người chụp chính nếu đủ chỗ
+- có màu theo trạng thái:
+  + chờ xác nhận
+  + đã xác nhận
+  + đã cọc
+  + còn nợ
+  + hoàn tất
+
+Trên lịch ngày 24h:
+- hiển thị như event block của Google Calendar
+- block có:
+  + tên khách
+  + giờ
+  + dịch vụ
+  + photo chính
+  + cảnh báo còn nợ nếu có
+
+3. BẤM VÀO SHOW → MỞ CỬA SỔ XEM CHI TIẾT GIỐNG GOOGLE CALENDAR
+
+Khi bấm vào một show trên lịch:
+- không mở form chỉnh sửa ngay
+- phải mở một cửa sổ / sheet xem chi tiết giống Google Calendar
+
+Màn hình chi tiết show phải có:
+- tên khách hàng
+- số điện thoại
+- ngày giờ
+- địa điểm
+- dịch vụ đã chọn
+- nội dung gói / mô tả
+- sản phẩm nhận được
+- phụ thu / phát sinh
+- người chụp
+- người makeup
+- người sale
+- người photoshop nếu có
+- tình trạng thanh toán:
+  + tổng tiền
+  + đã cọc
+  + còn lại
+- ghi chú nội bộ nếu có
+
+4. CHỈ BẤM BÚT MỚI ĐƯỢC CHỈNH SỬA
+
+Trong cửa sổ xem chi tiết show:
+- có icon cây bút ở góc trên
+- chỉ khi bấm cây bút mới chuyển sang chế độ chỉnh sửa
+- nếu không bấm bút thì chỉ xem, không sửa được field nào
+
+5. PHÂN QUYỀN CHỦ TIỆM VÀ NHÂN VIÊN
+
+A. Chủ tiệm / admin:
+- xem được toàn bộ lịch
+- xem được toàn bộ show
+- xem được giá tiền, chi phí, lợi nhuận, cast, sale
+- được chỉnh sửa
+- được xóa show
+- được thấy thông tin thu tiền
+
+B. Nhân viên:
+- chỉ thấy lịch liên quan đến mình
+- chỉ thấy các show mình được phân công
+- chỉ thấy nội dung công việc:
+  + giờ
+  + khách
+  + địa điểm
+  + dịch vụ
+  + nhiệm vụ của mình
+- không được thấy:
+  + giá bán
+  + cast
+  + lợi nhuận
+  + chi phí
+  + thông tin nội bộ nhạy cảm
+- không được tự sửa show nếu không có quyền
+
+6. CHẾ ĐỘ HIỂN THỊ KHÁC NHAU THEO ROLE
+
+Nếu user là admin:
+- hiện đầy đủ block tài chính và block chi phí
+
+Nếu user là nhân viên:
+- ẩn hoàn toàn:
+  + tổng tiền
+  + cọc
+  + còn lại
+  + lợi nhuận
+  + cast
+  + sale %
+  + chi phí sản xuất
+
+7. GIAO DIỆN CHI TIẾT SHOW PHẢI GIỐNG GOOGLE CALENDAR
+
+Mục tiêu UI:
+- nhìn giống event details của Google Calendar
+- bố cục rõ, sạch, dễ đọc
+- trên mobile phải mở dạng bottom sheet hoặc modal sheet
+- có:
+  + nút đóng
+  + nút chỉnh sửa (bút)
+  + nội dung chi tiết chia khối rõ ràng
+
+8. LIÊN KẾT DỮ LIỆU TOÀN HỆ THỐNG
+
+Show trên lịch phải liên kết với:
+- khách hàng
+- đơn hàng
+- dịch vụ
+- nhân sự
+- thu tiền
+- hợp đồng
+- báo giá
+
+Tức là:
+- tạo show xong → sinh event lịch
+- event lịch bấm vào → xem toàn bộ chi tiết show
+- admin có thể đi từ show sang đơn hàng / thu tiền / hợp đồng
+
+9. YÊU CẦU UX TRÊN ĐIỆN THOẠI
+
+- thao tác giống Google Calendar nhất có thể
+- nhanh, ít bước
+- dễ bấm
+- chữ rõ
+- lịch ngày và lịch tháng phải mượt
+- tạo show từ khung giờ phải thật nhanh
+
+10. MỤC TIÊU CUỐI CÙNG
+
+Tôi muốn trải nghiệm như sau:
+- vào lịch tháng
+- chọn ngày
+- vào lịch 24h
+- bấm 1 giờ cụ thể
+- tạo khách + tạo đơn + chọn dịch vụ
+- bấm xong
+- show hiện ngay trên lịch
+- bấm lại vào show thì mở bảng xem chi tiết giống Google Calendar
+- nếu muốn chỉnh mới bấm cây bút
+- chủ thấy đầy đủ tiền
+- nhân viên chỉ thấy lịch việc của mình
