@@ -582,6 +582,7 @@ function ShowFormPanel({
 
 
   const [deposit, setDeposit] = useState(booking?.depositAmount?.toString() ?? "0");
+  const [depositMethod, setDepositMethod] = useState<"cash" | "bank_transfer">("cash");
   const [notes, setNotes] = useState(booking?.notes ?? "");
   const [surcharges, setSurcharges] = useState<SurchargeItem[]>(() => {
     const raw = booking?.surcharges ?? [];
@@ -735,6 +736,7 @@ function ShowFormPanel({
           shootTime: "08:00",
           totalAmount: subDraftsTotal,
           depositAmount: depositNum,
+          depositPaymentMethod: depositMethod,
           discountAmount: 0,
           isParentContract: true,
           packageType: subDrafts.map(s => s.serviceLabel || "Dịch vụ").join(" + "),
@@ -784,6 +786,7 @@ function ShowFormPanel({
         serviceCategory: "wedding", packageType,
         location: location || null, status: finalStatus,
         totalAmount: finalTotal, depositAmount: finalDeposit,
+        depositPaymentMethod: finalDeposit > 0 ? depositMethod : undefined,
         discountAmount: 0,
         items: hasServices ? validLines.map(({ tempId: _t, ...rest }) => rest) : [],
         surcharges: cleanedSurcharges,
@@ -798,14 +801,6 @@ function ShowFormPanel({
         saved = await fetch(`${BASE}/api/bookings`, {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
         }).then(r => { if (!r.ok) throw new Error("Lỗi tạo đơn"); return r.json(); });
-      }
-
-      // ── 3. Ghi thanh toán đặt cọc nếu có ──
-      if (!isEdit && finalDeposit > 0) {
-        await fetch(`${BASE}/api/payments`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ bookingId: saved.id, amount: finalDeposit, paymentMethod: "transfer", paymentType: "deposit", notes: `Đặt cọc – ${packageType}` }),
-        });
       }
 
       qc.invalidateQueries({ queryKey: ["bookings"] });
@@ -1103,6 +1098,23 @@ function ShowFormPanel({
                 <span className="text-sm text-muted-foreground flex-shrink-0">Đặt cọc:</span>
                 <Input type="number" className="h-8 text-sm text-right w-40" value={deposit} placeholder="0" onChange={e => setDeposit(e.target.value)} />
               </div>
+              {parseFloat(deposit) > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground flex-shrink-0">H.thức cọc:</span>
+                  <div className="flex gap-1 ml-auto">
+                    {([{ v: "cash", label: "💵 Tiền mặt" }, { v: "bank_transfer", label: "🏦 CK" }] as { v: "cash" | "bank_transfer"; label: string }[]).map(opt => (
+                      <button
+                        key={opt.v}
+                        type="button"
+                        onClick={() => setDepositMethod(opt.v)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${depositMethod === opt.v ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/40"}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex justify-between items-center border-t border-border/60 pt-2">
                 <span className="text-sm font-semibold">Còn lại:</span>
                 <span className={`font-bold text-base ${remaining > 0 ? "text-destructive" : "text-emerald-600"}`}>{formatVND(remaining)}</span>

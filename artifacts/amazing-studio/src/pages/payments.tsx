@@ -509,14 +509,40 @@ export default function PaymentsPage() {
   const isOverpaid = amtNum > (selectedBooking?.remainingAmount ?? 0);
   const afterPay   = Math.max(0, (selectedBooking?.remainingAmount ?? 0) - amtNum);
 
+  /* Đồng bộ dữ liệu cọc cũ */
+  const [syncing, setSyncing] = useState(false);
+  const handleSyncDeposits = async () => {
+    if (!confirm("Hệ thống sẽ:\n• Tạo phiếu thu cọc cho các đơn chưa có\n• Xóa phiếu cọc bị trùng\n• Cập nhật lại số tiền đã thu\n\nTiếp tục?")) return;
+    setSyncing(true);
+    try {
+      const r = await fetchJson("/api/payments/sync-deposits", { method: "POST" });
+      alert(r.message);
+      await refetchRecent();
+      qc.invalidateQueries({ queryKey: ["payment-suggestions"] });
+    } catch {
+      alert("Có lỗi khi đồng bộ, thử lại");
+    } finally { setSyncing(false); }
+  };
+
   return (
     <div className="space-y-5 pb-8">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Thu tiền</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Chọn hồ sơ → Điền thông tin → Lưu phiếu thu
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Thu tiền</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Chọn hồ sơ → Điền thông tin → Lưu phiếu thu
+          </p>
+        </div>
+        <button
+          onClick={handleSyncDeposits}
+          disabled={syncing}
+          title="Đồng bộ tiền cọc cũ thành phiếu thu"
+          className="flex-shrink-0 flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl border border-border bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+        >
+          <History className="w-3.5 h-3.5" />
+          {syncing ? "Đang đồng bộ..." : "Đồng bộ cọc cũ"}
+        </button>
       </div>
 
       {/* ── Search box thông minh ─────────────────── */}
@@ -605,13 +631,16 @@ export default function PaymentsPage() {
               <div className="divide-y divide-border/40">
                 {recentPayments.map((p, idx) => {
                   const isCash    = p.paymentMethod === "cash";
+                  const isDeposit = p.paymentType === "deposit";
                   const isPaidFull = p.remainingAmount <= 0;
-                  const isFirst   = p.paymentCount === 1;
-                  const txLabel   = isPaidFull ? "Thu đủ" : isFirst ? "Thu cọc" : "Thu thêm";
-                  const txCls     = isPaidFull
-                    ? "bg-green-100 text-green-700"
-                    : isFirst
+                  const txLabel   = isDeposit ? "Đặt cọc"
+                                  : isPaidFull ? "Thu đủ"
+                                  : p.paymentCount <= 1 ? "Thu lần đầu"
+                                  : "Thu thêm";
+                  const txCls     = isDeposit
                     ? "bg-amber-100 text-amber-700"
+                    : isPaidFull
+                    ? "bg-green-100 text-green-700"
                     : "bg-blue-100 text-blue-700";
                   const paidWhen  = p.paidDate
                     ? fmtDate(p.paidDate)
@@ -964,7 +993,9 @@ export default function PaymentsPage() {
                       <div className="flex items-center gap-2">
                         <div className={cn(
                           "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
-                          p.paymentMethod === "cash"
+                          p.paymentType === "deposit"
+                            ? "bg-amber-100 text-amber-700"
+                            : p.paymentMethod === "cash"
                             ? "bg-green-100 text-green-700"
                             : "bg-blue-100 text-blue-700"
                         )}>
@@ -973,7 +1004,14 @@ export default function PaymentsPage() {
                             : <CreditCard className="w-4 h-4" />}
                         </div>
                         <div>
-                          <p className="text-sm font-bold text-primary">{fmtVND(p.amount)}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-bold text-primary">{fmtVND(p.amount)}</p>
+                            {p.paymentType === "deposit" && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold">
+                                Cọc
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-muted-foreground">
                             {METHOD_LABEL[p.paymentMethod] ?? p.paymentMethod}
                           </p>

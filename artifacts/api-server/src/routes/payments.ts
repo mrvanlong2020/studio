@@ -145,7 +145,7 @@ router.get("/payments/recent", async (req, res) => {
     FROM payments p
     LEFT JOIN bookings b ON p.booking_id = b.id
     LEFT JOIN customers c ON b.customer_id = c.id
-    WHERE p.payment_type = 'payment'
+    WHERE p.payment_type IN ('payment', 'deposit')
       AND ${dateFilter}
     ORDER BY p.paid_at DESC
     LIMIT $1`;
@@ -157,7 +157,7 @@ router.get("/payments/recent", async (req, res) => {
          COUNT(*)::int          AS "count",
          COALESCE(SUM(p.amount::numeric), 0) AS "total"
        FROM payments p
-       WHERE p.payment_type = 'payment'
+       WHERE p.payment_type IN ('payment', 'deposit')
          AND ${dateFilter}`
     ),
   ]);
@@ -255,6 +255,82 @@ router.post("/payments", async (req, res) => {
   }
 
   res.status(201).json({ ...payment, amount: parseFloat(payment.amount) });
+});
+
+// POST /payments/sync-deposits — đồng bộ tiền cọc cũ thành phiếu thu
+// - Xóa duplicate deposit records (giữ bản cũ nhất)
+// - Tạo deposit record cho booking nào có depositAmount > 0 nhưng chưa có phiếu thu nào
+// - Cập nhật lại paid_amount trên bookings table
+router.post("/payments/sync-deposits", async (_req, res) => {
+  const report: { created: number; removed: number; recalculated: number } = {
+    created: 0, removed: 0, recalculated: 0,
+  };
+
+  // Lấy tất cả bookings có depositAmount > 0, không phải child booking
+  const bookingsWithDeposit = await pool.query(`
+    SELECT id, deposit_amount::numeric AS deposit_amount, total_amount::numeric AS total_amount,
+           order_code, shoot_date, status
+    FROM bookings
+    WHERE deposit_amount::numeric > 0
+      AND parent_id IS NULL
+    ORDER BY id
+  `);
+
+  const affectedBookingIds: number[] = [];
+
+  for (const bk of bookingsWithDeposit.rows) {
+    const bkId       = Number(bk.id);
+    const depAmount  = parseFloat(bk.deposit_amount);
+
+    // Lấy tất cả deposit payments cho booking này, sắp xếp theo thời gian
+    const depPayments = await pool.query(`
+      SELECT id FROM payments
+      WHERE booking_id = $1 AND payment_type = 'deposit'
+      ORDER BY paid_at ASC
+    `, [bkId]);
+
+    if (depPayments.rows.length === 0) {
+      // Không có deposit record → tạo mới
+      await pool.query(`
+        INSERT INTO payments (booking_id, amount, payment_method, payment_type, paid_date, notes, paid_at)
+        VALUES ($1, $2, 'cash', 'deposit', $3, 'Cọc giữ lịch', NOW())
+      `, [bkId, String(depAmount), bk.shoot_date || null]);
+      report.created++;
+      affectedBookingIds.push(bkId);
+    } else if (depPayments.rows.length > 1) {
+      // Có nhiều hơn 1 deposit → giữ cái đầu tiên, xóa phần thừa
+      const toDelete = depPayments.rows.slice(1).map((r: any) => Number(r.id));
+      for (const did of toDelete) {
+        await pool.query(`DELETE FROM payments WHERE id = $1`, [did]);
+        report.removed++;
+      }
+      affectedBookingIds.push(bkId);
+    }
+  }
+
+  // Tính lại paid_amount cho tất cả booking bị ảnh hưởng
+  const uniqueIds = [...new Set(affectedBookingIds)];
+  for (const bkId of uniqueIds) {
+    const sumResult = await pool.query(`
+      SELECT COALESCE(SUM(amount::numeric), 0) AS total_paid,
+             (SELECT total_amount::numeric FROM bookings WHERE id = $1) AS total_amount
+      FROM payments WHERE booking_id = $1
+    `, [bkId]);
+    const totalPaid   = parseFloat(sumResult.rows[0].total_paid);
+    const totalAmount = parseFloat(sumResult.rows[0].total_amount);
+    const remaining   = Math.max(0, totalAmount - totalPaid);
+    await pool.query(`
+      UPDATE bookings SET paid_amount = $1 WHERE id = $2
+    `, [String(totalPaid), bkId]);
+    report.recalculated++;
+    // suppress unused variable
+    void remaining;
+  }
+
+  res.json({
+    message: `Đồng bộ hoàn tất: tạo ${report.created} phiếu cọc mới, xóa ${report.removed} bản trùng, cập nhật ${report.recalculated} đơn hàng`,
+    ...report,
+  });
 });
 
 // DELETE /payments/:id

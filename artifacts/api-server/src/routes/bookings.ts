@@ -76,9 +76,14 @@ router.post("/bookings", async (req, res) => {
     customerId, shootDate, shootTime, serviceCategory, packageType, location,
     totalAmount, depositAmount, discountAmount, items, surcharges, notes, internalNotes,
     assignedStaff, parentId, serviceLabel, isParentContract,
+    // Deposit payment fields
+    depositPaymentMethod, depositCollector,
     // Multi-service contract support
     subServices,
   } = req.body;
+
+  const depMethod    = depositPaymentMethod || "cash";
+  const depCollector = depositCollector     || null;
 
   const count = await db.select().from(bookingsTable);
   const orderCode = `DH${String(count.length + 1).padStart(4, "0")}`;
@@ -113,11 +118,13 @@ router.post("/bookings", async (req, res) => {
     // 2. Create deposit payment for the parent contract
     if (depositAmount && parseFloat(String(depositAmount)) > 0) {
       await db.insert(paymentsTable).values({
-        bookingId: parent.id,
-        amount: String(depositAmount),
-        paymentMethod: "cash",
-        paymentType: "deposit",
-        notes: "Tiền cọc hợp đồng",
+        bookingId:     parent.id,
+        amount:        String(depositAmount),
+        paymentMethod: depMethod,
+        paymentType:   "deposit",
+        collectorName: depCollector,
+        paidDate:      shootDate || null,
+        notes:         "Cọc giữ lịch",
       });
     }
 
@@ -200,11 +207,13 @@ router.post("/bookings", async (req, res) => {
 
   if (depositAmount && parseFloat(String(depositAmount)) > 0) {
     await db.insert(paymentsTable).values({
-      bookingId: booking.id,
-      amount: String(depositAmount),
-      paymentMethod: "cash",
-      paymentType: "deposit",
-      notes: "Tiền cọc ban đầu",
+      bookingId:     booking.id,
+      amount:        String(depositAmount),
+      paymentMethod: depMethod,
+      paymentType:   "deposit",
+      collectorName: depCollector,
+      paidDate:      shootDate || null,
+      notes:         "Cọc giữ lịch",
     });
   }
 
