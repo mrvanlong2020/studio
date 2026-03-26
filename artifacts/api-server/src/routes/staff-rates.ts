@@ -78,6 +78,12 @@ router.put("/staff-rates/:id", async (req, res) => {
   res.json(fmt(updated));
 });
 
+// ─── DELETE /staff-rates/clear — xóa toàn bộ (admin only) ────────────────────
+router.delete("/staff-rates/clear", async (_req, res) => {
+  await db.delete(staffRatePricesTable);
+  res.json({ ok: true, message: "Đã xóa toàn bộ bảng cast" });
+});
+
 // ─── DELETE /staff-rates/:id ──────────────────────────────────────────────────
 router.delete("/staff-rates/:id", async (req, res) => {
   const id = parseInt(req.params.id);

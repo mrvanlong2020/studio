@@ -53,6 +53,7 @@ type PkgItem = { name: string; quantity: string; unit?: string; notes?: string }
 type ServiceOption = {
   key: string; name: string; price: number;
   splits?: ServiceSplit[];
+  costCastPhoto?: number; costCastMakeup?: number; costPts?: number;
   printCost?: number; operatingCost?: number; salePercent?: number;
   items?: PkgItem[];
   addons?: Addon[];
@@ -184,16 +185,25 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
   const selectedSvc = line.serviceKey ? services.find(s => s.key === line.serviceKey) : null;
   const isPkg = !!selectedSvc?.key?.startsWith("pkg-");
 
-  // Cast nhân sự từ bảng giá riêng
-  const photoCast = lookupRate(line.photoId, "photographer", line.photoTask || "mac_dinh", allStaffRates);
-  const makeupCast = lookupRate(line.makeupId, "makeup", line.makeupTask || "mac_dinh", allStaffRates);
+  // Cast nhân sự thực tế (từ bảng giá cá nhân)
+  const actualPhotoCast = lookupRate(line.photoId, "photographer", line.photoTask || "mac_dinh", allStaffRates);
+  const actualMakeupCast = lookupRate(line.makeupId, "makeup", line.makeupTask || "mac_dinh", allStaffRates);
+
+  // Chi phí sản xuất chuẩn từ gói
+  const stdCastPhoto = selectedSvc?.costCastPhoto || 0;
+  const stdCastMakeup = selectedSvc?.costCastMakeup || 0;
+  const stdCastPts = selectedSvc?.costPts || 0;
+
+  // Dùng chi phí thực tế nếu có nhân sự, còn không dùng chi phí chuẩn
+  const photoCast = line.photoId ? actualPhotoCast : stdCastPhoto;
+  const makeupCast = line.makeupId ? actualMakeupCast : stdCastMakeup;
 
   // Chi phí cố định gói
   const printCost = selectedSvc?.printCost || 0;
   const operatingCost = selectedSvc?.operatingCost || 0;
   const salePercent = selectedSvc?.salePercent || 0;
   const saleAmt = Math.round(line.price * salePercent / 100);
-  const totalCost = printCost + operatingCost + saleAmt + photoCast + makeupCast;
+  const totalCost = stdCastPts + printCost + operatingCost + saleAmt + photoCast + makeupCast;
   const profit = line.price - totalCost;
 
   // Addon state — computed from line.selectedAddons + selectedSvc.addons
@@ -514,21 +524,30 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
           </div>
           <div className="bg-red-50 px-3 py-1.5 space-y-0.5 text-[10px]">
             <p className="font-semibold text-red-800">(-) Chi phí sản xuất</p>
+            {/* Cast chụp: thực tế nếu có nhân sự, chuẩn nếu chưa */}
+            {(photoCast > 0 || stdCastPhoto > 0) && (
+              <div className="flex justify-between text-blue-700">
+                <span>📷 Cast chụp{line.photoId ? ` — ${photographers.find(p => p.id === line.photoId)?.name ?? ""}` : " (chuẩn)"}</span>
+                <span className={!line.photoId ? "text-muted-foreground italic" : ""}>{photoCast > 0 ? fmtVND(photoCast) : "—"}</span>
+              </div>
+            )}
+            {/* Cast makeup: thực tế nếu có nhân sự, chuẩn nếu chưa */}
+            {(makeupCast > 0 || stdCastMakeup > 0) && (
+              <div className="flex justify-between text-pink-700">
+                <span>💄 Cast makeup{line.makeupId ? ` — ${makeupArtists.find(m => m.id === line.makeupId)?.name ?? ""}` : " (chuẩn)"}</span>
+                <span className={!line.makeupId ? "text-muted-foreground italic" : ""}>{makeupCast > 0 ? fmtVND(makeupCast) : "—"}</span>
+              </div>
+            )}
+            {/* PTS cost từ gói (chuẩn) */}
+            {stdCastPts > 0 && (
+              <div className="flex justify-between text-purple-700">
+                <span>🖥️ PTS chỉnh ảnh (chuẩn)</span>
+                <span>{fmtVND(stdCastPts)}</span>
+              </div>
+            )}
             {printCost > 0 && <div className="flex justify-between text-red-700"><span>🖨️ In ấn</span><span>{fmtVND(printCost)}</span></div>}
             {operatingCost > 0 && <div className="flex justify-between text-red-700"><span>⚡ Vận hành</span><span>{fmtVND(operatingCost)}</span></div>}
             {saleAmt > 0 && <div className="flex justify-between text-red-700"><span>💼 Sale {salePercent}%</span><span>{fmtVND(saleAmt)}</span></div>}
-            {line.photoId && (
-              <div className="flex justify-between text-blue-700">
-                <span>📷 Cast {photographers.find(p => p.id === line.photoId)?.name}</span>
-                <span>{photoCast > 0 ? fmtVND(photoCast) : <span className="text-orange-500 italic">chưa có</span>}</span>
-              </div>
-            )}
-            {line.makeupId && (
-              <div className="flex justify-between text-pink-700">
-                <span>💄 Cast {makeupArtists.find(m => m.id === line.makeupId)?.name}</span>
-                <span>{makeupCast > 0 ? fmtVND(makeupCast) : <span className="text-orange-500 italic">chưa có</span>}</span>
-              </div>
-            )}
             <div className="flex justify-between font-semibold text-red-800 border-t border-red-200 pt-0.5">
               <span>Tổng chi phí</span><span>{fmtVND(totalCost)}</span>
             </div>
@@ -620,7 +639,9 @@ function ShowFormPanel({
   const { data: allStaff = [] } = useQuery<Staff[]>({ queryKey: ["staff"], queryFn: () => fetch(`${BASE}/api/staff`).then(r => r.json()) });
   const { data: services = [] } = useQuery<Service[]>({ queryKey: ["services"], queryFn: () => fetch(`${BASE}/api/services`).then(r => r.json()) });
   const { data: pricingPackages = [] } = useQuery<{
-    id: number; name: string; price: number; printCost: number; operatingCost: number; salePercent: number;
+    id: number; name: string; price: number;
+    costCastPhoto: number; costCastMakeup: number; costPts: number;
+    printCost: number; operatingCost: number; salePercent: number;
     items?: PkgItem[]; addons?: Addon[]; products?: string[]; description?: string | null; notes?: string | null;
     serviceType?: string | null; photoCount?: number | null; includesMakeup?: boolean;
   }[]>({ queryKey: ["service-packages"], queryFn: () => fetch(`${BASE}/api/service-packages`).then(r => r.json()) });
@@ -647,6 +668,9 @@ function ShowFormPanel({
     ...services.map(s => ({ key: `svc-${s.id}`, name: s.name, price: s.price, splits: s.splits || [] })),
     ...pricingPackages.map(p => ({
       key: `pkg-${p.id}`, name: p.name, price: p.price, splits: [],
+      costCastPhoto: p.costCastPhoto || 0,
+      costCastMakeup: p.costCastMakeup || 0,
+      costPts: p.costPts || 0,
       printCost: p.printCost || 0, operatingCost: p.operatingCost || 0, salePercent: p.salePercent || 0,
       items: p.items || [], addons: p.addons || [], products: p.products || [],
       serviceType: p.serviceType ?? null,

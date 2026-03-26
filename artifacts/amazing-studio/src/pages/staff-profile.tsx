@@ -86,6 +86,30 @@ const ROLE_LABELS: Record<string, string> = {
   unknown: "Tham gia",
 };
 
+const TASK_TEMPLATES: Record<string, Array<{ key: string; name: string; rateType: string }>> = {
+  photographer: [
+    { key: "chup_album_co", name: "Chụp album cổng", rateType: "fixed" },
+    { key: "chup_album_ngoai_canh", name: "Chụp album ngoại cảnh", rateType: "fixed" },
+    { key: "chup_tiec", name: "Chụp tiệc / phóng sự", rateType: "fixed" },
+    { key: "chup_beauty", name: "Chụp beauty", rateType: "fixed" },
+    { key: "chup_gia_dinh", name: "Chụp gia đình", rateType: "fixed" },
+    { key: "chup_khac", name: "Chụp khác", rateType: "fixed" },
+  ],
+  makeup: [
+    { key: "makeup_album", name: "Makeup chụp album", rateType: "fixed" },
+    { key: "makeup_tiec", name: "Makeup tiệc cưới", rateType: "fixed" },
+    { key: "makeup_beauty", name: "Makeup beauty", rateType: "fixed" },
+    { key: "makeup_ba_sui", name: "Makeup bà sui", rateType: "fixed" },
+    { key: "makeup_khac", name: "Makeup khác", rateType: "fixed" },
+  ],
+  photoshop: [
+    { key: "pts_album", name: "PTS album", rateType: "per_photo" },
+    { key: "pts_tiec", name: "PTS tiệc", rateType: "per_photo" },
+    { key: "pts_beauty", name: "PTS beauty", rateType: "per_photo" },
+    { key: "pts_khac", name: "PTS khác", rateType: "per_photo" },
+  ],
+};
+
 const ROLE_ICONS: Record<string, string> = {
   admin: "👑", photographer: "📷", photo: "📷",
   makeup: "💄", sale: "💼", photoshop: "🖥️", assistant: "🤝", marketing: "📣",
@@ -161,6 +185,11 @@ export default function StaffProfilePage() {
   const [notesForm, setNotesForm] = useState<Partial<InternalNotes>>({});
   const [jobDetailId, setJobDetailId] = useState<number | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [castSheet, setCastSheet] = useState(false);
+  const [castNewRole, setCastNewRole] = useState("photographer");
+  const [castNewTaskKey, setCastNewTaskKey] = useState("");
+  const [castNewAmount, setCastNewAmount] = useState("");
+  const [castEditAmounts, setCastEditAmounts] = useState<Record<number, string>>({});
 
   // Avatar lightbox & menu
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -212,6 +241,36 @@ export default function StaffProfilePage() {
       qc.invalidateQueries({ queryKey: ["staff-profile", staffId] });
       setNotesSheet(false);
     },
+  });
+
+  const addCastRate = useMutation({
+    mutationFn: ({ role, taskKey, taskName, rate, rateType }: { role: string; taskKey: string; taskName: string; rate: number; rateType: string }) =>
+      fetchJson("/api/staff-rates/bulk", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ staffId, rates: [{ role, taskKey, taskName, rate, rateType }] }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["staff-profile", staffId] });
+      setCastNewAmount(""); setCastNewTaskKey("");
+    },
+  });
+
+  const updateCastRate = useMutation({
+    mutationFn: ({ id, role, taskKey, taskName, rate, rateType }: { id: number; role: string; taskKey: string; taskName: string; rate: number; rateType: string }) =>
+      fetchJson("/api/staff-rates/bulk", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ staffId, rates: [{ role, taskKey, taskName, rate, rateType }] }),
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["staff-profile", staffId] });
+      setCastEditAmounts(prev => { const n = { ...prev }; delete n[vars.id]; return n; });
+    },
+  });
+
+  const deleteCastRate = useMutation({
+    mutationFn: (rateId: number) =>
+      fetchJson(`/api/staff-rates/${rateId}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["staff-profile", staffId] }),
   });
 
   const handleAvatarUpload = async (base64: string) => {
@@ -703,9 +762,19 @@ export default function StaffProfilePage() {
 
       {/* ── G. BẢNG GIÁ CÁ NHÂN ────────────────────────────────────────── */}
       <section className="bg-card border border-border rounded-2xl p-4 space-y-4">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-          <TrendingUp className="w-3.5 h-3.5" /> Bảng cast chính thức
-        </p>
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <TrendingUp className="w-3.5 h-3.5" /> Bảng cast chính thức
+          </p>
+          {isAdmin && (
+            <button
+              onClick={() => setCastSheet(true)}
+              className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 font-medium hover:bg-emerald-100 transition-colors"
+            >
+              <Pencil className="w-3.5 h-3.5" /> Chỉnh sửa
+            </button>
+          )}
+        </div>
         {rates.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">Chưa có bảng cast nào</p>
         ) : (() => {
@@ -978,6 +1047,143 @@ export default function StaffProfilePage() {
             >
               {saveNotes.isPending ? "Đang lưu..." : "Lưu ghi chú"}
             </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* ── Cast Sheet (Admin) ─────────────────────────────────────────── */}
+      <Sheet open={castSheet} onOpenChange={setCastSheet}>
+        <SheetContent side="bottom" className="rounded-t-3xl max-h-[92vh] overflow-y-auto">
+          <SheetHeader className="mb-4">
+            <SheetTitle>Chỉnh sửa bảng cast — {staff.name}</SheetTitle>
+          </SheetHeader>
+          <div className="space-y-5 pb-4">
+            {/* Existing rates grouped by role */}
+            {(["photographer","makeup","photoshop"] as const).map(role => {
+              const roleRates = rates.filter(r => r.role === role || (role === "photographer" && r.role === "photo"));
+              if (roleRates.length === 0 && role !== "photographer") return null;
+              return (
+                <div key={role} className="space-y-2">
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                    <span>{ROLE_ICONS[role]}</span> {ROLE_LABELS[role]}
+                    {role === "photoshop" && <span className="text-[10px] text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded">/ tấm ảnh</span>}
+                  </p>
+                  {roleRates.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic pl-2">Chưa có cast cho vai này</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {roleRates.map(r => {
+                        const editing = r.id in castEditAmounts;
+                        return (
+                          <div key={r.id} className="flex items-center gap-2 bg-muted/30 rounded-xl px-3 py-2">
+                            <span className="flex-1 text-sm">{r.taskName}</span>
+                            {editing ? (
+                              <>
+                                <input
+                                  type="number"
+                                  className="w-28 h-8 text-sm border border-input rounded-lg px-2 text-right bg-background"
+                                  value={castEditAmounts[r.id] ?? ""}
+                                  onChange={e => setCastEditAmounts(prev => ({ ...prev, [r.id]: e.target.value }))}
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={() => updateCastRate.mutate({ id: r.id, role: r.role, taskKey: r.taskKey, taskName: r.taskName, rate: parseFloat(castEditAmounts[r.id]) || 0, rateType: r.rateType })}
+                                  className="text-xs px-2 py-1.5 rounded-lg bg-primary text-primary-foreground font-semibold"
+                                  disabled={updateCastRate.isPending}
+                                >✓</button>
+                                <button
+                                  onClick={() => setCastEditAmounts(prev => { const n = { ...prev }; delete n[r.id]; return n; })}
+                                  className="text-xs px-2 py-1.5 rounded-lg bg-muted text-muted-foreground"
+                                >✕</button>
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-sm font-semibold text-emerald-700 tabular-nums min-w-[5rem] text-right">
+                                  {r.rate !== null ? r.rate.toLocaleString("vi-VN") + (r.rateType === "per_photo" ? "đ/tấm" : "đ") : "—"}
+                                </span>
+                                <button
+                                  onClick={() => setCastEditAmounts(prev => ({ ...prev, [r.id]: String(r.rate ?? "") }))}
+                                  className="p-1.5 rounded-lg hover:bg-muted"
+                                ><Pencil className="w-3.5 h-3.5 text-muted-foreground" /></button>
+                                <button
+                                  onClick={() => { if (confirm("Xoá cast này?")) deleteCastRate.mutate(r.id); }}
+                                  className="p-1.5 rounded-lg hover:bg-destructive/10"
+                                ><Trash2 className="w-3.5 h-3.5 text-destructive/60" /></button>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Add new cast entry */}
+            <div className="pt-3 border-t border-border space-y-3">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                <Plus className="w-3.5 h-3.5" /> Thêm nhiệm vụ cast
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] text-muted-foreground mb-1">Vai trò</label>
+                  <select
+                    className="w-full h-9 border border-input rounded-lg px-2 text-sm bg-background"
+                    value={castNewRole}
+                    onChange={e => { setCastNewRole(e.target.value); setCastNewTaskKey(""); }}
+                  >
+                    <option value="photographer">📷 Nhiếp ảnh</option>
+                    <option value="makeup">💄 Makeup</option>
+                    <option value="photoshop">🖥️ PTS chỉnh ảnh</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] text-muted-foreground mb-1">Nhiệm vụ</label>
+                  <select
+                    className="w-full h-9 border border-input rounded-lg px-2 text-sm bg-background"
+                    value={castNewTaskKey}
+                    onChange={e => setCastNewTaskKey(e.target.value)}
+                  >
+                    <option value="">-- Chọn nhiệm vụ --</option>
+                    {(TASK_TEMPLATES[castNewRole] ?? []).map(t => (
+                      <option key={t.key} value={t.key}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-2 items-end">
+                <div className="flex-1">
+                  <label className="block text-[11px] text-muted-foreground mb-1">
+                    Số tiền cast (đ){castNewRole === "photoshop" ? " / tấm" : ""}
+                  </label>
+                  <input
+                    type="number"
+                    className="w-full h-9 border border-input rounded-lg px-3 text-sm bg-background"
+                    placeholder="Nhập số tiền..."
+                    value={castNewAmount}
+                    onChange={e => setCastNewAmount(e.target.value)}
+                  />
+                </div>
+                <button
+                  disabled={!castNewTaskKey || !castNewAmount || addCastRate.isPending}
+                  onClick={() => {
+                    const tmpl = (TASK_TEMPLATES[castNewRole] ?? []).find(t => t.key === castNewTaskKey);
+                    if (!tmpl) return;
+                    addCastRate.mutate({
+                      role: castNewRole,
+                      taskKey: castNewTaskKey,
+                      taskName: tmpl.name,
+                      rate: parseFloat(castNewAmount) || 0,
+                      rateType: tmpl.rateType,
+                    });
+                  }}
+                  className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
+                >
+                  {addCastRate.isPending ? "..." : "+ Thêm"}
+                </button>
+              </div>
+            </div>
           </div>
         </SheetContent>
       </Sheet>

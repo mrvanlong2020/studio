@@ -12,24 +12,39 @@ const fmtGroup = (g: { isActive: number; [k: string]: unknown }) => ({
 });
 
 const fmtPkg = (p: {
-  price: string; costPrice: string; printCost: string; operatingCost: string;
-  salePercent: string; isActive: number; addons: string | null; products: string | null;
+  price: string;
+  costCastPhoto?: string | null; costCastMakeup?: string | null; costPts?: string | null;
+  printCost?: string | null; operatingCost?: string | null; salePercent?: string | null;
+  isActive: number; addons: string | null; products: string | null;
   serviceType?: string | null; photoCount?: number | null; includesMakeup?: number | null;
   [k: string]: unknown
-}) => ({
-  ...p,
-  price: parseFloat(p.price),
-  costPrice: parseFloat(p.costPrice),
-  printCost: parseFloat(p.printCost ?? "0"),
-  operatingCost: parseFloat(p.operatingCost ?? "0"),
-  salePercent: parseFloat(p.salePercent ?? "0"),
-  isActive: Boolean(p.isActive),
-  addons: p.addons ? (() => { try { return JSON.parse(p.addons!); } catch { return []; } })() : [],
-  products: p.products ? (() => { try { return JSON.parse(p.products!); } catch { return []; } })() : [],
-  serviceType: p.serviceType ?? null,
-  photoCount: p.photoCount ?? 1,
-  includesMakeup: p.includesMakeup !== 0,
-});
+}) => {
+  const costCastPhoto = parseFloat((p.costCastPhoto as string) ?? "0");
+  const costCastMakeup = parseFloat((p.costCastMakeup as string) ?? "0");
+  const costPts = parseFloat((p.costPts as string) ?? "0");
+  const printCost = parseFloat((p.printCost as string) ?? "0");
+  const operatingCost = parseFloat((p.operatingCost as string) ?? "0");
+  const totalCost = costCastPhoto + costCastMakeup + costPts + printCost + operatingCost;
+  const price = parseFloat(p.price);
+  return {
+    ...p,
+    price,
+    costCastPhoto,
+    costCastMakeup,
+    costPts,
+    printCost,
+    operatingCost,
+    totalCost,
+    profit: price - totalCost,
+    salePercent: parseFloat((p.salePercent as string) ?? "0"),
+    isActive: Boolean(p.isActive),
+    addons: p.addons ? (() => { try { return JSON.parse(p.addons!); } catch { return []; } })() : [],
+    products: p.products ? (() => { try { return JSON.parse(p.products!); } catch { return []; } })() : [],
+    serviceType: p.serviceType ?? null,
+    photoCount: p.photoCount ?? 1,
+    includesMakeup: p.includesMakeup !== 0,
+  };
+};
 
 const fmtSurcharge = (s: { price: string; isActive: number; [k: string]: unknown }) => ({
   ...s, price: parseFloat(s.price), isActive: Boolean(s.isActive),
@@ -987,7 +1002,8 @@ router.get("/service-packages/:id", async (req, res) => {
 
 router.post("/service-packages", async (req, res) => {
   const {
-    groupId, code, name, price, costPrice, printCost, operatingCost, salePercent,
+    groupId, code, name, price,
+    costCastPhoto, costCastMakeup, costPts, printCost, operatingCost, salePercent,
     description, notes, addons, products, isActive, sortOrder, items = [],
     serviceType, photoCount, includesMakeup,
   } = req.body;
@@ -995,7 +1011,9 @@ router.post("/service-packages", async (req, res) => {
     groupId: groupId ? parseInt(groupId) : null,
     code, name,
     price: String(price ?? 0),
-    costPrice: String(costPrice ?? 0),
+    costCastPhoto: String(costCastPhoto ?? 0),
+    costCastMakeup: String(costCastMakeup ?? 0),
+    costPts: String(costPts ?? 0),
     printCost: String(printCost ?? 0),
     operatingCost: String(operatingCost ?? 0),
     salePercent: String(salePercent ?? 0),
@@ -1030,7 +1048,8 @@ router.post("/service-packages", async (req, res) => {
 router.put("/service-packages/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   const {
-    groupId, code, name, price, costPrice, printCost, operatingCost, salePercent,
+    groupId, code, name, price,
+    costCastPhoto, costCastMakeup, costPts, printCost, operatingCost, salePercent,
     description, notes, addons, products, isActive, sortOrder, items,
     serviceType, photoCount, includesMakeup,
   } = req.body;
@@ -1040,9 +1059,11 @@ router.put("/service-packages/:id", async (req, res) => {
   if (code !== undefined) update.code = code;
   if (name !== undefined) update.name = name;
   if (price !== undefined) update.price = String(price);
-  if (costPrice !== undefined) update.costPrice = String(costPrice);
-  if (printCost !== undefined) update.printCost = String(printCost);
-  if (operatingCost !== undefined) update.operatingCost = String(operatingCost);
+  if (costCastPhoto !== undefined) update.costCastPhoto = String(costCastPhoto ?? 0);
+  if (costCastMakeup !== undefined) update.costCastMakeup = String(costCastMakeup ?? 0);
+  if (costPts !== undefined) update.costPts = String(costPts ?? 0);
+  if (printCost !== undefined) update.printCost = String(printCost ?? 0);
+  if (operatingCost !== undefined) update.operatingCost = String(operatingCost ?? 0);
   if (salePercent !== undefined) update.salePercent = String(salePercent);
   if (description !== undefined) update.description = description;
   if (notes !== undefined) update.notes = notes;
