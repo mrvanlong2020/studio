@@ -11,6 +11,10 @@ export const paymentsTable = pgTable("payments", {
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   paymentMethod: text("payment_method").notNull(),
   paymentType: text("payment_type").notNull(),
+  collectorName: text("collector_name"),
+  bankName: text("bank_name"),
+  proofImageUrl: text("proof_image_url"),
+  paidDate: text("paid_date"),
   notes: text("notes"),
   paidAt: timestamp("paid_at").defaultNow().notNull(),
 });

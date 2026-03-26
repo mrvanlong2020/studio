@@ -76,7 +76,7 @@ export default function BookingsPage() {
     queryFn: () => fetchJson("/api/bookings"),
   });
 
-  const { data: customers = [] } = useQuery<{ id: number; name: string; phone: string }[]>({
+  const { data: customers = [] } = useQuery<{ id: number; name: string; phone: string; customCode?: string }[]>({
     queryKey: ["customers-light"],
     queryFn: () => fetchJson("/api/customers"),
   });
@@ -516,8 +516,111 @@ export default function BookingsPage() {
   );
 }
 
+function CustomerSearchBox({
+  customers,
+  onSelect,
+  onCreateNew,
+}: {
+  customers: { id: number; name: string; phone: string; customCode?: string }[];
+  onSelect: (c: { id: number; name: string; phone: string; customCode?: string }) => void;
+  onCreateNew: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<{ id: number; name: string; phone: string; customCode?: string } | null>(null);
+
+  const filtered = (() => {
+    if (!query.trim()) return [];
+    const q = query.toLowerCase();
+    const phoneExact = customers.filter(c => c.phone.includes(query));
+    const nameMatch  = customers.filter(c => !c.phone.includes(query) && c.name.toLowerCase().includes(q));
+    return [...phoneExact, ...nameMatch].slice(0, 10);
+  })();
+
+  const handleSelect = (c: typeof customers[0]) => {
+    setSelected(c);
+    setQuery(c.name);
+    setOpen(false);
+    onSelect(c);
+  };
+
+  const handleClear = () => {
+    setSelected(null);
+    setQuery("");
+    setOpen(false);
+    onSelect({ id: 0, name: "", phone: "" });
+  };
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <input
+          className="w-full pl-8 pr-8 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+          placeholder="Tìm theo tên hoặc số điện thoại..."
+          value={query}
+          onChange={e => { setQuery(e.target.value); setOpen(true); setSelected(null); }}
+          onFocus={() => { if (query) setOpen(true); }}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          autoComplete="off"
+        />
+        {query && (
+          <button onClick={handleClear} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {selected && (
+        <div className="mt-1 flex items-center gap-2 text-xs text-primary bg-primary/5 border border-primary/20 rounded-lg px-3 py-1.5">
+          <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+          <span className="font-semibold">{selected.name}</span>
+          <span className="text-muted-foreground">—</span>
+          <span>{selected.phone}</span>
+          {selected.customCode && <span className="text-muted-foreground">— {selected.customCode}</span>}
+        </div>
+      )}
+
+      {open && query.trim() && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-background border border-border rounded-xl shadow-lg overflow-hidden max-h-56 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="p-3">
+              <p className="text-sm text-muted-foreground text-center mb-2">Không tìm thấy khách hàng "{query}"</p>
+              <button
+                onClick={onCreateNew}
+                className="w-full flex items-center justify-center gap-2 text-xs text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-lg py-2 font-medium transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" /> Tạo khách hàng mới
+              </button>
+            </div>
+          ) : (
+            filtered.map(c => (
+              <button
+                key={c.id}
+                onMouseDown={() => handleSelect(c)}
+                className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-muted text-left transition-colors border-b border-border/40 last:border-0"
+              >
+                <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold flex-shrink-0">
+                  {c.name[0]?.toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Phone className="w-3 h-3" /> {c.phone}
+                    {c.customCode && <span className="ml-1 text-primary/60 font-medium">• {c.customCode}</span>}
+                  </p>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CreateBookingForm({ customers, onSuccess, onCancel }: {
-  customers: { id: number; name: string; phone: string }[];
+  customers: { id: number; name: string; phone: string; customCode?: string }[];
   onSuccess: () => void;
   onCancel: () => void;
 }) {
@@ -526,6 +629,7 @@ function CreateBookingForm({ customers, onSuccess, onCancel }: {
     packageType: "", location: "", totalAmount: "", depositAmount: "", discountAmount: "0", notes: "",
   });
   const [loading, setLoading] = useState(false);
+  const [showNewCustomer, setShowNewCustomer] = useState(false);
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
   const handleSubmit = async () => {
@@ -545,10 +649,17 @@ function CreateBookingForm({ customers, onSuccess, onCancel }: {
     <div className="space-y-3 max-h-[70vh] overflow-y-auto">
       <div>
         <label className="text-xs font-medium text-muted-foreground">Khách hàng *</label>
-        <Select value={form.customerId} onChange={e => setForm(f => ({ ...f, customerId: e.target.value }))}>
-          <option value="">-- Chọn khách hàng --</option>
-          {customers.map(c => <option key={c.id} value={c.id}>{c.name} - {c.phone}</option>)}
-        </Select>
+        <CustomerSearchBox
+          customers={customers}
+          onSelect={c => setForm(f => ({ ...f, customerId: c.id ? String(c.id) : "" }))}
+          onCreateNew={() => setShowNewCustomer(true)}
+        />
+        {showNewCustomer && (
+          <div className="mt-1.5 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+            💡 Vui lòng vào trang <strong>Khách hàng</strong> để tạo mới, sau đó quay lại tạo đơn.
+            <button className="ml-2 underline text-amber-600" onClick={() => setShowNewCustomer(false)}>Đóng</button>
+          </div>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div><label className="text-xs font-medium text-muted-foreground">Ngày chụp *</label><Input type="date" value={form.shootDate} onChange={e => setForm(f => ({ ...f, shootDate: e.target.value }))} /></div>
