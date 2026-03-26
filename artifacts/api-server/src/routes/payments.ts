@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import { paymentsTable, bookingsTable, customersTable } from "@workspace/db/schema";
-import { eq, or, ilike, desc } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -18,45 +18,97 @@ router.get("/payments", async (req, res) => {
   res.json(payments.map(p => ({ ...p, amount: parseFloat(p.amount) })));
 });
 
+function fmtBookingRow(row: any) {
+  return {
+    id:              Number(row.id),
+    orderCode:       row.orderCode ?? null,
+    customerId:      Number(row.customerId),
+    customerName:    row.customerName ?? "",
+    customerPhone:   row.customerPhone ?? "",
+    customerCode:    row.customerCode ?? null,
+    packageType:     row.packageType ?? "",
+    totalAmount:     parseFloat(row.totalAmount     || 0),
+    paidAmount:      parseFloat(row.paidAmount      || 0),
+    remainingAmount: parseFloat(row.remainingAmount || 0),
+    status:          row.status ?? "",
+    shootDate:       row.shootDate ?? null,
+    createdAt:       row.createdAt ?? null,
+    notes:           row.notes ?? null,
+    latestPaymentAt: row.latestPaymentAt ?? null,
+  };
+}
+
+const BOOKING_JOIN_SQL = `
+  SELECT
+    b.id,
+    b.order_code              AS "orderCode",
+    b.customer_id             AS "customerId",
+    c.name                    AS "customerName",
+    c.phone                   AS "customerPhone",
+    c.custom_code             AS "customerCode",
+    b.package_type            AS "packageType",
+    b.total_amount::numeric   AS "totalAmount",
+    b.paid_amount::numeric    AS "paidAmount",
+    GREATEST(0, (b.total_amount - b.paid_amount)::numeric) AS "remainingAmount",
+    b.status,
+    b.shoot_date  AS "shootDate",
+    b.created_at  AS "createdAt",
+    b.notes
+  FROM bookings b
+  LEFT JOIN customers c ON b.customer_id = c.id
+`;
+
+// GET /payments/suggestions — gợi ý thông minh khi mở ô tìm kiếm (chưa nhập)
+router.get("/payments/suggestions", async (req, res) => {
+  const [bookingsResult, paymentsResult] = await Promise.all([
+    pool.query(`${BOOKING_JOIN_SQL}
+      WHERE b.status IN ('pending', 'confirmed', 'in_progress')
+      ORDER BY b.created_at DESC
+      LIMIT 50`),
+    pool.query(`
+      SELECT booking_id, MAX(paid_at) AS latest_paid_at
+      FROM payments
+      WHERE booking_id IS NOT NULL
+      GROUP BY booking_id`),
+  ]);
+
+  const latestMap = new Map<number, string>();
+  for (const row of paymentsResult.rows) {
+    if (row.booking_id) latestMap.set(Number(row.booking_id), String(row.latest_paid_at));
+  }
+
+  const items = bookingsResult.rows.map((b: any) => ({
+    ...fmtBookingRow(b),
+    latestPaymentAt: latestMap.get(Number(b.id)) ?? null,
+  }));
+
+  const sorted = items.sort((a: any, b: any) => {
+    const aOwed = a.remainingAmount > 0 ? 1 : 0;
+    const bOwed = b.remainingAmount > 0 ? 1 : 0;
+    if (bOwed !== aOwed) return bOwed - aOwed;
+    const aTime = String(a.latestPaymentAt ?? a.createdAt ?? "");
+    const bTime = String(b.latestPaymentAt ?? b.createdAt ?? "");
+    return bTime > aTime ? 1 : -1;
+  }).slice(0, 15);
+
+  res.json(sorted);
+});
+
 // GET /payments/search?q=... — tìm đơn hàng cần thu theo tên/SĐT/mã đơn
 router.get("/payments/search", async (req, res) => {
   const q = ((req.query.q as string) || "").trim();
   if (!q) { res.json([]); return; }
 
-  const rows = await db
-    .select({
-      id:              bookingsTable.id,
-      orderCode:       bookingsTable.orderCode,
-      customerId:      bookingsTable.customerId,
-      customerName:    customersTable.name,
-      customerPhone:   customersTable.phone,
-      customerCode:    customersTable.customCode,
-      packageType:     bookingsTable.packageType,
-      totalAmount:     bookingsTable.totalAmount,
-      paidAmount:      bookingsTable.paidAmount,
-      remainingAmount: bookingsTable.remainingAmount,
-      status:          bookingsTable.status,
-      shootDate:       bookingsTable.shootDate,
-      notes:           bookingsTable.notes,
-    })
-    .from(bookingsTable)
-    .leftJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
-    .where(
-      or(
-        ilike(customersTable.name,  `%${q}%`),
-        ilike(customersTable.phone, `%${q}%`),
-        ilike(bookingsTable.orderCode, `%${q}%`),
-      )
-    )
-    .orderBy(desc(bookingsTable.shootDate))
-    .limit(20);
+  const pct = `%${q}%`;
+  const result = await pool.query(
+    `${BOOKING_JOIN_SQL}
+     WHERE c.name ILIKE $1 OR c.phone ILIKE $2 OR b.order_code ILIKE $3
+     ORDER BY b.created_at DESC
+     LIMIT 20`,
+    [pct, pct, pct]
+  );
 
-  res.json(rows.map(b => ({
-    ...b,
-    totalAmount:     parseFloat(String(b.totalAmount     || 0)),
-    paidAmount:      parseFloat(String(b.paidAmount      || 0)),
-    remainingAmount: parseFloat(String(b.remainingAmount || 0)),
-  })));
+  res.json(result.rows.map(fmtBookingRow));
 });
 
 // POST /payments — tạo phiếu thu mới
