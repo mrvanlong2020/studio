@@ -14,7 +14,7 @@ import {
   ChevronLeft, ChevronRight, Calendar, Clock, Phone, Package2, Sun, Moon,
   AlertCircle, Plus, X, Check, Camera, User, Sparkles,
   ChevronDown, Trash2, Save, MapPin, CreditCard, ArrowLeft,
-  Pencil, ShieldCheck, Eye,
+  Pencil, ShieldCheck, Eye, FileText,
 } from "lucide-react";
 import { Button, Input } from "@/components/ui";
 import { ServiceSearchBox } from "@/components/service-search-box";
@@ -533,25 +533,25 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
           </div>
           <div className="bg-red-50 px-3 py-1.5 space-y-0.5 text-[10px]">
             <p className="font-semibold text-red-800">(-) Chi phí sản xuất</p>
-            {/* Cast chụp: thực tế nếu có nhân sự, chuẩn nếu chưa */}
-            {(photoCast > 0 || stdCastPhoto > 0) && (
+            {/* Cast chụp: thực tế nếu có nhân sự */}
+            {photoCast > 0 && (
               <div className="flex justify-between text-blue-700">
-                <span>📷 Cast chụp{line.photoId ? ` — ${photographers.find(p => p.id === line.photoId)?.name ?? ""}` : " (chuẩn)"}</span>
-                <span className={!line.photoId ? "text-muted-foreground italic" : ""}>{photoCast > 0 ? fmtVND(photoCast) : "—"}</span>
+                <span>📷 Cast chụp{line.photoId ? ` — ${photographers.find(p => p.id === line.photoId)?.name ?? ""}` : ""}</span>
+                <span>{fmtVND(photoCast)}</span>
               </div>
             )}
-            {/* Cast makeup: thực tế nếu có nhân sự, chuẩn nếu chưa */}
-            {(makeupCast > 0 || stdCastMakeup > 0) && (
+            {/* Cast makeup: thực tế nếu có nhân sự */}
+            {makeupCast > 0 && (
               <div className="flex justify-between text-pink-700">
-                <span>💄 Cast makeup{line.makeupId ? ` — ${makeupArtists.find(m => m.id === line.makeupId)?.name ?? ""}` : " (chuẩn)"}</span>
-                <span className={!line.makeupId ? "text-muted-foreground italic" : ""}>{makeupCast > 0 ? fmtVND(makeupCast) : "—"}</span>
+                <span>💄 Cast makeup{line.makeupId ? ` — ${makeupArtists.find(m => m.id === line.makeupId)?.name ?? ""}` : ""}</span>
+                <span>{fmtVND(makeupCast)}</span>
               </div>
             )}
-            {/* PTS cost từ gói (chuẩn) */}
-            {stdCastPts > 0 && (
+            {/* PTS cast */}
+            {ptsCast > 0 && (
               <div className="flex justify-between text-purple-700">
-                <span>🖥️ PTS chỉnh ảnh (chuẩn)</span>
-                <span>{fmtVND(stdCastPts)}</span>
+                <span>🖥️ PTS chỉnh ảnh</span>
+                <span>{fmtVND(ptsCast)}</span>
               </div>
             )}
             {printCost > 0 && <div className="flex justify-between text-red-700"><span>🖨️ In ấn</span><span>{fmtVND(printCost)}</span></div>}
@@ -1191,6 +1191,210 @@ function ShowFormPanel({
 type DetailAddon = { key: string; name: string; price: number };
 type DetailPackage = { id: number; code: string; addons?: DetailAddon[]; products?: string[]; items?: PkgItem[]; description?: string | null; notes?: string | null };
 
+// ─── Xuất hợp đồng PDF ────────────────────────────────────────────────────────
+function fmtVNDStr(n: number) {
+  return n.toLocaleString("vi-VN") + " đ";
+}
+
+function generateContractHTML(booking: Booking, siblings: Booking[]): string {
+  const today = new Date();
+  const todayStr = format(today, "dd/MM/yyyy");
+  const shootDateStr = (() => {
+    try { const d = parseISO(booking.shootDate); return isNaN(d.getTime()) ? booking.shootDate : format(d, "dd/MM/yyyy"); } catch { return booking.shootDate; }
+  })();
+
+  // For multi-service: compute totals from siblings if available
+  const allServices = siblings.length > 0 ? siblings : [booking];
+  const totalAmount = siblings.length > 0
+    ? siblings.reduce((s, b) => s + (b.totalAmount || 0), 0)
+    : booking.totalAmount;
+  const paidAmount = siblings.length > 0
+    ? siblings.reduce((s, b) => s + (b.paidAmount || 0), 0)
+    : booking.paidAmount;
+  const remainingAmount = Math.max(0, totalAmount - paidAmount);
+
+  const servicesHTML = allServices.map((b, idx) => {
+    const bDate = (() => { try { const d = parseISO(b.shootDate); return isNaN(d.getTime()) ? b.shootDate : format(d, "dd/MM/yyyy"); } catch { return b.shootDate; }})();
+    const label = b.serviceLabel || b.packageType || `Dịch vụ ${idx + 1}`;
+    const items = (b.items || []);
+    const surcharges = b.surcharges || [];
+    const surchargesTotal = surcharges.reduce((s, i) => s + (i.amount || 0), 0);
+
+    const itemRows = items.map((it) => `
+      <tr>
+        <td style="padding:8px 10px;border-bottom:1px solid #f0e8f0;">${it.serviceName || "—"}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #f0e8f0;text-align:right;font-weight:600;color:#8B1A6B;">${fmtVNDStr(it.price || 0)}</td>
+      </tr>
+      ${it.photoName ? `<tr><td colspan="2" style="padding:2px 10px 6px;color:#666;font-size:12px;border-bottom:1px solid #f0e8f0;">📷 Nhiếp ảnh: ${it.photoName}${it.makeupName ? ` &nbsp;|&nbsp; 💄 Makeup: ${it.makeupName}` : ""}</td></tr>` : ""}
+    `).join("");
+
+    const surchargeRows = surcharges.map((s) => `
+      <tr>
+        <td style="padding:6px 10px;border-bottom:1px solid #f0e8f0;color:#c0392b;font-style:italic;">+ ${s.name}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #f0e8f0;text-align:right;color:#c0392b;">${fmtVNDStr(s.amount)}</td>
+      </tr>
+    `).join("");
+
+    const multiHeader = allServices.length > 1 ? `
+      <div style="background:#f8f0fa;border-left:4px solid #9b59b6;padding:8px 14px;margin-bottom:8px;border-radius:0 8px 8px 0;">
+        <strong style="color:#6c3483;">📋 ${label}</strong>
+        <span style="color:#888;font-size:12px;margin-left:10px;">Ngày: ${bDate} &nbsp;|&nbsp; Giờ: ${b.shootTime?.slice(0,5) || "—"}</span>
+      </div>
+    ` : "";
+
+    return `
+      ${multiHeader}
+      <table style="width:100%;border-collapse:collapse;margin-bottom:${allServices.length > 1 ? "20px" : "0"};">
+        <thead>
+          <tr style="background:#f8f0fa;">
+            <th style="padding:10px;text-align:left;color:#6c3483;font-size:13px;font-weight:700;border-bottom:2px solid #c39bd3;">Dịch vụ</th>
+            <th style="padding:10px;text-align:right;color:#6c3483;font-size:13px;font-weight:700;border-bottom:2px solid #c39bd3;">Thành tiền</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemRows}
+          ${surchargeRows}
+          ${surchargesTotal > 0 ? `<tr><td style="padding:6px 10px;color:#888;font-size:12px;" colspan="2">Tổng phụ thu: ${fmtVNDStr(surchargesTotal)}</td></tr>` : ""}
+        </tbody>
+      </table>
+    `;
+  }).join('<div style="height:1px;background:#e8d5e8;margin:12px 0;"></div>');
+
+  const contractCode = booking.orderCode || `HD-${booking.id}`;
+
+  return `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hợp Đồng Dịch Vụ - ${contractCode}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Be Vietnam Pro',sans-serif; color:#2c2c2c; background:#fff; font-size:14px; }
+  .page { max-width:800px; margin:0 auto; padding:40px; }
+  @media print {
+    body { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .no-print { display:none !important; }
+    .page { padding:20px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Nút in - ẩn khi in -->
+  <div class="no-print" style="text-align:right;margin-bottom:20px;">
+    <button onclick="window.print()" style="background:#8B1A6B;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">
+      🖨️ In / Lưu PDF
+    </button>
+  </div>
+
+  <!-- Header Studio -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:32px;padding-bottom:20px;border-bottom:3px solid #8B1A6B;">
+    <div>
+      <div style="font-size:28px;font-weight:800;color:#8B1A6B;letter-spacing:-0.5px;">✨ Amazing Studio</div>
+      <div style="color:#888;font-size:13px;margin-top:4px;">Chụp ảnh cưới &amp; cho thuê váy cưới chuyên nghiệp</div>
+      <div style="color:#666;font-size:12px;margin-top:2px;">📍 TP. Hồ Chí Minh &nbsp;·&nbsp; 📞 0900 000 000</div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:22px;font-weight:800;color:#8B1A6B;">HỢP ĐỒNG DỊCH VỤ</div>
+      <div style="font-size:13px;color:#555;margin-top:6px;">Số HĐ: <strong>${contractCode}</strong></div>
+      <div style="font-size:13px;color:#555;">Ngày lập: <strong>${todayStr}</strong></div>
+    </div>
+  </div>
+
+  <!-- Thông tin 2 bên -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px;">
+    <div style="background:#fdf8ff;border:1px solid #e8d5e8;border-radius:12px;padding:18px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9b59b6;margin-bottom:10px;">🏢 Bên cung cấp dịch vụ (Bên A)</div>
+      <div style="font-weight:700;font-size:15px;color:#2c2c2c;">Amazing Studio</div>
+      <div style="color:#555;margin-top:4px;font-size:13px;">Địa chỉ: TP. Hồ Chí Minh</div>
+      <div style="color:#555;font-size:13px;">Điện thoại: 0900 000 000</div>
+    </div>
+    <div style="background:#fdf8ff;border:1px solid #e8d5e8;border-radius:12px;padding:18px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9b59b6;margin-bottom:10px;">👤 Khách hàng (Bên B)</div>
+      <div style="font-weight:700;font-size:15px;color:#2c2c2c;">${booking.customerName}</div>
+      <div style="color:#555;margin-top:4px;font-size:13px;">Điện thoại: ${booking.customerPhone || "—"}</div>
+    </div>
+  </div>
+
+  <!-- Thông tin lịch -->
+  <div style="background:#fdf8ff;border:1px solid #e8d5e8;border-radius:12px;padding:16px 20px;margin-bottom:24px;">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9b59b6;margin-bottom:10px;">📅 Thông tin lịch chụp</div>
+    <div style="display:flex;gap:32px;flex-wrap:wrap;">
+      <div><span style="color:#888;font-size:12px;">Ngày chụp</span><br/><strong style="font-size:15px;">${shootDateStr}</strong></div>
+      <div><span style="color:#888;font-size:12px;">Giờ bắt đầu</span><br/><strong style="font-size:15px;">${booking.shootTime?.slice(0,5) || "—"}</strong></div>
+      ${booking.location ? `<div><span style="color:#888;font-size:12px;">Địa điểm</span><br/><strong style="font-size:15px;">${booking.location}</strong></div>` : ""}
+    </div>
+  </div>
+
+  <!-- Chi tiết dịch vụ -->
+  <div style="margin-bottom:24px;">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9b59b6;margin-bottom:12px;">🎁 Nội dung dịch vụ</div>
+    ${servicesHTML}
+  </div>
+
+  <!-- Tổng tiền -->
+  <div style="background:linear-gradient(135deg,#8B1A6B,#6c3483);border-radius:12px;padding:20px 24px;margin-bottom:28px;color:#fff;">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;opacity:0.8;margin-bottom:14px;">💰 Thanh toán</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <span style="opacity:0.9;">Tổng giá trị hợp đồng</span>
+      <span style="font-size:20px;font-weight:800;">${fmtVNDStr(totalAmount)}</span>
+    </div>
+    <div style="height:1px;background:rgba(255,255,255,0.2);margin:10px 0;"></div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+      <span style="opacity:0.85;">✅ Đã đặt cọc / đã thanh toán</span>
+      <span style="font-weight:600;">${fmtVNDStr(paidAmount)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;">
+      <span style="opacity:0.85;">⏳ Còn lại cần thanh toán</span>
+      <span style="font-weight:700;font-size:16px;">${fmtVNDStr(remainingAmount)}</span>
+    </div>
+  </div>
+
+  ${booking.notes ? `
+  <!-- Ghi chú -->
+  <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#f57f17;margin-bottom:6px;">📝 Ghi chú</div>
+    <div style="color:#555;font-size:13px;line-height:1.6;">${booking.notes}</div>
+  </div>
+  ` : ""}
+
+  <!-- Điều khoản -->
+  <div style="margin-bottom:32px;">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9b59b6;margin-bottom:10px;">📋 Điều khoản &amp; cam kết</div>
+    <div style="background:#f9f9f9;border-radius:10px;padding:16px;font-size:12px;color:#555;line-height:1.8;">
+      <p>1. Bên A cam kết thực hiện đúng và đầy đủ các dịch vụ đã thỏa thuận theo hợp đồng này.</p>
+      <p>2. Bên B thanh toán số tiền còn lại trước hoặc vào ngày chụp theo thỏa thuận.</p>
+      <p>3. Trường hợp Bên B hủy lịch trước 07 ngày, tiền cọc sẽ được hoàn lại 50%. Hủy dưới 07 ngày, tiền cọc sẽ không được hoàn lại.</p>
+      <p>4. Bên A có trách nhiệm bàn giao sản phẩm (ảnh, album) trong thời gian đã cam kết.</p>
+      <p>5. Hai bên cùng ký xác nhận và đồng ý với các điều khoản trên.</p>
+    </div>
+  </div>
+
+  <!-- Chữ ký -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:20px;">
+    <div style="text-align:center;">
+      <div style="font-weight:700;margin-bottom:6px;color:#8B1A6B;">Bên A — Amazing Studio</div>
+      <div style="font-size:12px;color:#888;margin-bottom:60px;">(Ký, ghi rõ họ tên)</div>
+      <div style="border-top:1px dashed #ccc;padding-top:8px;color:#666;font-size:12px;">Xác nhận ngày: ___/___/______</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-weight:700;margin-bottom:6px;color:#8B1A6B;">Bên B — Khách hàng</div>
+      <div style="font-size:12px;color:#888;margin-bottom:60px;">(Ký, ghi rõ họ tên)</div>
+      <div style="border-top:1px dashed #ccc;padding-top:8px;color:#666;font-size:12px;">Xác nhận ngày: ___/___/______</div>
+    </div>
+  </div>
+
+  <div style="text-align:center;margin-top:32px;padding-top:20px;border-top:1px solid #f0e0f0;color:#bbb;font-size:11px;">
+    Hợp đồng được tạo tự động bởi Amazing Studio Management System · ${todayStr}
+  </div>
+</div>
+</body>
+</html>`;
+}
+
 function ShowDetailPanel({
   booking, onClose, onEdit, onDeleteDone, isAdmin,
 }: {
@@ -1272,6 +1476,14 @@ function ShowDetailPanel({
     } finally { setDeleting(false); }
   };
 
+  const handlePrintContract = () => {
+    const html = generateContractHTML(booking, siblings);
+    const win = window.open("", "_blank");
+    if (!win) { alert("Vui lòng cho phép trình duyệt mở cửa sổ mới để xuất hợp đồng."); return; }
+    win.document.write(html);
+    win.document.close();
+  };
+
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background">
       {/* ── Header bar ── */}
@@ -1290,6 +1502,13 @@ function ShowDetailPanel({
           {isAdmin ? <ShieldCheck className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
           {isAdmin ? "Admin" : "Nhân viên"}
         </div>
+        <button
+          onClick={handlePrintContract}
+          className="p-1.5 rounded-lg text-violet-500 hover:text-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950/30 transition-colors flex-shrink-0"
+          title="Xuất hợp đồng PDF"
+        >
+          <FileText className="w-4 h-4" />
+        </button>
         {isAdmin && (
           <>
             <button onClick={handleDelete} disabled={deleting} className="p-1.5 rounded-lg text-destructive/50 hover:text-destructive hover:bg-destructive/10 transition-colors flex-shrink-0" title="Xoá show">
