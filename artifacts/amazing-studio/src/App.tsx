@@ -17,6 +17,7 @@ import SettingsPage from "@/pages/settings";
 import BookingsPage from "@/pages/bookings";
 import ContractsPage from "@/pages/contracts";
 import ReportsPage from "@/pages/reports";
+import PaymentsPage from "@/pages/payments";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -47,6 +48,7 @@ function Router() {
         <Route path="/ai-assistant" component={AiAssistantPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route path="/bookings" component={BookingsPage} />
+        <Route path="/payments" component={PaymentsPage} />
         <Route path="/contracts" component={ContractsPage} />
         <Route path="/reports" component={ReportsPage} />
         <Route component={NotFound} />
