@@ -44,6 +44,8 @@ type ServiceOption = {
   items?: PkgItem[];
   addons?: Addon[];
   products?: string[];
+  serviceType?: string | null;
+  photoCount?: number | null;
 };
 type OrderLine = {
   tempId: string; serviceName: string; serviceId: number | null; serviceKey: string; price: number;
@@ -229,6 +231,28 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
       {useCustom && (
         <Input className="h-9 text-sm" placeholder="Tên dịch vụ..." value={line.serviceName} onChange={e => onChange({ ...line, serviceName: e.target.value })} />
       )}
+
+      {/* Gói: badge loại dịch vụ + số photo — chỉ hiện khi có serviceType */}
+      {isPkg && selectedSvc?.serviceType && (() => {
+        const typeLabel: Record<string, string> = {
+          tiec: "🎊 Tiệc cưới",
+          tiec_le: "🎊 Tiệc + Lễ",
+          phong_su: "📸 Phóng sự",
+          phong_su_luxury: "📸 Phóng sự luxury (2 photo)",
+        };
+        const label = typeLabel[selectedSvc.serviceType] ?? selectedSvc.serviceType;
+        const photoN = selectedSvc?.photoCount ?? 1;
+        return (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1 bg-indigo-100 text-indigo-700 text-[10px] font-semibold px-2 py-1 rounded-full">
+              {label}
+            </span>
+            <span className="inline-flex items-center gap-1 bg-sky-100 text-sky-700 text-[10px] font-semibold px-2 py-1 rounded-full">
+              📷 {photoN} photographer
+            </span>
+          </div>
+        );
+      })()}
 
       {/* Gói: hiện "Bao gồm" */}
       {isPkg && selectedSvc?.items && selectedSvc.items.length > 0 && (
@@ -493,6 +517,7 @@ function ShowFormPanel({
   const { data: pricingPackages = [] } = useQuery<{
     id: number; name: string; price: number; printCost: number; operatingCost: number; salePercent: number;
     items?: PkgItem[]; addons?: Addon[]; products?: string[]; description?: string;
+    serviceType?: string | null; photoCount?: number | null;
   }[]>({ queryKey: ["service-packages"], queryFn: () => fetch(`${BASE}/api/service-packages`).then(r => r.json()) });
   const { data: allStaffRates = [] } = useQuery<StaffRate[]>({ queryKey: ["staff-rates"], queryFn: () => fetch(`${BASE}/api/staff-rates`).then(r => r.json()) });
 
@@ -519,6 +544,8 @@ function ShowFormPanel({
       key: `pkg-${p.id}`, name: p.name, price: p.price, splits: [],
       printCost: p.printCost || 0, operatingCost: p.operatingCost || 0, salePercent: p.salePercent || 0,
       items: p.items || [], addons: p.addons || [], products: p.products || [],
+      serviceType: p.serviceType ?? null,
+      photoCount: p.photoCount ?? null,
     })),
   ];
 

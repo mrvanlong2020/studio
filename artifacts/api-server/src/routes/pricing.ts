@@ -13,7 +13,8 @@ const fmtGroup = (g: { isActive: number; [k: string]: unknown }) => ({
 
 const fmtPkg = (p: {
   price: string; costPrice: string; printCost: string; operatingCost: string;
-  salePercent: string; isActive: number; addons: string | null; products: string | null; [k: string]: unknown
+  salePercent: string; isActive: number; addons: string | null; products: string | null;
+  serviceType?: string | null; photoCount?: number | null; [k: string]: unknown
 }) => ({
   ...p,
   price: parseFloat(p.price),
@@ -24,6 +25,8 @@ const fmtPkg = (p: {
   isActive: Boolean(p.isActive),
   addons: p.addons ? (() => { try { return JSON.parse(p.addons!); } catch { return []; } })() : [],
   products: p.products ? (() => { try { return JSON.parse(p.products!); } catch { return []; } })() : [],
+  serviceType: p.serviceType ?? null,
+  photoCount: p.photoCount ?? 1,
 });
 
 const fmtSurcharge = (s: { price: string; isActive: number; [k: string]: unknown }) => ({
@@ -219,6 +222,110 @@ async function seedIfEmpty() {
 
 seedIfEmpty().catch(console.error);
 
+// ─── Addon: Chụp tiệc cưới ───────────────────────────────────────────────────
+const ADDONS_TIEC_CUOI = JSON.stringify([
+  { key: "ruoc_dau",      name: "Rước dâu",                          price: 500000 },
+  { key: "tang_gio",      name: "Tăng giờ chiều / tối",              price: 2000000 },
+  { key: "tiec_40_ban",   name: "Tiệc trên 40 bàn",                  price: 500000 },
+  { key: "video_hau_truong", name: "Video hậu trường (1-2 phút)",    price: 300000 },
+]);
+
+async function seedTiecCuoiIfMissing() {
+  const existing = await db.select()
+    .from(serviceGroupsTable)
+    .where(eq(serviceGroupsTable.name, "CHỤP TIỆC CƯỚI"))
+    .limit(1);
+  if (existing.length > 0) return;
+
+  // ─── Nhóm 3: CHỤP TIỆC CƯỚI ─────────────────────────────────────────────
+  const [grTiec] = await db.insert(serviceGroupsTable).values([
+    { name: "CHỤP TIỆC CƯỚI", description: "Gói chụp ảnh phóng sự tiệc cưới", sortOrder: 3 },
+  ]).returning();
+
+  const [pkTiec, pkTiecLe, pkPhongSu1, pkPhongSu2] = await db.insert(servicePackagesTable).values([
+    {
+      groupId: grTiec.id, code: "TC-TRUYEN-THONG", name: "Gói truyền thống (tiệc)",
+      price: "3000000", costPrice: "0",
+      printCost: "0", operatingCost: "0", salePercent: "10",
+      description: "1 photographer — chỉ chụp tiệc, không có lễ",
+      serviceType: "tiec", photoCount: 1,
+      addons: ADDONS_TIEC_CUOI,
+      products: JSON.stringify([
+        "200–300 ảnh đã chỉnh màu",
+        "File gốc USB / Google Drive",
+      ]),
+      sortOrder: 1,
+    },
+    {
+      groupId: grTiec.id, code: "TC-TRUYEN-THONG-LE", name: "Gói truyền thống (tiệc + lễ)",
+      price: "3500000", costPrice: "0",
+      printCost: "0", operatingCost: "0", salePercent: "10",
+      description: "1 photographer — chụp cả lễ & tiệc",
+      serviceType: "tiec_le", photoCount: 1,
+      addons: ADDONS_TIEC_CUOI,
+      products: JSON.stringify([
+        "300–400 ảnh đã chỉnh màu (lễ + tiệc)",
+        "File gốc USB / Google Drive",
+      ]),
+      sortOrder: 2,
+    },
+    {
+      groupId: grTiec.id, code: "TC-PHONG-SU-1P", name: "Gói phóng sự 1 photo",
+      price: "4500000", costPrice: "0",
+      printCost: "0", operatingCost: "0", salePercent: "10",
+      description: "1 photographer chuyên nghiệp — phong cách phóng sự báo chí",
+      serviceType: "phong_su", photoCount: 1,
+      addons: ADDONS_TIEC_CUOI,
+      products: JSON.stringify([
+        "400–500 ảnh phóng sự đã chỉnh màu",
+        "20 ảnh retouch kỹ",
+        "File gốc USB / Google Drive",
+      ]),
+      sortOrder: 3,
+    },
+    {
+      groupId: grTiec.id, code: "TC-PHONG-SU-2P", name: "Gói phóng sự 2 photo",
+      price: "7000000", costPrice: "0",
+      printCost: "0", operatingCost: "0", salePercent: "10",
+      description: "2 photographers — phong cách phóng sự — góc chụp toàn diện",
+      serviceType: "phong_su_luxury", photoCount: 2,
+      addons: ADDONS_TIEC_CUOI,
+      products: JSON.stringify([
+        "600–800 ảnh phóng sự đã chỉnh màu (2 góc chụp)",
+        "30 ảnh retouch kỹ",
+        "File gốc USB / Google Drive",
+      ]),
+      sortOrder: 4,
+    },
+  ]).returning();
+
+  // Bao gồm — Gói tiệc
+  await db.insert(packageItemsTable).values([
+    { packageId: pkTiec.id, name: "Nhiếp ảnh gia", quantity: "1", unit: "người", sortOrder: 1 },
+    { packageId: pkTiec.id, name: "Chụp tiệc",     quantity: "1", unit: "buổi",  sortOrder: 2 },
+  ]);
+  // Bao gồm — Gói tiệc + lễ
+  await db.insert(packageItemsTable).values([
+    { packageId: pkTiecLe.id, name: "Nhiếp ảnh gia",           quantity: "1", unit: "người", sortOrder: 1 },
+    { packageId: pkTiecLe.id, name: "Chụp lễ gia tiên / cưới", quantity: "1", unit: "buổi",  sortOrder: 2 },
+    { packageId: pkTiecLe.id, name: "Chụp tiệc",               quantity: "1", unit: "buổi",  sortOrder: 3 },
+  ]);
+  // Bao gồm — Gói phóng sự 1 photo
+  await db.insert(packageItemsTable).values([
+    { packageId: pkPhongSu1.id, name: "Nhiếp ảnh gia phóng sự", quantity: "1", unit: "người", sortOrder: 1 },
+    { packageId: pkPhongSu1.id, name: "Chụp lễ + tiệc",         quantity: "1", unit: "buổi",  sortOrder: 2 },
+  ]);
+  // Bao gồm — Gói phóng sự 2 photo
+  await db.insert(packageItemsTable).values([
+    { packageId: pkPhongSu2.id, name: "Nhiếp ảnh gia phóng sự", quantity: "2", unit: "người", notes: "2 góc chụp đồng thời", sortOrder: 1 },
+    { packageId: pkPhongSu2.id, name: "Chụp lễ + tiệc",         quantity: "1", unit: "buổi",  sortOrder: 2 },
+  ]);
+
+  console.log("[seed] CHỤP TIỆC CƯỚI — 4 gói đã được thêm.");
+}
+
+seedTiecCuoiIfMissing().catch(console.error);
+
 // ─── Service groups ─────────────────────────────────────────────────────────
 router.get("/service-groups", async (_req, res) => {
   const groups = await db.select().from(serviceGroupsTable).orderBy(asc(serviceGroupsTable.sortOrder));
@@ -277,6 +384,7 @@ router.post("/service-packages", async (req, res) => {
   const {
     groupId, code, name, price, costPrice, printCost, operatingCost, salePercent,
     description, notes, addons, products, isActive, sortOrder, items = [],
+    serviceType, photoCount,
   } = req.body;
   const [pkg] = await db.insert(servicePackagesTable).values({
     groupId: groupId ? parseInt(groupId) : null,
@@ -291,6 +399,8 @@ router.post("/service-packages", async (req, res) => {
     products: products ? (typeof products === "string" ? products : JSON.stringify(products)) : null,
     isActive: isActive !== false ? 1 : 0,
     sortOrder: sortOrder ?? 0,
+    serviceType: serviceType ?? null,
+    photoCount: photoCount ? parseInt(photoCount) : 1,
   }).returning();
 
   if (items.length > 0) {
@@ -316,6 +426,7 @@ router.put("/service-packages/:id", async (req, res) => {
   const {
     groupId, code, name, price, costPrice, printCost, operatingCost, salePercent,
     description, notes, addons, products, isActive, sortOrder, items,
+    serviceType, photoCount,
   } = req.body;
 
   const update: Record<string, unknown> = {};
@@ -333,6 +444,8 @@ router.put("/service-packages/:id", async (req, res) => {
   if (products !== undefined) update.products = products ? (typeof products === "string" ? products : JSON.stringify(products)) : null;
   if (isActive !== undefined) update.isActive = isActive ? 1 : 0;
   if (sortOrder !== undefined) update.sortOrder = sortOrder;
+  if (serviceType !== undefined) update.serviceType = serviceType ?? null;
+  if (photoCount !== undefined) update.photoCount = photoCount ? parseInt(photoCount) : 1;
 
   const [pkg] = await db.update(servicePackagesTable).set(update)
     .where(eq(servicePackagesTable.id, id)).returning();

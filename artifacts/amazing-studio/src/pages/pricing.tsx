@@ -18,6 +18,9 @@ type ServicePackage = {
   printCost: number; operatingCost: number; salePercent: number;
   description: string; notes: string;
   isActive: boolean; sortOrder: number; items: PackageItem[];
+  serviceType?: string | null; photoCount?: number | null;
+  addons?: { key: string; name: string; price: number }[];
+  products?: string[];
 };
 type ServiceGroup = { id: number; name: string; description: string; isActive: boolean; sortOrder: number };
 type Surcharge = { id: number; name: string; category: string; price: number; unit: string; description: string; isActive: boolean; sortOrder: number };
@@ -269,6 +272,19 @@ export default function PricingPage() {
                               <div>
                                 <p className="font-semibold text-sm">{pkg.name}</p>
                                 {pkg.code && <p className="text-xs text-muted-foreground">{pkg.code}</p>}
+                                {/* Badge loại dịch vụ & số photo */}
+                                {pkg.serviceType && (() => {
+                                  const typeLabel: Record<string, string> = {
+                                    tiec: "🎊 Tiệc cưới", tiec_le: "🎊 Tiệc + Lễ",
+                                    phong_su: "📸 Phóng sự", phong_su_luxury: "📸 Phóng sự luxury",
+                                  };
+                                  return (
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      <span className="text-[9px] px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-semibold">{typeLabel[pkg.serviceType!] ?? pkg.serviceType}</span>
+                                      <span className="text-[9px] px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded-full font-semibold">📷 {pkg.photoCount ?? 1} photo</span>
+                                    </div>
+                                  );
+                                })()}
                               </div>
                               {!pkg.isActive && <span className="text-[10px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground">Ẩn</span>}
                             </div>
