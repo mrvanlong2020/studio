@@ -47,10 +47,13 @@ A wedding photography studio and wedding dress rental management system for "Ama
   - `staffType` field: "official" (nhân viên chính thức) or "freelancer" (CTV)
   - Roles: admin, photographer, makeup, sale, photoshop, assistant, marketing (jsonb array)
   - Real staff seeded: 5 chính thức (Trần Chí, Trung, Hoa, Quân, Diệu Mai) + 15 CTV photographers
-  - Per-staff individual pricing via `staff_rate_prices` table (staffId × role × taskKey → rate + rateType)
+  - Per-staff individual pricing via `staff_rate_prices` table (staffId × role × taskKey → rate + rateType) — OLD system, still used as fallback
+  - **NEW: Cast theo gói (T001)**: `staff_cast_rates(staffId, role, packageId, amount)` — cast cost per employee+role+package. Section G in staff profile shows package-based cast sheet with tabs (photographer/makeup/photoshop). Calendar uses `lookupCastByPkg()` first, falls back to old system. API: `/api/staff-cast` (GET/POST bulk/DELETE).
+  - `costCastPhoto/Makeup/Pts` columns REMOVED from `service_packages` schema (DB columns still exist, ignored by Drizzle)
   - Filter by type (Tất cả / Chính thức / CTV) and role in staff list
-  - DB: `staff.roles` (jsonb), `staff.staffType`, `staff_rate_prices`, `staff_job_earnings`
-  - API: `/api/staff-rates` (bulk upsert), `/api/job-earnings`
+  - DB: `staff.roles` (jsonb), `staff.staffType`, `staff_rate_prices`, `staff_job_earnings`, `staff_cast_rates`
+  - API: `/api/staff-rates` (bulk upsert old), `/api/job-earnings`, `/api/staff-cast` (new packageId-based cast)
+  - Tasks schema: Added `servicePackageId`, `role`, `taskType` columns to `tasks` table
   - Auto-compute: booking → "completed" → earnings auto-generated per assigned staff using per-staff rates
   - Calendar: `photoTask`/`makeupTask`/`saleTask`/`photoshopTask` stored per booking item + `assignedStaff`
 

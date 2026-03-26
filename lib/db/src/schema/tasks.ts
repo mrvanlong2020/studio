@@ -3,6 +3,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
 import { bookingsTable } from "./bookings";
+import { servicePackagesTable } from "./pricing";
 
 export const staffTable = pgTable("staff", {
   id: serial("id").primaryKey(),
@@ -31,6 +32,9 @@ export const tasksTable = pgTable("tasks", {
   category: text("category").notNull().default("other"),
   assigneeId: integer("assignee_id").references(() => staffTable.id),
   bookingId: integer("booking_id").references(() => bookingsTable.id),
+  servicePackageId: integer("service_package_id").references(() => servicePackagesTable.id),
+  role: text("role"),          // photographer | makeup | photoshop | support | ...
+  taskType: text("task_type"), // chup | makeup | pts | support | in | giao_file | goi_khach
   priority: text("priority").notNull().default("medium"),
   status: text("status").notNull().default("todo"),
   dueDate: date("due_date"),

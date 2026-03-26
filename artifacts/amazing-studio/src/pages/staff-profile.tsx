@@ -54,6 +54,14 @@ interface RateEntry {
   rate: number | null; rateType: string; notes?: string | null;
 }
 
+interface CastRate {
+  id: number; staffId: number; role: string; packageId: number; amount: number | null;
+}
+
+interface ServicePackageBrief {
+  id: number; code: string; name: string; price: number; serviceType?: string | null;
+}
+
 interface LeaveRequest {
   id: number; staffId: number; startDate: string; endDate: string;
   reason: string; status: string; approvedByName?: string;
@@ -187,9 +195,8 @@ export default function StaffProfilePage() {
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [castSheet, setCastSheet] = useState(false);
   const [castNewRole, setCastNewRole] = useState("photographer");
-  const [castNewTaskKey, setCastNewTaskKey] = useState("");
-  const [castNewAmount, setCastNewAmount] = useState("");
-  const [castEditAmounts, setCastEditAmounts] = useState<Record<number, string>>({});
+  const [castPkgEdits, setCastPkgEdits] = useState<Record<number, string>>({}); // packageId → amount string
+  const [castSaving, setCastSaving] = useState(false);
 
   // Avatar lightbox & menu
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -243,34 +250,42 @@ export default function StaffProfilePage() {
     },
   });
 
-  const addCastRate = useMutation({
-    mutationFn: ({ role, taskKey, taskName, rate, rateType }: { role: string; taskKey: string; taskName: string; rate: number; rateType: string }) =>
-      fetchJson("/api/staff-rates/bulk", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ staffId, rates: [{ role, taskKey, taskName, rate, rateType }] }),
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["staff-profile", staffId] });
-      setCastNewAmount(""); setCastNewTaskKey("");
-    },
+  // ─── Cast rates (new packageId-based system) ────────────────────────────────
+  const { data: allPackages = [] } = useQuery<ServicePackageBrief[]>({
+    queryKey: ["service-packages-brief"],
+    queryFn: () => fetchJson("/api/service-packages"),
+    staleTime: 60_000,
   });
 
-  const updateCastRate = useMutation({
-    mutationFn: ({ id, role, taskKey, taskName, rate, rateType }: { id: number; role: string; taskKey: string; taskName: string; rate: number; rateType: string }) =>
-      fetchJson("/api/staff-rates/bulk", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ staffId, rates: [{ role, taskKey, taskName, rate, rateType }] }),
-      }),
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["staff-profile", staffId] });
-      setCastEditAmounts(prev => { const n = { ...prev }; delete n[vars.id]; return n; });
-    },
+  const { data: castRates = [], refetch: refetchCast } = useQuery<CastRate[]>({
+    queryKey: ["staff-cast", staffId],
+    queryFn: () => fetchJson(`/api/staff-cast?staffId=${staffId}`),
+    enabled: castSheet && !!staffId,
   });
+
+  const saveCastBulk = async (role: string, edits: Record<number, string>) => {
+    setCastSaving(true);
+    try {
+      const rates = Object.entries(edits).map(([pkgId, amt]) => ({
+        packageId: parseInt(pkgId),
+        amount: amt.trim() === "" ? null : parseFloat(amt),
+      }));
+      await fetchJson("/api/staff-cast/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ staffId, role, rates }),
+      });
+      await refetchCast();
+      setCastPkgEdits({});
+    } finally {
+      setCastSaving(false);
+    }
+  };
 
   const deleteCastRate = useMutation({
     mutationFn: (rateId: number) =>
-      fetchJson(`/api/staff-rates/${rateId}`, { method: "DELETE" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["staff-profile", staffId] }),
+      fetchJson(`/api/staff-cast/${rateId}`, { method: "DELETE" }),
+    onSuccess: () => refetchCast(),
   });
 
   const handleAvatarUpload = async (base64: string) => {
@@ -1052,138 +1067,101 @@ export default function StaffProfilePage() {
       </Sheet>
 
       {/* ── Cast Sheet (Admin) ─────────────────────────────────────────── */}
-      <Sheet open={castSheet} onOpenChange={setCastSheet}>
-        <SheetContent side="bottom" className="rounded-t-3xl max-h-[92vh] overflow-y-auto">
+      <Sheet open={castSheet} onOpenChange={open => { setCastSheet(open); if (!open) setCastPkgEdits({}); }}>
+        <SheetContent side="bottom" className="rounded-t-3xl max-h-[94vh] overflow-y-auto">
           <SheetHeader className="mb-4">
-            <SheetTitle>Chỉnh sửa bảng cast — {staff.name}</SheetTitle>
+            <SheetTitle>Bảng Cast theo Gói — {staff.name}</SheetTitle>
           </SheetHeader>
-          <div className="space-y-5 pb-4">
-            {/* Existing rates grouped by role */}
-            {(["photographer","makeup","photoshop"] as const).map(role => {
-              const roleRates = rates.filter(r => r.role === role || (role === "photographer" && r.role === "photo"));
-              if (roleRates.length === 0 && role !== "photographer") return null;
+
+          {/* Role tabs */}
+          <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+            {[
+              { value: "photographer", label: "📷 Nhiếp ảnh" },
+              { value: "makeup", label: "💄 Makeup" },
+              { value: "photoshop", label: "🖥️ PTS" },
+            ].map(r => (
+              <button
+                key={r.value}
+                onClick={() => { setCastNewRole(r.value); setCastPkgEdits({}); }}
+                className={cn(
+                  "shrink-0 text-sm px-4 py-1.5 rounded-full border font-medium transition-colors",
+                  castNewRole === r.value
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-muted/40 text-muted-foreground border-transparent hover:border-border"
+                )}
+              >{r.label}</button>
+            ))}
+          </div>
+
+          {/* Package list */}
+          <div className="space-y-2 pb-24">
+            {allPackages.length === 0 && (
+              <p className="text-sm text-muted-foreground italic text-center py-8">Chưa có gói dịch vụ nào</p>
+            )}
+            {allPackages.map(pkg => {
+              const saved = castRates.find(c => c.role === castNewRole && c.packageId === pkg.id);
+              const editing = pkg.id in castPkgEdits;
+              const editVal = castPkgEdits[pkg.id] ?? "";
+              const displayAmt = saved?.amount !== null && saved?.amount !== undefined ? saved.amount : null;
+
               return (
-                <div key={role} className="space-y-2">
-                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                    <span>{ROLE_ICONS[role]}</span> {ROLE_LABELS[role]}
-                    {role === "photoshop" && <span className="text-[10px] text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded">/ tấm ảnh</span>}
-                  </p>
-                  {roleRates.length === 0 ? (
-                    <p className="text-xs text-muted-foreground italic pl-2">Chưa có cast cho vai này</p>
+                <div key={pkg.id} className="flex items-center gap-3 bg-muted/30 rounded-xl px-4 py-2.5">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{pkg.name}</p>
+                    <p className="text-[11px] text-muted-foreground">{pkg.code} · {pkg.price.toLocaleString("vi-VN")}đ</p>
+                  </div>
+                  {editing ? (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <input
+                        type="number"
+                        autoFocus
+                        placeholder="Số tiền..."
+                        className="w-28 h-8 text-sm border border-input rounded-lg px-2 text-right bg-background"
+                        value={editVal}
+                        onChange={e => setCastPkgEdits(prev => ({ ...prev, [pkg.id]: e.target.value }))}
+                      />
+                      <button
+                        onClick={() => saveCastBulk(castNewRole, { [pkg.id]: editVal })}
+                        disabled={castSaving}
+                        className="text-xs px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground font-semibold disabled:opacity-50"
+                      >✓</button>
+                      <button
+                        onClick={() => setCastPkgEdits(prev => { const n = { ...prev }; delete n[pkg.id]; return n; })}
+                        className="text-xs px-2.5 py-1.5 rounded-lg bg-muted text-muted-foreground"
+                      >✕</button>
+                    </div>
                   ) : (
-                    <div className="space-y-1.5">
-                      {roleRates.map(r => {
-                        const editing = r.id in castEditAmounts;
-                        return (
-                          <div key={r.id} className="flex items-center gap-2 bg-muted/30 rounded-xl px-3 py-2">
-                            <span className="flex-1 text-sm">{r.taskName}</span>
-                            {editing ? (
-                              <>
-                                <input
-                                  type="number"
-                                  className="w-28 h-8 text-sm border border-input rounded-lg px-2 text-right bg-background"
-                                  value={castEditAmounts[r.id] ?? ""}
-                                  onChange={e => setCastEditAmounts(prev => ({ ...prev, [r.id]: e.target.value }))}
-                                  autoFocus
-                                />
-                                <button
-                                  onClick={() => updateCastRate.mutate({ id: r.id, role: r.role, taskKey: r.taskKey, taskName: r.taskName, rate: parseFloat(castEditAmounts[r.id]) || 0, rateType: r.rateType })}
-                                  className="text-xs px-2 py-1.5 rounded-lg bg-primary text-primary-foreground font-semibold"
-                                  disabled={updateCastRate.isPending}
-                                >✓</button>
-                                <button
-                                  onClick={() => setCastEditAmounts(prev => { const n = { ...prev }; delete n[r.id]; return n; })}
-                                  className="text-xs px-2 py-1.5 rounded-lg bg-muted text-muted-foreground"
-                                >✕</button>
-                              </>
-                            ) : (
-                              <>
-                                <span className="text-sm font-semibold text-emerald-700 tabular-nums min-w-[5rem] text-right">
-                                  {r.rate !== null ? r.rate.toLocaleString("vi-VN") + (r.rateType === "per_photo" ? "đ/tấm" : "đ") : "—"}
-                                </span>
-                                <button
-                                  onClick={() => setCastEditAmounts(prev => ({ ...prev, [r.id]: String(r.rate ?? "") }))}
-                                  className="p-1.5 rounded-lg hover:bg-muted"
-                                ><Pencil className="w-3.5 h-3.5 text-muted-foreground" /></button>
-                                <button
-                                  onClick={() => { if (confirm("Xoá cast này?")) deleteCastRate.mutate(r.id); }}
-                                  className="p-1.5 rounded-lg hover:bg-destructive/10"
-                                ><Trash2 className="w-3.5 h-3.5 text-destructive/60" /></button>
-                              </>
-                            )}
-                          </div>
-                        );
-                      })}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className={cn(
+                        "text-sm font-semibold tabular-nums min-w-[4.5rem] text-right",
+                        displayAmt !== null ? "text-emerald-700" : "text-muted-foreground/50"
+                      )}>
+                        {displayAmt !== null ? displayAmt.toLocaleString("vi-VN") + "đ" : "—"}
+                      </span>
+                      <button
+                        onClick={() => setCastPkgEdits(prev => ({ ...prev, [pkg.id]: displayAmt !== null ? String(displayAmt) : "" }))}
+                        className="p-1.5 rounded-lg hover:bg-muted"
+                      ><Pencil className="w-3.5 h-3.5 text-muted-foreground" /></button>
+                      {saved && (
+                        <button
+                          onClick={() => { if (confirm("Xoá cast này?")) deleteCastRate.mutate(saved.id); }}
+                          className="p-1.5 rounded-lg hover:bg-destructive/10"
+                        ><Trash2 className="w-3.5 h-3.5 text-destructive/60" /></button>
+                      )}
                     </div>
                   )}
                 </div>
               );
             })}
+          </div>
 
-            {/* Add new cast entry */}
-            <div className="pt-3 border-t border-border space-y-3">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                <Plus className="w-3.5 h-3.5" /> Thêm nhiệm vụ cast
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[11px] text-muted-foreground mb-1">Vai trò</label>
-                  <select
-                    className="w-full h-9 border border-input rounded-lg px-2 text-sm bg-background"
-                    value={castNewRole}
-                    onChange={e => { setCastNewRole(e.target.value); setCastNewTaskKey(""); }}
-                  >
-                    <option value="photographer">📷 Nhiếp ảnh</option>
-                    <option value="makeup">💄 Makeup</option>
-                    <option value="photoshop">🖥️ PTS chỉnh ảnh</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[11px] text-muted-foreground mb-1">Nhiệm vụ</label>
-                  <select
-                    className="w-full h-9 border border-input rounded-lg px-2 text-sm bg-background"
-                    value={castNewTaskKey}
-                    onChange={e => setCastNewTaskKey(e.target.value)}
-                  >
-                    <option value="">-- Chọn nhiệm vụ --</option>
-                    {(TASK_TEMPLATES[castNewRole] ?? []).map(t => (
-                      <option key={t.key} value={t.key}>{t.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="flex gap-2 items-end">
-                <div className="flex-1">
-                  <label className="block text-[11px] text-muted-foreground mb-1">
-                    Số tiền cast (đ){castNewRole === "photoshop" ? " / tấm" : ""}
-                  </label>
-                  <input
-                    type="number"
-                    className="w-full h-9 border border-input rounded-lg px-3 text-sm bg-background"
-                    placeholder="Nhập số tiền..."
-                    value={castNewAmount}
-                    onChange={e => setCastNewAmount(e.target.value)}
-                  />
-                </div>
-                <button
-                  disabled={!castNewTaskKey || !castNewAmount || addCastRate.isPending}
-                  onClick={() => {
-                    const tmpl = (TASK_TEMPLATES[castNewRole] ?? []).find(t => t.key === castNewTaskKey);
-                    if (!tmpl) return;
-                    addCastRate.mutate({
-                      role: castNewRole,
-                      taskKey: castNewTaskKey,
-                      taskName: tmpl.name,
-                      rate: parseFloat(castNewAmount) || 0,
-                      rateType: tmpl.rateType,
-                    });
-                  }}
-                  className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
-                >
-                  {addCastRate.isPending ? "..." : "+ Thêm"}
-                </button>
-              </div>
-            </div>
+          {/* Summary footer */}
+          <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border px-4 py-3">
+            <p className="text-xs text-muted-foreground text-center">
+              Đã thiết lập: <span className="font-semibold text-foreground">
+                {castRates.filter(c => c.role === castNewRole && c.amount !== null).length}
+              </span> / {allPackages.length} gói
+            </p>
           </div>
         </SheetContent>
       </Sheet>

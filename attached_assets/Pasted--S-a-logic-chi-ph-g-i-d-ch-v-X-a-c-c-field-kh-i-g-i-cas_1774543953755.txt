@@ -1,0 +1,63 @@
+
+Sửa logic chi phí gói dịch vụ:
+
+Xóa các field khỏi gói: cast chụp, cast makeup, cast photoshop.
+Gói dịch vụ chỉ giữ chi phí cố định: in ấn, vận hành, sale (%).
+Cast là chi phí biến đổi → lưu ở bảng cast nhân viên.
+Cast phụ thuộc: employee + role + package.
+Khi chọn nhân viên trong đơn → load cast đúng theo gói.
+Tổng chi phí = chi phí cố định + cast của nhân viên.
+Lợi nhuận = giá bán - tổng chi phí.
+UI gói hiển thị: “cast biến đổi theo nhân sự”, không hiển thị số cố định.
+
+Mục tiêu:
+Quản lý cast theo công thức:
+Nhân viên + Vai trò + Gói dịch vụ = 1 mức cast
+
+Logic:
+- Mỗi nhóm dịch vụ có nhiều gói (ví dụ chụp cổng có 3 gói)
+- Khi vào nhân viên → chọn vai trò + nhóm dịch vụ
+- Hệ thống phải tự sinh toàn bộ các gói thuộc nhóm đó
+- Mỗi gói có 1 ô nhập cast riêng
+
+Ví dụ:
+Chụp cổng có 3 gói:
+- Basic 2.9tr
+- Premium 3.9tr
+- Luxury 5.9tr
+
+Nhân viên Trung → vai trò Nhiếp ảnh → chọn nhóm chụp cổng
+→ hiển thị:
+- Cast Basic
+- Cast Premium
+- Cast Luxury
+
+Data:
+- Lưu theo: employeeId + role + packageId
+- Không dùng text làm key
+- Nếu chưa nhập cast thì để null
+
+Áp dụng:
+- Khi tạo đơn hàng → chọn gói + nhân viên
+→ tự động lấy cast đúng theo gói
+
+UI:
+- Không nhập cast kiểu nhiệm vụ rời nữa
+- Chỉ chọn vai trò + nhóm → tự sinh danh sách gói
+Sửa module Giao việc theo mô hình liên kết Show (Đơn hàng), không dùng task rời.
+
+Mỗi task bắt buộc có: customerId, showId, servicePackageId, assignedEmployeeId, role, taskType, status, dueDate.
+Khi bấm “Thêm việc” → phải chọn khách hàng hoặc mã đơn / show trước.
+Sau khi chọn show → load toàn bộ dịch vụ trong đơn để chọn đúng job.
+Cho chọn loại việc: chụp, makeup, photoshop, support, in, giao file, gọi khách...
+Cho chọn nhân viên phù hợp theo vai trò (lọc theo role).
+Lưu task phải gắn chặt với show, không tạo task độc lập.
+Thêm nút: “Tạo task từ show” → auto sinh các việc theo nhân sự đã phân công.
+Kanban phải load task thật từ database, không dùng dữ liệu rời.
+Mỗi card hiển thị: tên việc + khách + mã đơn + người làm + deadline.
+Khi task = DONE → cập nhật ngược trạng thái vào show (đã chụp / đã makeup / đã hậu kỳ...).
+Trong màn hình show → hiển thị danh sách task liên quan + trạng thái.
+Nhân viên chỉ thấy task của mình, không thấy giá tiền / lợi nhuận.
+
+
+Thêm nút “Xuất hợp đồng” trong màn hình chi tiết show. Khi bấm, hệ thống tạo hợp đồng dịch vụ tự động từ dữ liệu khách hàng + show + các dòng dịch vụ đã chọn. Hợp đồng phải bao gồm: thông tin bên A (khách), bên B (Amazing Studio), danh sách các hạng mục theo từng ngày (tên gói, ngày, giờ, địa điểm, giá, phụ thu, thành tiền, mô tả, bao gồm, sản phẩm nhận được), tổng tiền, tiền cọc, tiền còn lại, và điều khoản chung. Cuối hợp đồng có 2 ô ký: bên A (khách hàng) và bên B (Trần Cao Minh Chí). Sau khi tạo, hiển thị trang preview có nút In và Tải PDF. Lưu lịch sử hợp đồng vào hệ thống, hiển thị lại trong show. Cho phép gộp nhiều show của cùng một khách thành 1 hợp đồng. Chỉ admin được phép xuất hợp đồng.

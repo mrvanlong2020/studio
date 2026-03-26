@@ -18,6 +18,7 @@ import payrollsRouter from "./payrolls";
 import pricingRouter from "./pricing";
 import salaryRatesRouter from "./salary-rates";
 import staffRatesRouter from "./staff-rates";
+import staffCastRouter from "./staff-cast";
 import jobEarningsRouter from "./job-earnings";
 import staffProfileRouter from "./staff-profile";
 
@@ -42,6 +43,7 @@ router.use(payrollsRouter);
 router.use(pricingRouter);
 router.use(salaryRatesRouter);
 router.use(staffRatesRouter);
+router.use(staffCastRouter);
 router.use(jobEarningsRouter);
 router.use(staffProfileRouter);
 

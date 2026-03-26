@@ -53,7 +53,6 @@ type PkgItem = { name: string; quantity: string; unit?: string; notes?: string }
 type ServiceOption = {
   key: string; name: string; price: number;
   splits?: ServiceSplit[];
-  costCastPhoto?: number; costCastMakeup?: number; costPts?: number;
   printCost?: number; operatingCost?: number; salePercent?: number;
   items?: PkgItem[];
   addons?: Addon[];
@@ -161,22 +160,29 @@ function fmtVND(n: number) {
 }
 
 type StaffRate = { staffId: number; role: string; taskKey: string; rate: number | null; rateType: string };
+type CastRatePkg = { id: number; staffId: number; role: string; packageId: number; amount: number | null };
 
 function lookupRate(staffId: number | null, role: string, taskKey: string, rates: StaffRate[]): number {
   if (!staffId) return 0;
-  // Try exact taskKey first, then fallback to mac_dinh
   const exact = rates.find(r => r.staffId === staffId && r.role === role && r.taskKey === taskKey && r.rate != null);
   if (exact) return exact.rateType === "percent" ? 0 : (exact.rate ?? 0);
   const fallback = rates.find(r => r.staffId === staffId && r.role === role && r.taskKey === "mac_dinh" && r.rate != null);
   return fallback?.rate ?? 0;
 }
 
-function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRates, onChange, onRemove }: {
+function lookupCastByPkg(staffId: number | null, role: string, packageId: number | null, castRates: CastRatePkg[]): number | null {
+  if (!staffId || !packageId) return null;
+  const found = castRates.find(c => c.staffId === staffId && c.role === role && c.packageId === packageId);
+  return found?.amount ?? null;
+}
+
+function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRates, allCastRates, onChange, onRemove }: {
   line: OrderLine;
   photographers: Staff[];
   makeupArtists: Staff[];
   services: ServiceOption[];
   allStaffRates: StaffRate[];
+  allCastRates: CastRatePkg[];
   onChange: (u: OrderLine) => void;
   onRemove?: () => void;
 }) {
@@ -185,25 +191,28 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
   const selectedSvc = line.serviceKey ? services.find(s => s.key === line.serviceKey) : null;
   const isPkg = !!selectedSvc?.key?.startsWith("pkg-");
 
-  // Cast nhân sự thực tế (từ bảng giá cá nhân)
-  const actualPhotoCast = lookupRate(line.photoId, "photographer", line.photoTask || "mac_dinh", allStaffRates);
-  const actualMakeupCast = lookupRate(line.makeupId, "makeup", line.makeupTask || "mac_dinh", allStaffRates);
+  // Extract packageId from serviceKey (format: "pkg-{id}")
+  const packageId = selectedSvc?.key?.startsWith("pkg-") ? parseInt(selectedSvc.key.replace("pkg-", "")) : null;
 
-  // Chi phí sản xuất chuẩn từ gói
-  const stdCastPhoto = selectedSvc?.costCastPhoto || 0;
-  const stdCastMakeup = selectedSvc?.costCastMakeup || 0;
-  const stdCastPts = selectedSvc?.costPts || 0;
+  // Cast nhân sự thực tế — ưu tiên bảng cast theo gói (staff_cast_rates), fallback sang staff_rate_prices
+  const actualPhotoCastPkg = lookupCastByPkg(line.photoId, "photographer", packageId, allCastRates);
+  const actualMakeupCastPkg = lookupCastByPkg(line.makeupId, "makeup", packageId, allCastRates);
+  const actualPtsCastPkg = lookupCastByPkg(line.photoId, "photoshop", packageId, allCastRates);
 
-  // Dùng chi phí thực tế nếu có nhân sự, còn không dùng chi phí chuẩn
-  const photoCast = line.photoId ? actualPhotoCast : stdCastPhoto;
-  const makeupCast = line.makeupId ? actualMakeupCast : stdCastMakeup;
+  // Fallback sang hệ thống cũ (staff_rate_prices) nếu chưa có cast theo gói
+  const actualPhotoCastOld = lookupRate(line.photoId, "photographer", line.photoTask || "mac_dinh", allStaffRates);
+  const actualMakeupCastOld = lookupRate(line.makeupId, "makeup", line.makeupTask || "mac_dinh", allStaffRates);
+
+  const photoCast = line.photoId ? (actualPhotoCastPkg ?? actualPhotoCastOld) : 0;
+  const makeupCast = line.makeupId ? (actualMakeupCastPkg ?? actualMakeupCastOld) : 0;
+  const ptsCast = line.photoId ? (actualPtsCastPkg ?? 0) : 0;
 
   // Chi phí cố định gói
   const printCost = selectedSvc?.printCost || 0;
   const operatingCost = selectedSvc?.operatingCost || 0;
   const salePercent = selectedSvc?.salePercent || 0;
   const saleAmt = Math.round(line.price * salePercent / 100);
-  const totalCost = stdCastPts + printCost + operatingCost + saleAmt + photoCast + makeupCast;
+  const totalCost = ptsCast + printCost + operatingCost + saleAmt + photoCast + makeupCast;
   const profit = line.price - totalCost;
 
   // Addon state — computed from line.selectedAddons + selectedSvc.addons
@@ -640,12 +649,12 @@ function ShowFormPanel({
   const { data: services = [] } = useQuery<Service[]>({ queryKey: ["services"], queryFn: () => fetch(`${BASE}/api/services`).then(r => r.json()) });
   const { data: pricingPackages = [] } = useQuery<{
     id: number; name: string; price: number;
-    costCastPhoto: number; costCastMakeup: number; costPts: number;
     printCost: number; operatingCost: number; salePercent: number;
     items?: PkgItem[]; addons?: Addon[]; products?: string[]; description?: string | null; notes?: string | null;
     serviceType?: string | null; photoCount?: number | null; includesMakeup?: boolean;
   }[]>({ queryKey: ["service-packages"], queryFn: () => fetch(`${BASE}/api/service-packages`).then(r => r.json()) });
   const { data: allStaffRates = [] } = useQuery<StaffRate[]>({ queryKey: ["staff-rates"], queryFn: () => fetch(`${BASE}/api/staff-rates`).then(r => r.json()) });
+  const { data: allCastRates = [] } = useQuery<CastRatePkg[]>({ queryKey: ["staff-cast-all"], queryFn: () => fetch(`${BASE}/api/staff-cast`).then(r => r.json()), staleTime: 60_000 });
 
   // Support both old single-role and new multi-role staff
   const hasRole = (s: Staff, role: string) => s.roles?.includes(role) || s.role === role;
@@ -668,9 +677,6 @@ function ShowFormPanel({
     ...services.map(s => ({ key: `svc-${s.id}`, name: s.name, price: s.price, splits: s.splits || [] })),
     ...pricingPackages.map(p => ({
       key: `pkg-${p.id}`, name: p.name, price: p.price, splits: [],
-      costCastPhoto: p.costCastPhoto || 0,
-      costCastMakeup: p.costCastMakeup || 0,
-      costPts: p.costPts || 0,
       printCost: p.printCost || 0, operatingCost: p.operatingCost || 0, salePercent: p.salePercent || 0,
       items: p.items || [], addons: p.addons || [], products: p.products || [],
       serviceType: p.serviceType ?? null,
@@ -1003,7 +1009,7 @@ function ShowFormPanel({
                       <label className="text-[10px] text-muted-foreground mb-1 block">Gói / dịch vụ</label>
                       <div className="space-y-1.5">
                         {sub.items.map(line => (
-                          <OrderLineRow key={line.tempId} line={line} photographers={photographers} makeupArtists={makeupArtists} services={allServices} allStaffRates={allStaffRates}
+                          <OrderLineRow key={line.tempId} line={line} photographers={photographers} makeupArtists={makeupArtists} services={allServices} allStaffRates={allStaffRates} allCastRates={allCastRates}
                             onChange={updated => updateSubDraft(sub.id, { items: sub.items.map(l => l.tempId === line.tempId ? updated : l) })}
                             onRemove={sub.items.length > 1 ? () => updateSubDraft(sub.id, { items: sub.items.filter(l => l.tempId !== line.tempId) }) : undefined}
                           />

@@ -17,9 +17,6 @@ export const servicePackagesTable = pgTable("service_packages", {
   code: text("code"),
   name: text("name").notNull(),
   price: numeric("price", { precision: 12, scale: 2 }).notNull().default("0"),
-  costCastPhoto: numeric("cost_cast_photo", { precision: 12, scale: 2 }).notNull().default("0"),  // cast chụp
-  costCastMakeup: numeric("cost_cast_makeup", { precision: 12, scale: 2 }).notNull().default("0"), // cast makeup
-  costPts: numeric("cost_pts", { precision: 12, scale: 2 }).notNull().default("0"),              // chi phí PTS
   printCost: numeric("print_cost", { precision: 12, scale: 2 }).notNull().default("0"),           // in ấn
   operatingCost: numeric("operating_cost", { precision: 12, scale: 2 }).notNull().default("0"),   // vận hành
   salePercent: numeric("sale_percent", { precision: 5, scale: 2 }).notNull().default("0"),

@@ -3,6 +3,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { staffTable } from "./tasks";
 import { bookingsTable } from "./bookings";
+import { servicePackagesTable } from "./pricing";
 
 // ─── Default salary rates per service × role ─────────────────────────────────
 // serviceKey = free-text service name OR "default" for fallback
@@ -82,3 +83,19 @@ export type SalaryRate = typeof staffSalaryRatesTable.$inferSelect;
 export const insertJobEarningSchema = createInsertSchema(staffJobEarningsTable).omit({ id: true, createdAt: true });
 export type InsertJobEarning = z.infer<typeof insertJobEarningSchema>;
 export type JobEarning = typeof staffJobEarningsTable.$inferSelect;
+
+// ─── Staff cast rates per package ─────────────────────────────────────────────
+// Cast là chi phí biến đổi theo: nhân viên + vai trò + gói dịch vụ
+// key: staffId + role + packageId → 1 mức cast duy nhất
+export const staffCastRatesTable = pgTable("staff_cast_rates", {
+  id: serial("id").primaryKey(),
+  staffId: integer("staff_id").notNull().references(() => staffTable.id, { onDelete: "cascade" }),
+  role: text("role").notNull(), // photographer | makeup | photoshop | ...
+  packageId: integer("package_id").notNull().references(() => servicePackagesTable.id, { onDelete: "cascade" }),
+  amount: numeric("amount", { precision: 12, scale: 2 }), // null = chưa nhập
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertStaffCastRateSchema = createInsertSchema(staffCastRatesTable).omit({ id: true, createdAt: true });
+export type InsertStaffCastRate = z.infer<typeof insertStaffCastRateSchema>;
+export type StaffCastRate = typeof staffCastRatesTable.$inferSelect;
