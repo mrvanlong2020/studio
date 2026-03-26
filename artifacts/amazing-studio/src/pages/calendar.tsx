@@ -31,6 +31,14 @@ type Booking = {
   totalAmount: number; depositAmount: number;
   paidAmount: number; remainingAmount: number; assignedStaff: number[];
   notes: string | null;
+  // Multi-service contract fields
+  parentId: number | null;
+  serviceLabel: string | null;
+  isParentContract: boolean;
+  // Loaded on detail fetch
+  siblings?: Booking[];
+  parentContract?: Booking & { remainingAmount: number };
+  children?: Booking[];
 };
 type Customer = {
   id: number; name: string; phone: string; email?: string;
@@ -60,6 +68,16 @@ type OrderLine = {
   selectedAddons: string[];
   photoId: number | null; photoName: string; photoTask: string;
   makeupId: number | null; makeupName: string; makeupTask: string;
+};
+type SubServiceDraft = {
+  id: string;
+  serviceLabel: string;
+  shootDate: string;       // "" = inherit contract date
+  shootTime: string;
+  items: OrderLine[];
+  photoId: number | null; photoName: string; photoTask: string;
+  makeupId: number | null; makeupName: string; makeupTask: string;
+  notes: string;
 };
 
 const STATUS = {
@@ -158,7 +176,7 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
   services: ServiceOption[];
   allStaffRates: StaffRate[];
   onChange: (u: OrderLine) => void;
-  onRemove: () => void;
+  onRemove?: () => void;
 }) {
   const [useCustom, setUseCustom] = useState(!line.serviceId && !line.serviceKey && !!line.serviceName);
 
@@ -582,6 +600,19 @@ function ShowFormPanel({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // ── Multi-service mode ────────────────────────────────────────────────────
+  const [multiMode, setMultiMode] = useState(false);
+  const newSubDraft = (): SubServiceDraft => ({
+    id: genId(), serviceLabel: "", shootDate: "", shootTime: "08:00",
+    items: [{ tempId: genId(), serviceName: "", serviceId: null, serviceKey: "", price: 0, basePrice: 0, selectedAddons: [], photoId: null, photoName: "", photoTask: "", makeupId: null, makeupName: "", makeupTask: "" }],
+    photoId: null, photoName: "", photoTask: "",
+    makeupId: null, makeupName: "", makeupTask: "",
+    notes: "",
+  });
+  const [subDrafts, setSubDrafts] = useState<SubServiceDraft[]>([newSubDraft()]);
+  const updateSubDraft = (id: string, patch: Partial<SubServiceDraft>) =>
+    setSubDrafts(p => p.map(s => s.id === id ? { ...s, ...patch } : s));
+
   const { data: allStaff = [] } = useQuery<Staff[]>({ queryKey: ["staff"], queryFn: () => fetch(`${BASE}/api/staff`).then(r => r.json()) });
   const { data: services = [] } = useQuery<Service[]>({ queryKey: ["services"], queryFn: () => fetch(`${BASE}/api/services`).then(r => r.json()) });
   const { data: pricingPackages = [] } = useQuery<{
@@ -625,8 +656,10 @@ function ShowFormPanel({
   const linesTotal = lines.reduce((s, l) => s + (l.price || 0), 0);
   const surchargesTotal = surcharges.reduce((s, i) => s + (i.amount || 0), 0);
   const totalAmount = linesTotal + surchargesTotal;
+  const multiServicesTotal = subDrafts.reduce((s, sub) => s + sub.items.reduce((si, l) => si + (l.price || 0), 0), 0);
+  const effectiveTotal = multiMode ? multiServicesTotal : totalAmount;
   const depositNum = parseFloat(deposit) || 0;
-  const remaining = Math.max(0, totalAmount - depositNum);
+  const remaining = Math.max(0, effectiveTotal - depositNum);
 
   const handleSelectCustomer = (c: Customer) => {
     setCustomerId(c.id); setCustomerName(c.name); setPhone(c.phone);
@@ -646,8 +679,9 @@ function ShowFormPanel({
     setError("");
     if (!customerName.trim()) { setError("Vui lòng nhập tên khách hàng"); return; }
     if (!phone.trim()) { setError("Vui lòng nhập số điện thoại"); return; }
-    if (!shootDate) { setError("Vui lòng chọn ngày chụp"); return; }
-    if (!timeStart) { setError("Vui lòng chọn giờ bắt đầu"); return; }
+    if (!shootDate) { setError("Vui lòng chọn ngày " + (multiMode ? "ký hợp đồng" : "chụp")); return; }
+    if (!multiMode && !timeStart) { setError("Vui lòng chọn giờ bắt đầu"); return; }
+    if (multiMode && subDrafts.length === 0) { setError("Vui lòng thêm ít nhất 1 dịch vụ"); return; }
     setSaving(true);
     try {
       // ── 1. Tạo / tìm khách hàng ──
@@ -657,7 +691,6 @@ function ShowFormPanel({
         const existing = found.find(c => c.phone === phone);
         if (existing) {
           cid = existing.id;
-          // Update avatar nếu có ảnh mới
           if (avatar && !existing.avatar) {
             await fetch(`${BASE}/api/customers/${cid}`, {
               method: "PUT", headers: { "Content-Type": "application/json" },
@@ -673,7 +706,57 @@ function ShowFormPanel({
         }
       }
 
-      // ── 2. Chuẩn bị dịch vụ (không bắt buộc) ──
+      let saved: Booking;
+
+      // ── Multi-service contract mode ──
+      if (multiMode) {
+        const assignedStaff: Record<string, unknown> = {};
+        if (saleId) { assignedStaff.sale = saleId; assignedStaff.saleTask = saleTask || "mac_dinh"; }
+        if (photoshopId) { assignedStaff.photoshop = photoshopId; assignedStaff.photoshopTask = photoshopTask || "mac_dinh"; }
+
+        const subServicePayloads = subDrafts.map(sub => {
+          const validItems = sub.items.filter(l => l.serviceName || l.serviceId);
+          const subTotal = sub.items.reduce((s, l) => s + (l.price || 0), 0);
+          const subAssigned: Record<string, unknown> = {};
+          if (sub.photoId) { subAssigned.photo = sub.photoId; subAssigned.photoTask = sub.photoTask || "mac_dinh"; }
+          if (sub.makeupId) { subAssigned.makeup = sub.makeupId; subAssigned.makeupTask = sub.makeupTask || "mac_dinh"; }
+          return {
+            serviceLabel: sub.serviceLabel || `Dịch vụ ${subDrafts.indexOf(sub) + 1}`,
+            shootDate: sub.shootDate || shootDate,
+            shootTime: sub.shootTime || "08:00",
+            items: validItems.map(({ tempId: _t, ...rest }) => rest),
+            totalAmount: subTotal,
+            assignedStaff: subAssigned,
+            notes: sub.notes || null,
+          };
+        });
+
+        const body = {
+          customerId: cid,
+          shootDate,
+          shootTime: "08:00",
+          totalAmount: multiServicesTotal,
+          depositAmount: depositNum,
+          discountAmount: 0,
+          isParentContract: true,
+          packageType: subDrafts.map(s => s.serviceLabel || "Dịch vụ").join(" + "),
+          assignedStaff,
+          notes: notes || null,
+          location: location || null,
+          subServices: subServicePayloads,
+        };
+
+        saved = await fetch(`${BASE}/api/bookings`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+        }).then(r => { if (!r.ok) throw new Error("Lỗi tạo hợp đồng"); return r.json(); });
+
+        qc.invalidateQueries({ queryKey: ["bookings"] });
+        qc.invalidateQueries({ queryKey: ["customers"] });
+        onSaved();
+        return;
+      }
+
+      // ── 2. Single booking (existing behavior) ──
       const validLines = lines.filter(l => l.serviceName || l.serviceId);
       const hasServices = validLines.length > 0;
 
@@ -687,8 +770,6 @@ function ShowFormPanel({
       const finalTotal = hasServices ? totalAmount : surchargesTotal;
       const finalDeposit = (hasServices || surchargesTotal > 0) ? depositNum : 0;
 
-      // Build role-keyed assignedStaff object for payroll auto-compute
-      // Include task keys so earnings compute can look up the right price
       const assignedStaff: Record<string, unknown> = {};
       if (saleId) { assignedStaff.sale = saleId; assignedStaff.saleTask = saleTask || "mac_dinh"; }
       if (photoshopId) { assignedStaff.photoshop = photoshopId; assignedStaff.photoshopTask = photoshopTask || "mac_dinh"; }
@@ -708,7 +789,6 @@ function ShowFormPanel({
         assignedStaff, notes: notes || null,
       };
 
-      let saved: Booking;
       if (isEdit && booking) {
         saved = await fetch(`${BASE}/api/bookings/${booking.id}`, {
           method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
@@ -827,60 +907,184 @@ function ShowFormPanel({
 
           {/* B. Lịch chụp */}
           <section className="space-y-2">
-            <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5" /> B. Lịch chụp
-            </h4>
-            <div className="grid grid-cols-[1fr_auto_1fr] gap-2">
-              <div>
-                <label className="text-[10px] text-muted-foreground mb-1 block">Ngày chụp *</label>
-                <Input type="date" className="h-9 text-sm" value={shootDate} onChange={e => handleShootDateChange(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><Clock className="w-3 h-3" /> Giờ bắt đầu</label>
-                <Input type="time" className="h-9 text-sm w-28" value={timeStart} onChange={e => setTimeStart(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-[10px] text-muted-foreground mb-1 block">Trạng thái</label>
-                <select className="w-full h-9 border border-input rounded-lg px-2 text-sm bg-background" value={status} onChange={e => setStatus(e.target.value)}>
-                  <option value="draft">📋 Lịch tạm</option>
-                  <option value="pending_service">⏳ Chưa chốt dịch vụ</option>
-                  <option value="pending">🟡 Chờ xác nhận</option>
-                  <option value="confirmed">🔵 Đã xác nhận</option>
-                  <option value="in_progress">🟣 Đang thực hiện</option>
-                  <option value="completed">🟢 Hoàn thành</option>
-                  <option value="cancelled">⚫ Đã hủy</option>
-                </select>
-              </div>
-            </div>
-            <div className="relative">
-              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input className="pl-9 h-9 text-sm" placeholder="Địa điểm (tuỳ chọn)" value={location} onChange={e => setLocation(e.target.value)} />
-            </div>
-          </section>
-
-          {/* C. Dịch vụ / Job chụp */}
-          <section className="space-y-2">
             <div className="flex items-center justify-between">
               <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Package2 className="w-3.5 h-3.5" /> C. Dịch vụ / Job chụp
-                <span className="normal-case text-[10px] font-normal text-muted-foreground/60">(tuỳ chọn)</span>
+                <Calendar className="w-3.5 h-3.5" /> B. Lịch chụp
               </h4>
-              <button
-                onClick={() => setLines(p => [...p, { tempId: genId(), serviceName: "", serviceId: null, serviceKey: "", price: 0, basePrice: 0, selectedAddons: [], photoId: null, photoName: "", photoTask: "", makeupId: null, makeupName: "", makeupTask: "" }])}
-                className="flex items-center gap-1 text-xs text-primary hover:underline font-medium"
-              >
-                <Plus className="w-3 h-3" /> Thêm dòng
-              </button>
+              {!isEdit && (
+                <button
+                  type="button"
+                  onClick={() => setMultiMode(m => !m)}
+                  className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border font-semibold transition-all ${multiMode ? "bg-violet-100 border-violet-400 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300" : "border-border text-muted-foreground hover:border-primary hover:text-primary"}`}
+                >
+                  {multiMode ? "✓ Hợp đồng đa dịch vụ" : "＋ Nhiều dịch vụ / ngày khác"}
+                </button>
+              )}
             </div>
-            <div className="space-y-2">
-              {lines.map(line => (
-                <OrderLineRow key={line.tempId} line={line} photographers={photographers} makeupArtists={makeupArtists} services={allServices} allStaffRates={allStaffRates}
-                  onChange={updated => setLines(p => p.map(l => l.tempId === line.tempId ? updated : l))}
-                  onRemove={() => setLines(p => p.filter(l => l.tempId !== line.tempId))}
-                />
-              ))}
-            </div>
+
+            {!multiMode ? (
+              /* ── Single-service mode ── */
+              <>
+                <div className="grid grid-cols-[1fr_auto_1fr] gap-2">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-1 block">Ngày chụp *</label>
+                    <Input type="date" className="h-9 text-sm" value={shootDate} onChange={e => handleShootDateChange(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><Clock className="w-3 h-3" /> Giờ bắt đầu</label>
+                    <Input type="time" className="h-9 text-sm w-28" value={timeStart} onChange={e => setTimeStart(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-1 block">Trạng thái</label>
+                    <select className="w-full h-9 border border-input rounded-lg px-2 text-sm bg-background" value={status} onChange={e => setStatus(e.target.value)}>
+                      <option value="draft">📋 Lịch tạm</option>
+                      <option value="pending_service">⏳ Chưa chốt dịch vụ</option>
+                      <option value="pending">🟡 Chờ xác nhận</option>
+                      <option value="confirmed">🔵 Đã xác nhận</option>
+                      <option value="in_progress">🟣 Đang thực hiện</option>
+                      <option value="completed">🟢 Hoàn thành</option>
+                      <option value="cancelled">⚫ Đã hủy</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input className="pl-9 h-9 text-sm" placeholder="Địa điểm (tuỳ chọn)" value={location} onChange={e => setLocation(e.target.value)} />
+                </div>
+              </>
+            ) : (
+              /* ── Multi-service mode: contract date only ── */
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-muted-foreground mb-1 block">📅 Ngày ký hợp đồng *</label>
+                  <Input type="date" className="h-9 text-sm" value={shootDate} onChange={e => handleShootDateChange(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground mb-1 block">Địa điểm chung</label>
+                  <Input className="h-9 text-sm" placeholder="(tuỳ chọn)" value={location} onChange={e => setLocation(e.target.value)} />
+                </div>
+              </div>
+            )}
           </section>
+
+          {/* C. Dịch vụ — single mode */}
+          {!multiMode && (
+            <section className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Package2 className="w-3.5 h-3.5" /> C. Dịch vụ / Job chụp
+                  <span className="normal-case text-[10px] font-normal text-muted-foreground/60">(tuỳ chọn)</span>
+                </h4>
+                <button
+                  onClick={() => setLines(p => [...p, { tempId: genId(), serviceName: "", serviceId: null, serviceKey: "", price: 0, basePrice: 0, selectedAddons: [], photoId: null, photoName: "", photoTask: "", makeupId: null, makeupName: "", makeupTask: "" }])}
+                  className="flex items-center gap-1 text-xs text-primary hover:underline font-medium"
+                >
+                  <Plus className="w-3 h-3" /> Thêm dòng
+                </button>
+              </div>
+              <div className="space-y-2">
+                {lines.map(line => (
+                  <OrderLineRow key={line.tempId} line={line} photographers={photographers} makeupArtists={makeupArtists} services={allServices} allStaffRates={allStaffRates}
+                    onChange={updated => setLines(p => p.map(l => l.tempId === line.tempId ? updated : l))}
+                    onRemove={() => setLines(p => p.filter(l => l.tempId !== line.tempId))}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* C. Dịch vụ — multi mode: sub-service blocks */}
+          {multiMode && (
+            <section className="space-y-3">
+              <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Package2 className="w-3.5 h-3.5" /> C. Danh sách dịch vụ theo ngày
+              </h4>
+              {subDrafts.map((sub, idx) => {
+                const effectiveDate = sub.shootDate || shootDate;
+                const subTotal = sub.items.reduce((s, l) => s + (l.price || 0), 0);
+                return (
+                  <div key={sub.id} className="rounded-xl border border-violet-200 dark:border-violet-800 overflow-hidden">
+                    {/* Block header */}
+                    <div className="flex items-center gap-2 px-3 py-2 bg-violet-50 dark:bg-violet-950/30 border-b border-violet-200 dark:border-violet-800">
+                      <span className="w-5 h-5 rounded-full bg-violet-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">{idx + 1}</span>
+                      <Input
+                        className="h-7 text-sm border-0 bg-transparent p-0 font-semibold focus-visible:ring-0 placeholder:text-muted-foreground/60 flex-1"
+                        placeholder={`Tên dịch vụ ${idx + 1} (VD: Đám hỏi, Ngày cưới...)`}
+                        value={sub.serviceLabel}
+                        onChange={e => updateSubDraft(sub.id, { serviceLabel: e.target.value })}
+                      />
+                      {subDrafts.length > 1 && (
+                        <button type="button" onClick={() => setSubDrafts(p => p.filter(s => s.id !== sub.id))} className="p-1 text-muted-foreground hover:text-destructive transition-colors">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="p-3 space-y-2.5 bg-background">
+                      {/* Date/time row */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[10px] text-muted-foreground">📅 Ngày thực hiện</label>
+                            <button
+                              type="button"
+                              onClick={() => updateSubDraft(sub.id, { shootDate: sub.shootDate ? "" : (shootDate || "") })}
+                              className={`text-[9px] px-1.5 py-0.5 rounded border transition-all ${sub.shootDate ? "border-primary text-primary bg-primary/5" : "border-border text-muted-foreground hover:border-primary"}`}
+                            >
+                              {sub.shootDate ? "Ngày riêng ✓" : "Dùng ngày hợp đồng"}
+                            </button>
+                          </div>
+                          {sub.shootDate ? (
+                            <Input type="date" className="h-8 text-sm" value={sub.shootDate} onChange={e => updateSubDraft(sub.id, { shootDate: e.target.value })} />
+                          ) : (
+                            <div className="h-8 rounded-lg border border-dashed border-border px-2.5 flex items-center text-sm text-muted-foreground gap-1.5">
+                              <Calendar className="w-3.5 h-3.5" />
+                              {effectiveDate ? format(parseISO(effectiveDate), "dd/MM/yyyy") : "—"}
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground mb-1 block">⏰ Giờ bắt đầu</label>
+                          <Input type="time" className="h-8 text-sm" value={sub.shootTime} onChange={e => updateSubDraft(sub.id, { shootTime: e.target.value })} />
+                        </div>
+                      </div>
+                      {/* Service selection */}
+                      <div>
+                        <label className="text-[10px] text-muted-foreground mb-1 block">Gói / dịch vụ</label>
+                        <div className="space-y-1.5">
+                          {sub.items.map(line => (
+                            <OrderLineRow key={line.tempId} line={line} photographers={photographers} makeupArtists={makeupArtists} services={allServices} allStaffRates={allStaffRates}
+                              onChange={updated => updateSubDraft(sub.id, { items: sub.items.map(l => l.tempId === line.tempId ? updated : l) })}
+                              onRemove={sub.items.length > 1 ? () => updateSubDraft(sub.id, { items: sub.items.filter(l => l.tempId !== line.tempId) }) : undefined}
+                            />
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => updateSubDraft(sub.id, { items: [...sub.items, { tempId: genId(), serviceName: "", serviceId: null, serviceKey: "", price: 0, basePrice: 0, selectedAddons: [], photoId: null, photoName: "", photoTask: "", makeupId: null, makeupName: "", makeupTask: "" }] })}
+                            className="text-xs text-primary hover:underline"
+                          >
+                            + Thêm dịch vụ trong cùng ngày
+                          </button>
+                        </div>
+                      </div>
+                      {/* Notes */}
+                      <Input className="h-8 text-sm" placeholder="Ghi chú riêng cho dịch vụ này..." value={sub.notes} onChange={e => updateSubDraft(sub.id, { notes: e.target.value })} />
+                      {/* Sub total */}
+                      {subTotal > 0 && (
+                        <div className="text-xs text-right text-primary font-semibold">{formatVND(subTotal)}</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setSubDrafts(p => [...p, newSubDraft()])}
+                className="w-full py-2.5 border-2 border-dashed border-violet-300 dark:border-violet-700 rounded-xl text-sm text-violet-600 dark:text-violet-400 hover:border-violet-500 hover:bg-violet-50/50 dark:hover:bg-violet-950/20 transition-all flex items-center justify-center gap-2 font-medium"
+              >
+                <Plus className="w-4 h-4" /> Thêm dịch vụ {subDrafts.length + 1}
+              </button>
+            </section>
+          )}
 
           {/* C2. Phụ thu / phát sinh */}
           <section className="space-y-2">
@@ -962,7 +1166,7 @@ function ShowFormPanel({
             <div className="bg-muted/40 rounded-xl p-3 space-y-2.5 border border-border/50">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">Tổng tiền:</span>
-                <span className="font-bold text-base">{formatVND(totalAmount)}</span>
+                <span className="font-bold text-base">{formatVND(effectiveTotal)}</span>
               </div>
               <div className="flex justify-between items-center gap-3">
                 <span className="text-sm text-muted-foreground flex-shrink-0">Đặt cọc:</span>
@@ -1020,6 +1224,17 @@ function ShowDetailPanel({
     queryFn: () => fetch(`${BASE}/api/service-packages`).then(r => r.json()),
     staleTime: 60_000,
   });
+
+  // ── Fetch full detail (includes siblings/parentContract) when applicable ──
+  const needsFullDetail = !!booking.parentId || !!booking.isParentContract;
+  const { data: fullDetail } = useQuery<Booking & { siblings?: Booking[]; parentContract?: Booking; children?: Booking[] }>({
+    queryKey: ["booking-full", booking.id],
+    queryFn: () => fetch(`${BASE}/api/bookings/${booking.id}`).then(r => r.json()),
+    enabled: needsFullDetail,
+    staleTime: 30_000,
+  });
+  const siblings: Booking[] = fullDetail?.siblings ?? [];
+  const parentContract: (Booking & { remainingAmount: number }) | null = (fullDetail?.parentContract as (Booking & { remainingAmount: number })) ?? null;
 
   const [deleting, setDeleting] = useState(false);
 
@@ -1137,6 +1352,78 @@ function ShowDetailPanel({
           </div>
 
           <div className="border-t border-border/40" />
+
+          {/* 2b. Hợp đồng đa dịch vụ — hiển thị các dịch vụ liên kết */}
+          {booking.parentId && (
+            <>
+              {/* Service label badge */}
+              {booking.serviceLabel && (
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 border border-violet-300 dark:border-violet-700">
+                    📋 {booking.serviceLabel}
+                  </span>
+                  <span className="text-xs text-muted-foreground">trong hợp đồng nhiều dịch vụ</span>
+                </div>
+              )}
+
+              {/* Siblings list */}
+              {siblings.length > 0 && (
+                <div className="rounded-xl border border-violet-200 dark:border-violet-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-violet-50 dark:bg-violet-950/30 border-b border-violet-200 dark:border-violet-800">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-violet-700 dark:text-violet-300">
+                      📅 Tất cả dịch vụ trong hợp đồng ({siblings.length})
+                    </p>
+                  </div>
+                  {siblings.map((sib, idx) => {
+                    const sibDate = (() => { try { const d = parseISO(sib.shootDate); return isNaN(d.getTime()) ? null : d; } catch { return null; } })();
+                    const isCurrent = sib.id === booking.id;
+                    const sibSt = STATUS[sib.status as keyof typeof STATUS] ?? STATUS.pending;
+                    return (
+                      <div key={sib.id} className={`flex items-center gap-3 px-3 py-2.5 ${idx > 0 ? "border-t border-violet-100 dark:border-violet-900" : ""} ${isCurrent ? "bg-violet-50 dark:bg-violet-950/20" : ""}`}>
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${sibSt.dot}`} />
+                        <div className="flex-1 min-w-0">
+                          <span className={`text-sm font-semibold ${isCurrent ? "text-violet-700 dark:text-violet-300" : ""}`}>
+                            {sib.serviceLabel || sib.packageType || `Dịch vụ ${idx + 1}`}
+                            {isCurrent && <span className="ml-1.5 text-[10px] bg-violet-200 dark:bg-violet-800 px-1.5 py-0.5 rounded font-bold">Đang xem</span>}
+                          </span>
+                        </div>
+                        <span className="text-xs text-muted-foreground flex-shrink-0">
+                          {sibDate ? format(sibDate, "dd/MM/yyyy") : "—"}
+                        </span>
+                        {isAdmin && sib.totalAmount > 0 && (
+                          <span className="text-xs font-bold text-primary flex-shrink-0">{fmtVND(sib.totalAmount)}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Contract totals from parent */}
+              {isAdmin && parentContract && (
+                <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-emerald-50 dark:bg-emerald-950/30 border-b border-emerald-200 dark:border-emerald-800">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">💰 Tổng hợp đồng</p>
+                  </div>
+                  <div className="px-3 py-2.5 space-y-1.5">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Tổng hợp đồng</span>
+                      <span className="font-bold">{fmtVND(parentContract.totalAmount)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Đã đặt cọc</span>
+                      <span className="font-semibold text-emerald-600">{fmtVND(parentContract.depositAmount)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm border-t border-border/40 pt-1.5">
+                      <span className="font-semibold">Còn lại</span>
+                      <span className={`font-bold ${parentContract.remainingAmount > 0 ? "text-destructive" : "text-emerald-600"}`}>{fmtVND(parentContract.remainingAmount)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div className="border-t border-border/40" />
+            </>
+          )}
 
           {/* 3. Dịch vụ */}
           {booking.items && booking.items.length > 0 ? (
@@ -1668,12 +1955,12 @@ export default function CalendarPage() {
   const monthLunar = useMemo(() => convertSolarToLunar(1, currentDate.getMonth() + 1, currentDate.getFullYear()), [currentDate]);
 
   const getBookingsForDay = useCallback(
-    (date: Date) => bookings.filter(b => isSameDay(new Date(b.shootDate), date)),
+    (date: Date) => bookings.filter(b => !b.isParentContract && isSameDay(new Date(b.shootDate), date)),
     [bookings]
   );
 
   const selectedBookings = getBookingsForDay(selectedDate);
-  const monthBookings = bookings.filter(b => { const d = new Date(b.shootDate); return d >= monthStart && d <= monthEnd; });
+  const monthBookings = bookings.filter(b => { if (b.isParentContract) return false; const d = new Date(b.shootDate); return d >= monthStart && d <= monthEnd; });
 
   // Handlers — month view
   const handleDayClick = useCallback((date: Date) => {

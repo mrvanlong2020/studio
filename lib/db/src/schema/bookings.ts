@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, numeric, date, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, numeric, date, jsonb, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
@@ -22,6 +22,10 @@ export const bookingsTable = pgTable("bookings", {
   assignedStaff: jsonb("assigned_staff").notNull().default([]),
   internalNotes: text("internal_notes"),
   notes: text("notes"),
+  // Multi-service contract support
+  parentId: integer("parent_id"),               // null = root booking; set on child service bookings
+  serviceLabel: text("service_label"),           // e.g. "Chụp album", "Đám hỏi", "Ngày cưới"
+  isParentContract: boolean("is_parent_contract").notNull().default(false), // true = contract node, hidden from calendar
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -1,0 +1,191 @@
+Tôi muốn nâng cấp phần tạo đơn / hợp đồng / lịch chụp theo mô hình sau:
+
+I. NGUYÊN TẮC CHUNG
+
+1. Một khách hàng có thể book 1 gói chính, nhưng bên trong có nhiều dịch vụ con.
+Ví dụ:
+- Chụp album
+- Đám hỏi
+- Ngày trước rước dâu
+- Ngày rước dâu / tiệc cưới
+
+2. Mỗi dịch vụ con có thể thực hiện ở cùng ngày hoặc khác ngày.
+3. Hệ thống phải cho phép lưu nhiều ngày thực hiện trong cùng một đơn hàng / cùng một khách / cùng một hợp đồng.
+4. Tất cả các ngày này phải liên kết chung về cùng một hồ sơ khách hàng và cùng một đơn hàng.
+
+II. KHI TẠO ĐƠN / HỢP ĐỒNG MỚI
+
+Form tạo đơn phải có:
+
+1. Thông tin cơ bản:
+- Tên khách hàng
+- Số điện thoại
+- Tên cô dâu chú rể
+- Gói chính đã chốt
+- Tổng giá trị hợp đồng
+- Tiền cọc
+- Ghi chú thanh toán
+- Ngày ký hợp đồng
+
+2. Ngày hợp đồng mặc định:
+- Có một “ngày chính” hoặc “ngày ký / ngày mặc định”
+- Đây là ngày dùng làm ngày mặc định ban đầu cho tất cả dịch vụ con nếu chưa chọn ngày riêng
+
+III. PHẦN DANH SÁCH DỊCH VỤ CON TRONG CÙNG MỘT ĐƠN
+
+1. Trong một đơn phải có phần “Danh sách dịch vụ thực hiện”.
+2. Cho phép thêm nhiều dòng dịch vụ con trong cùng một đơn.
+3. Mỗi dòng dịch vụ gồm:
+
+- Tên dịch vụ
+- Gói / nội dung dịch vụ
+- Giá dịch vụ
+- Ngày thực hiện
+- Checkbox hoặc công tắc:
+  “Dùng ngày mặc định của hợp đồng”
+  hoặc
+  “Chọn ngày riêng”
+- Ghi chú riêng cho dịch vụ đó
+
+IV. LOGIC CHỌN NGÀY
+
+1. Khi mới thêm dịch vụ con, ô ngày mặc định sẽ tự lấy theo “ngày chính / ngày ký / ngày gốc” của đơn hàng.
+2. Nếu dịch vụ đó thực hiện đúng ngày mặc định thì không cần sửa gì.
+3. Nếu khách thực hiện dịch vụ đó ở ngày khác thì cho phép bật lựa chọn:
+- “Chọn ngày riêng”
+Khi bật lên thì mở ô chọn ngày khác.
+
+Ví dụ:
+- Dịch vụ 1: Chụp album -> ngày 26/4
+- Dịch vụ 2: Đám hỏi -> ngày 28/4
+- Dịch vụ 3: Ngày cưới -> ngày 29/4
+
+4. Mỗi dịch vụ con phải lưu ngày riêng độc lập nếu người dùng chọn ngày khác.
+5. Không ép tất cả dịch vụ về cùng một ngày.
+
+V. GIAO DIỆN THÊM DỊCH VỤ CON
+
+1. Có nút:
+- Thêm dịch vụ thứ 2
+- Thêm dịch vụ thứ 3
+- Thêm dịch vụ khác
+
+2. Mỗi lần thêm dịch vụ mới thì tạo ra 1 block riêng gồm:
+- Dịch vụ số 1
+- Dịch vụ số 2
+- Dịch vụ số 3
+
+3. Trong mỗi block có:
+- Chọn loại dịch vụ
+- Nhập giá hoặc chọn từ gói có sẵn
+- Ô ngày kế bên
+- Mặc định lấy ngày gốc của hợp đồng
+- Nếu muốn ngày khác thì bật “chọn ngày riêng”
+
+VI. LIÊN KẾT LỊCH
+
+1. Sau khi lưu đơn, tất cả dịch vụ con phải nằm chung trong 1 hồ sơ khách.
+2. Nhưng trên lịch, mỗi dịch vụ con phải hiện ra như 1 lịch riêng theo đúng ngày của nó.
+3. Ví dụ:
+Khách Nhu Quỳnh – Phước Đông
+- 26/4: Chụp album
+- 28/4: Đám hỏi
+- 29/4: Ngày cưới
+
+4. Các lịch này phải liên kết với nhau, nghĩa là khi bấm vào 1 lịch bất kỳ sẽ thấy:
+- cùng khách hàng đó
+- toàn bộ các dịch vụ còn lại
+- tổng giá trị hợp đồng
+- cọc
+- còn lại bao nhiêu
+
+VII. LOGIC TÍNH TIỀN
+
+1. Mỗi dịch vụ con có thể có giá riêng.
+2. Tổng hợp lại thành:
+- Tổng tiền hợp đồng
+- Tiền cọc
+- Còn lại phải thanh toán
+
+3. Ví dụ:
+- Chụp album: 3.900.000
+- Đám hỏi: 4.500.000
+- Ngày cưới: 7.000.000
+=> Tổng hợp đồng: 15.400.000
+
+VIII. YÊU CẦU HIỂN THỊ TRÊN LỊCH
+
+1. Lịch phải hiển thị đúng theo ngày riêng của từng dịch vụ.
+2. Không gộp sai ngày.
+3. Nếu 1 hợp đồng có 3 dịch vụ ở 3 ngày khác nhau thì phải tạo 3 lịch đúng 3 ngày đó.
+4. Nhưng khi mở chi tiết từng lịch thì vẫn biết đây là cùng 1 khách / cùng 1 hợp đồng.
+
+IX. YÊU CẦU GIAO DIỆN MOBILE
+
+1. Tối ưu cho điện thoại.
+2. Khi thêm đơn mới:
+- nhập nhanh
+- thêm nhiều dịch vụ con dễ dàng
+- chọn ngày nhanh
+- nhìn rõ block dịch vụ 1, 2, 3
+
+3. Mỗi block dịch vụ nên có:
+- tiêu đề rõ
+- ô ngày rõ
+- nút bật “ngày khác”
+- không rối
+
+X. CẤU TRÚC DỮ LIỆU CẦN ĐÚNG
+
+1. 1 hợp đồng / đơn hàng
+2. 1 khách hàng
+3. nhiều dịch vụ con
+4. mỗi dịch vụ con có:
+- tên dịch vụ
+- giá
+- ngày thực hiện riêng
+- ghi chú riêng
+- trạng thái riêng
+
+5. Tất cả dịch vụ con phải liên kết về cùng 1 hợp đồng cha.
+
+XI. TRẠNG THÁI HOÀN THÀNH
+
+1. Mỗi dịch vụ con phải có trạng thái riêng:
+- Chưa làm
+- Đang làm
+- Hoàn thành
+
+2. Khi dịch vụ nào hoàn thành thì cập nhật đúng dịch vụ đó.
+3. Không được đánh dấu hoàn thành toàn bộ nếu mới xong 1 phần.
+
+XII. VÍ DỤ MẪU ĐÚNG
+
+Khách hàng: Nhu Quỳnh - Phước Đông
+Ngày ký hợp đồng: 26/4
+
+Dịch vụ 1:
+- Chụp album
+- Giá: 3.900.000
+- Ngày thực hiện: 26/4
+
+Dịch vụ 2:
+- Đám hỏi
+- Giá: 4.500.000
+- Ngày thực hiện: 28/4
+
+Dịch vụ 3:
+- Ngày cưới
+- Giá: 7.000.000
+- Ngày thực hiện: 29/4
+
+Tổng hợp đồng: 15.400.000
+Tiền cọc: 1.500.000
+Còn lại: 13.900.000
+
+Khi xem lịch:
+- ngày 26/4 thấy lịch chụp album
+- ngày 28/4 thấy lịch đám hỏi
+- ngày 29/4 thấy lịch ngày cưới
+
+Nhưng cả 3 lịch đều phải liên kết cùng 1 hồ sơ khách hàng và cùng 1 hợp đồng.

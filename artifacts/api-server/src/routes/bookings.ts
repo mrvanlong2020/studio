@@ -1,65 +1,53 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { bookingsTable, customersTable, paymentsTable, expensesTable, tasksTable, staffTable } from "@workspace/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { computeBookingEarnings } from "./job-earnings";
 
 const router: IRouter = Router();
 
-const fmt = async (b: typeof bookingsTable.$inferSelect & { customerName: string; customerPhone: string }) => {
-  const payments = await db.select().from(paymentsTable).where(eq(paymentsTable.bookingId, b.id));
-  const paidAmount = payments.reduce((s, p) => s + parseFloat(p.amount), 0);
-  const totalAmount = parseFloat(b.totalAmount);
-  const depositAmount = parseFloat(b.depositAmount);
-  const expenses = await db.select().from(expensesTable).where(eq(expensesTable.bookingId, b.id));
-  const totalExpenses = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
-  return {
-    ...b,
-    totalAmount,
-    depositAmount,
-    paidAmount,
-    discountAmount: parseFloat(b.discountAmount ?? "0"),
-    remainingAmount: Math.max(0, totalAmount - paidAmount),
-    totalExpenses,
-    grossProfit: totalAmount - totalExpenses,
-    payments: payments.map(p => ({ ...p, amount: parseFloat(p.amount) })),
-  };
+// ─── Select fields shared across GET queries ──────────────────────────────────
+const bookingFields = {
+  id: bookingsTable.id,
+  orderCode: bookingsTable.orderCode,
+  customerId: bookingsTable.customerId,
+  customerName: customersTable.name,
+  customerPhone: customersTable.phone,
+  shootDate: bookingsTable.shootDate,
+  shootTime: bookingsTable.shootTime,
+  serviceCategory: bookingsTable.serviceCategory,
+  packageType: bookingsTable.packageType,
+  location: bookingsTable.location,
+  status: bookingsTable.status,
+  items: bookingsTable.items,
+  surcharges: bookingsTable.surcharges,
+  totalAmount: bookingsTable.totalAmount,
+  depositAmount: bookingsTable.depositAmount,
+  paidAmount: bookingsTable.paidAmount,
+  discountAmount: bookingsTable.discountAmount,
+  assignedStaff: bookingsTable.assignedStaff,
+  internalNotes: bookingsTable.internalNotes,
+  notes: bookingsTable.notes,
+  parentId: bookingsTable.parentId,
+  serviceLabel: bookingsTable.serviceLabel,
+  isParentContract: bookingsTable.isParentContract,
+  createdAt: bookingsTable.createdAt,
 };
 
 router.get("/bookings", async (req, res) => {
   const status = req.query.status as string | undefined;
   const customerId = req.query.customerId ? parseInt(req.query.customerId as string) : undefined;
+  const parentId = req.query.parentId ? parseInt(req.query.parentId as string) : undefined;
 
   const rows = await db
-    .select({
-      id: bookingsTable.id,
-      orderCode: bookingsTable.orderCode,
-      customerId: bookingsTable.customerId,
-      customerName: customersTable.name,
-      customerPhone: customersTable.phone,
-      shootDate: bookingsTable.shootDate,
-      shootTime: bookingsTable.shootTime,
-      serviceCategory: bookingsTable.serviceCategory,
-      packageType: bookingsTable.packageType,
-      location: bookingsTable.location,
-      status: bookingsTable.status,
-      items: bookingsTable.items,
-      surcharges: bookingsTable.surcharges,
-      totalAmount: bookingsTable.totalAmount,
-      depositAmount: bookingsTable.depositAmount,
-      paidAmount: bookingsTable.paidAmount,
-      discountAmount: bookingsTable.discountAmount,
-      assignedStaff: bookingsTable.assignedStaff,
-      internalNotes: bookingsTable.internalNotes,
-      notes: bookingsTable.notes,
-      createdAt: bookingsTable.createdAt,
-    })
+    .select(bookingFields)
     .from(bookingsTable)
     .innerJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
     .where(
       and(
         status ? eq(bookingsTable.status, status) : undefined,
-        customerId ? eq(bookingsTable.customerId, customerId) : undefined
+        customerId ? eq(bookingsTable.customerId, customerId) : undefined,
+        parentId ? eq(bookingsTable.parentId, parentId) : undefined,
       )
     )
     .orderBy(desc(bookingsTable.shootDate));
@@ -84,9 +72,104 @@ router.get("/bookings", async (req, res) => {
 });
 
 router.post("/bookings", async (req, res) => {
-  const { customerId, shootDate, shootTime, serviceCategory, packageType, location, totalAmount, depositAmount, discountAmount, items, surcharges, notes, internalNotes, assignedStaff } = req.body;
+  const {
+    customerId, shootDate, shootTime, serviceCategory, packageType, location,
+    totalAmount, depositAmount, discountAmount, items, surcharges, notes, internalNotes,
+    assignedStaff, parentId, serviceLabel, isParentContract,
+    // Multi-service contract support
+    subServices,
+  } = req.body;
+
   const count = await db.select().from(bookingsTable);
   const orderCode = `DH${String(count.length + 1).padStart(4, "0")}`;
+
+  // ── Multi-service contract: create parent + children atomically ──
+  if (subServices && Array.isArray(subServices) && subServices.length > 0) {
+    // 1. Create parent contract booking
+    const [parent] = await db
+      .insert(bookingsTable)
+      .values({
+        orderCode,
+        customerId,
+        shootDate,       // contract/signing date
+        shootTime: shootTime || "08:00",
+        serviceCategory: serviceCategory || "wedding",
+        packageType: packageType || `Hợp đồng ${subServices.length} dịch vụ`,
+        location: location || null,
+        totalAmount: String(totalAmount || 0),
+        depositAmount: String(depositAmount || 0),
+        discountAmount: String(discountAmount || 0),
+        paidAmount: String(depositAmount || 0),
+        items: [],
+        surcharges: surcharges || [],
+        notes: notes || null,
+        internalNotes: internalNotes || null,
+        assignedStaff: assignedStaff || {},
+        isParentContract: true,
+        status: "confirmed",
+      })
+      .returning();
+
+    // 2. Create deposit payment for the parent contract
+    if (depositAmount && parseFloat(String(depositAmount)) > 0) {
+      await db.insert(paymentsTable).values({
+        bookingId: parent.id,
+        amount: String(depositAmount),
+        paymentMethod: "cash",
+        paymentType: "deposit",
+        notes: "Tiền cọc hợp đồng",
+      });
+    }
+
+    // 3. Create child service bookings
+    const children = [];
+    for (let i = 0; i < subServices.length; i++) {
+      const sub = subServices[i];
+      const childCode = `${orderCode}-${i + 1}`;
+      const [child] = await db
+        .insert(bookingsTable)
+        .values({
+          orderCode: childCode,
+          customerId,
+          shootDate: sub.shootDate || shootDate,
+          shootTime: sub.shootTime || "08:00",
+          serviceCategory: serviceCategory || "wedding",
+          packageType: sub.serviceLabel || sub.items?.[0]?.serviceName || `Dịch vụ ${i + 1}`,
+          location: sub.location || location || null,
+          totalAmount: String(sub.totalAmount || 0),
+          depositAmount: "0",
+          discountAmount: "0",
+          paidAmount: "0",
+          items: sub.items || [],
+          surcharges: sub.surcharges || [],
+          notes: sub.notes || null,
+          internalNotes: null,
+          assignedStaff: sub.assignedStaff || {},
+          parentId: parent.id,
+          serviceLabel: sub.serviceLabel || null,
+          isParentContract: false,
+          status: sub.status || "confirmed",
+        })
+        .returning();
+      children.push(child);
+    }
+
+    const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, customerId));
+    res.status(201).json({
+      ...parent,
+      customerName: customer.name,
+      customerPhone: customer.phone,
+      totalAmount: parseFloat(parent.totalAmount),
+      depositAmount: parseFloat(parent.depositAmount),
+      paidAmount: parseFloat(parent.paidAmount),
+      discountAmount: parseFloat(parent.discountAmount ?? "0"),
+      remainingAmount: Math.max(0, parseFloat(parent.totalAmount) - parseFloat(parent.paidAmount)),
+      children: children.map(c => ({ ...c, totalAmount: parseFloat(c.totalAmount) })),
+    });
+    return;
+  }
+
+  // ── Single booking (existing behavior) ──
   const [booking] = await db
     .insert(bookingsTable)
     .values({
@@ -106,6 +189,9 @@ router.post("/bookings", async (req, res) => {
       notes,
       internalNotes,
       assignedStaff: assignedStaff || [],
+      parentId: parentId || null,
+      serviceLabel: serviceLabel || null,
+      isParentContract: isParentContract || false,
       status: "pending",
     })
     .returning();
@@ -137,29 +223,7 @@ router.post("/bookings", async (req, res) => {
 router.get("/bookings/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   const [row] = await db
-    .select({
-      id: bookingsTable.id,
-      orderCode: bookingsTable.orderCode,
-      customerId: bookingsTable.customerId,
-      customerName: customersTable.name,
-      customerPhone: customersTable.phone,
-      shootDate: bookingsTable.shootDate,
-      shootTime: bookingsTable.shootTime,
-      serviceCategory: bookingsTable.serviceCategory,
-      packageType: bookingsTable.packageType,
-      location: bookingsTable.location,
-      status: bookingsTable.status,
-      items: bookingsTable.items,
-      surcharges: bookingsTable.surcharges,
-      totalAmount: bookingsTable.totalAmount,
-      depositAmount: bookingsTable.depositAmount,
-      paidAmount: bookingsTable.paidAmount,
-      discountAmount: bookingsTable.discountAmount,
-      assignedStaff: bookingsTable.assignedStaff,
-      internalNotes: bookingsTable.internalNotes,
-      notes: bookingsTable.notes,
-      createdAt: bookingsTable.createdAt,
-    })
+    .select(bookingFields)
     .from(bookingsTable)
     .innerJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
     .where(eq(bookingsTable.id, id));
@@ -182,6 +246,59 @@ router.get("/bookings/:id", async (req, res) => {
   const totalAmount = parseFloat(row.totalAmount);
   const totalExpenses = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
 
+  // ── If this booking is a child (has parentId), fetch siblings + parent ──
+  let siblings: unknown[] = [];
+  let parentContract: unknown = null;
+
+  if (row.parentId) {
+    const siblingRows = await db
+      .select(bookingFields)
+      .from(bookingsTable)
+      .innerJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
+      .where(and(eq(bookingsTable.parentId, row.parentId)))
+      .orderBy(bookingsTable.shootDate);
+    siblings = siblingRows.map(s => ({
+      ...s,
+      totalAmount: parseFloat(s.totalAmount),
+      depositAmount: parseFloat(s.depositAmount),
+    }));
+
+    const [parentRow] = await db
+      .select(bookingFields)
+      .from(bookingsTable)
+      .innerJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
+      .where(eq(bookingsTable.id, row.parentId));
+
+    if (parentRow) {
+      const parentPayments = await db.select().from(paymentsTable).where(eq(paymentsTable.bookingId, parentRow.id));
+      const parentPaid = parentPayments.reduce((s, p) => s + parseFloat(p.amount), 0);
+      const parentTotal = parseFloat(parentRow.totalAmount);
+      parentContract = {
+        ...parentRow,
+        totalAmount: parentTotal,
+        depositAmount: parseFloat(parentRow.depositAmount),
+        paidAmount: parentPaid,
+        remainingAmount: Math.max(0, parentTotal - parentPaid),
+      };
+    }
+  }
+
+  // ── If this booking is the parent, fetch children ──
+  let children: unknown[] = [];
+  if (row.isParentContract) {
+    const childRows = await db
+      .select(bookingFields)
+      .from(bookingsTable)
+      .innerJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
+      .where(eq(bookingsTable.parentId, id))
+      .orderBy(bookingsTable.shootDate);
+    children = childRows.map(c => ({
+      ...c,
+      totalAmount: parseFloat(c.totalAmount),
+      depositAmount: parseFloat(c.depositAmount),
+    }));
+  }
+
   res.json({
     ...row,
     totalAmount,
@@ -194,12 +311,19 @@ router.get("/bookings/:id", async (req, res) => {
     payments: payments.map(p => ({ ...p, amount: parseFloat(p.amount) })),
     expenses: expenses.map(e => ({ ...e, amount: parseFloat(e.amount) })),
     tasks,
+    siblings,
+    parentContract,
+    children,
   });
 });
 
 router.put("/bookings/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  const { shootDate, shootTime, serviceCategory, packageType, location, status, totalAmount, depositAmount, discountAmount, items, surcharges, notes, internalNotes, assignedStaff } = req.body;
+  const {
+    shootDate, shootTime, serviceCategory, packageType, location, status,
+    totalAmount, depositAmount, discountAmount, items, surcharges, notes, internalNotes,
+    assignedStaff, parentId, serviceLabel, isParentContract,
+  } = req.body;
 
   const updateData: Record<string, unknown> = {};
   if (shootDate !== undefined) updateData.shootDate = shootDate;
@@ -216,6 +340,9 @@ router.put("/bookings/:id", async (req, res) => {
   if (notes !== undefined) updateData.notes = notes;
   if (internalNotes !== undefined) updateData.internalNotes = internalNotes;
   if (assignedStaff !== undefined) updateData.assignedStaff = assignedStaff;
+  if (parentId !== undefined) updateData.parentId = parentId;
+  if (serviceLabel !== undefined) updateData.serviceLabel = serviceLabel;
+  if (isParentContract !== undefined) updateData.isParentContract = isParentContract;
 
   if (Object.keys(updateData).length > 0) {
     const payments = await db.select().from(paymentsTable).where(eq(paymentsTable.bookingId, id));
@@ -223,14 +350,12 @@ router.put("/bookings/:id", async (req, res) => {
     updateData.paidAmount = String(paidAmount);
   }
 
-  // Get old status before update
   const [oldBooking] = await db.select({ status: bookingsTable.status }).from(bookingsTable).where(eq(bookingsTable.id, id));
   const oldStatus = oldBooking?.status;
 
   const [booking] = await db.update(bookingsTable).set(updateData).where(eq(bookingsTable.id, id)).returning();
   if (!booking) return res.status(404).json({ error: "Không tìm thấy đơn hàng" });
 
-  // Auto-compute job earnings when job is marked as completed
   if (status === "completed" && oldStatus !== "completed") {
     computeBookingEarnings(id).catch(err => console.error("Earnings compute error:", err));
   }
@@ -253,6 +378,21 @@ router.put("/bookings/:id", async (req, res) => {
 
 router.delete("/bookings/:id", async (req, res) => {
   const id = parseInt(req.params.id);
+
+  // Check if this is a parent contract — cascade delete children first
+  const [target] = await db.select({ isParentContract: bookingsTable.isParentContract }).from(bookingsTable).where(eq(bookingsTable.id, id));
+  if (target?.isParentContract) {
+    // Delete all child bookings + their payments
+    const children = await db.select({ id: bookingsTable.id }).from(bookingsTable).where(eq(bookingsTable.parentId, id));
+    if (children.length > 0) {
+      const childIds = children.map(c => c.id);
+      await db.delete(paymentsTable).where(inArray(paymentsTable.bookingId, childIds));
+      await db.delete(bookingsTable).where(inArray(bookingsTable.id, childIds));
+    }
+  }
+
+  // Delete the booking itself + its payments
+  await db.delete(paymentsTable).where(eq(paymentsTable.bookingId, id));
   await db.delete(bookingsTable).where(eq(bookingsTable.id, id));
   res.status(204).send();
 });

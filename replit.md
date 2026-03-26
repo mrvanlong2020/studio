@@ -14,9 +14,16 @@ A wedding photography studio and wedding dress rental management system for "Ama
 - **Lịch chụp (Calendar)**: Google Calendar-style 3-view system:
   - **Month view**: 30-day grid with booking chips (color-coded by status), solar+lunar calendar
   - **Day view**: 24h timeline, click hour slot → create show form; role toggle "Admin/NV" button in header
-  - **Detail view** (`ShowDetailPanel`): Read-only Google Calendar-style panel when tapping any booking. Shows: customer, date/time, services (with package items/products/description), surcharges, staff, payment info. Admin sees finances + pencil+trash; staff sees only work info.
-  - **Form view** (`ShowFormPanel`): Edit/create — opens from detail's pencil button or "Tạo show"
-  - **Role toggle**: "Admin" ↔ "Nhân viên" button in month + day view headers; persisted to localStorage `cal_view_mode`. Admin sees all; staff hides finances, edit/delete
+  - **Detail view** (`ShowDetailPanel`): Read-only panel. Admin sees finances + edit/delete; staff sees only work info. If booking has `parentId` → shows "Tất cả dịch vụ trong hợp đồng" sibling list + contract totals.
+  - **Form view** (`ShowFormPanel`): Edit/create. Toggle "＋ Nhiều dịch vụ / ngày khác" for multi-service contract mode (see below).
+  - **Role toggle**: "Admin" ↔ "Nhân viên" in both month + day view headers; persisted to `localStorage.cal_view_mode`
+- **Multi-service contract (Hợp đồng đa dịch vụ)**:
+  - **Data model**: 1 parent booking (`isParentContract=true`) + N child bookings (`parentId=parentId`). Each child has its own `shootDate`, `serviceLabel`, `items`, `assignedStaff`.
+  - **DB columns added**: `parent_id integer`, `service_label text`, `is_parent_contract boolean default false`
+  - **API**: `POST /bookings` with `subServices:[...]` → creates parent + children atomically; `GET /bookings/:id` returns `siblings`, `parentContract`, `children` when applicable; `DELETE /bookings/:id` cascades to children.
+  - **Calendar display**: Filters out `isParentContract=true` bookings — only children appear on their own dates (each child is its own calendar event).
+  - **Form creation**: Toggle "＋ Nhiều dịch vụ / ngày khác" in section B → violet sub-service blocks, each with label, date override toggle, time, service search, notes. "+ Thêm dịch vụ N" adds more blocks. Total auto-sums.
+  - **Detail view**: When `parentId` is set, detail panel fetches full booking (includes siblings) and shows violet card "Tất cả dịch vụ trong hợp đồng (N)" listing all siblings with dates, "Đang xem" badge on current. Admin sees green contract totals.
 - **Váy cưới (Dresses)**: Wedding dress inventory management
 - **Cho thuê váy (Rentals)**: Dress rental management with return tracking
 - **Thanh toán (Payments)**: Payment tracking (cash, bank transfer, MoMo, ZaloPay)
