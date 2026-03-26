@@ -770,6 +770,151 @@ seedGiaDinhIfMissing().catch(console.error);
 seedMakeupLeIfMissing().catch(console.error);
 seedInAnhIfMissing().catch(console.error);
 
+// ─── Addon: Chụp cổng tại studio ─────────────────────────────────────────────
+const ADDONS_CONG = JSON.stringify([
+  { key: "video_hau_truong", name: "Video hậu trường",      price: 200000 },
+  { key: "makeup_chu_re",    name: "Makeup luôn cho chú rể", price: 500000 },
+]);
+
+const NOTES_CONG = "Cọc 20% khi đặt lịch\nThanh toán 60% trong ngày chụp\nThanh toán 20% còn lại khi nhận hình\n\nPhụ thu:\n• Video hậu trường +200.000đ\n• Makeup chú rể +500.000đ";
+
+async function seedCongGroup() {
+  const existing = await db.select()
+    .from(serviceGroupsTable)
+    .where(eq(serviceGroupsTable.name, "CHỤP CỔNG TẠI STUDIO"))
+    .limit(1);
+  if (existing.length > 0) return;
+
+  // ─── Nhóm 0: CHỤP CỔNG TẠI STUDIO (nhóm dịch vụ chủ lực) ────────────────
+  const [grCong] = await db.insert(serviceGroupsTable).values([
+    { name: "CHỤP CỔNG TẠI STUDIO", description: "Nhóm dịch vụ chủ lực — chụp ảnh cổng cưới tại studio Amazing Studio", sortOrder: 1 },
+  ]).returning();
+
+  const [cgBasic, cgPremium, cgLuxury] = await db.insert(servicePackagesTable).values([
+    {
+      groupId: grCong.id,
+      code: "CG-BASIC",
+      name: "Chụp cổng Basic",
+      price: "2900000",
+      costPrice: "400000",
+      printCost: "300000",
+      operatingCost: "100000",
+      salePercent: "8",
+      serviceType: "tiec",
+      photoCount: 1,
+      includesMakeup: 1,
+      description: "Dành cho cặp đôi muốn lưu giữ khoảnh khắc giản dị nhưng vẫn tinh tế.\n\n• 1 sare cô dâu + 1 áo vest chú rể\n• 1 photo chuyên viên\n• Makeup chuyên viên",
+      notes: NOTES_CONG,
+      addons: ADDONS_CONG,
+      products: JSON.stringify([
+        "2 hình cổng 60×90 ép gỗ in lụa",
+        "5 hình nhỏ 13×18 (chưa khung)",
+        "Toàn bộ file gốc (tặng kèm)",
+      ]),
+      sortOrder: 1,
+    },
+    {
+      groupId: grCong.id,
+      code: "CG-PREMIUM",
+      name: "Chụp cổng Premium",
+      price: "3900000",
+      costPrice: "550000",
+      printCost: "400000",
+      operatingCost: "150000",
+      salePercent: "8",
+      serviceType: "tiec",
+      photoCount: 1,
+      includesMakeup: 1,
+      description: "Dành cho cặp đôi muốn bộ ảnh chỉn chu, sang trọng hơn.\n\n• 2 sare cô dâu + 2 áo vest chú rể\n• 1 photo chuyên viên\n• Makeup chuyên viên",
+      notes: NOTES_CONG,
+      addons: ADDONS_CONG,
+      products: JSON.stringify([
+        "2 hình cổng 60×90 mica gương cao cấp",
+        "10 hình nhỏ 13×18 (chưa khung)",
+        "Toàn bộ file gốc (tặng kèm)",
+      ]),
+      sortOrder: 2,
+    },
+    {
+      groupId: grCong.id,
+      code: "CG-LUXURY",
+      name: "Chụp cổng Luxury",
+      price: "5900000",
+      costPrice: "800000",
+      printCost: "600000",
+      operatingCost: "200000",
+      salePercent: "8",
+      serviceType: "tiec",
+      photoCount: 1,
+      includesMakeup: 1,
+      description: "Phiên bản cao cấp nhất, mọi chi tiết đều được đầu tư tỉ mỉ.\n\n• 2 sare cô dâu + 2 áo vest chú rể\n• 1 photo master\n• Makeup master",
+      notes: NOTES_CONG,
+      addons: ADDONS_CONG,
+      products: JSON.stringify([
+        "2 hình cổng 60×90 mica gương cao cấp",
+        "10 hình khung 15×21 ép gỗ cao cấp (có khung)",
+        "Toàn bộ file gốc (tặng kèm)",
+      ]),
+      sortOrder: 3,
+    },
+  ]).returning();
+
+  await db.insert(packageItemsTable).values([
+    // Basic
+    { packageId: cgBasic.id, name: "Sare cô dâu",         quantity: "1", unit: "bộ",     sortOrder: 1 },
+    { packageId: cgBasic.id, name: "Áo vest chú rể",      quantity: "1", unit: "bộ",     sortOrder: 2 },
+    { packageId: cgBasic.id, name: "Photo chuyên viên",   quantity: "1", unit: "người",  sortOrder: 3 },
+    { packageId: cgBasic.id, name: "Makeup chuyên viên",  quantity: "1", unit: "lần",    sortOrder: 4 },
+    // Premium
+    { packageId: cgPremium.id, name: "Sare cô dâu",       quantity: "2", unit: "bộ",     sortOrder: 1 },
+    { packageId: cgPremium.id, name: "Áo vest chú rể",    quantity: "2", unit: "bộ",     sortOrder: 2 },
+    { packageId: cgPremium.id, name: "Photo chuyên viên", quantity: "1", unit: "người",  sortOrder: 3 },
+    { packageId: cgPremium.id, name: "Makeup chuyên viên",quantity: "1", unit: "lần",    sortOrder: 4 },
+    // Luxury
+    { packageId: cgLuxury.id, name: "Sare cô dâu",        quantity: "2", unit: "bộ",     sortOrder: 1 },
+    { packageId: cgLuxury.id, name: "Áo vest chú rể",     quantity: "2", unit: "bộ",     sortOrder: 2 },
+    { packageId: cgLuxury.id, name: "Photo master",        quantity: "1", unit: "người",  sortOrder: 3 },
+    { packageId: cgLuxury.id, name: "Makeup master",       quantity: "1", unit: "lần",    sortOrder: 4 },
+  ]);
+
+  console.log("[seed] CHỤP CỔNG TẠI STUDIO — 3 gói đã thêm.");
+}
+
+async function updateGroupSortOrders() {
+  // Thứ tự ưu tiên kinh doanh Amazing Studio
+  const ORDER: { name: string; newName?: string; sortOrder: number }[] = [
+    { name: "CHỤP CỔNG TẠI STUDIO",  sortOrder: 1  },
+    { name: "ALBUM TẠI STUDIO",       sortOrder: 2  },
+    { name: "ALBUM NGOẠI CẢNH",       sortOrder: 3  },
+    { name: "CHỤP TIỆC CƯỚI",         sortOrder: 4  },
+    { name: "CHỤP BEAUTY",  newName: "BEAUTY / THỜI TRANG", sortOrder: 5 },
+    { name: "BEAUTY / THỜI TRANG",    sortOrder: 5  }, // idempotent nếu đã đổi tên rồi
+    { name: "COMBO CÓ MAKEUP",        sortOrder: 6  },
+    { name: "COMBO KHÔNG MAKEUP",     sortOrder: 7  },
+    { name: "QUAY PHIM",              sortOrder: 8  },
+    { name: "CHỤP GIA ĐÌNH",          sortOrder: 9  },
+    { name: "MAKEUP LẺ",              sortOrder: 10 },
+    { name: "IN ẢNH",                 sortOrder: 11 },
+  ];
+
+  for (const entry of ORDER) {
+    const rows = await db.select().from(serviceGroupsTable)
+      .where(eq(serviceGroupsTable.name, entry.name)).limit(1);
+    if (rows.length === 0) continue;
+
+    const updatePayload: Record<string, unknown> = { sortOrder: entry.sortOrder };
+    if (entry.newName) updatePayload.name = entry.newName;
+
+    await db.update(serviceGroupsTable)
+      .set(updatePayload)
+      .where(eq(serviceGroupsTable.id, rows[0].id));
+  }
+  console.log("[migrate] Thứ tự nhóm dịch vụ đã được cập nhật.");
+}
+
+seedCongGroup().catch(console.error);
+updateGroupSortOrders().catch(console.error);
+
 // ─── Service groups ─────────────────────────────────────────────────────────
 router.get("/service-groups", async (_req, res) => {
   const groups = await db.select().from(serviceGroupsTable).orderBy(asc(serviceGroupsTable.sortOrder));
