@@ -1,22 +1,21 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   ArrowLeft, Phone, Mail, Calendar, Briefcase, Star,
   CheckCircle2, Clock, XCircle, PlayCircle, Banknote, TrendingUp,
   FileText, Plus, ChevronRight, Lock, Pencil, AlertCircle,
-  CalendarOff, ClipboardList, Shield,
+  CalendarOff, ClipboardList, Shield, Camera, ImageUp, Trash2, X,
 } from "lucide-react";
 import { useStaffAuth } from "@/contexts/StaffAuthContext";
 import { cn } from "@/lib/utils";
-import StaffAvatar from "@/components/StaffAvatar";
+import { compressStaffAvatar } from "@/components/StaffAvatar";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -118,6 +117,34 @@ const LEAVE_STATUS_COLORS: Record<string, string> = {
   rejected: "bg-red-100 text-red-700",
 };
 
+const COVER_GRADIENT: Record<string, string> = {
+  admin:        "from-violet-500 via-purple-400 to-violet-200",
+  photographer: "from-blue-500 via-indigo-400 to-blue-200",
+  photo:        "from-blue-500 via-indigo-400 to-blue-200",
+  makeup:       "from-pink-500 via-rose-400 to-pink-200",
+  sale:         "from-orange-400 via-amber-300 to-orange-100",
+  photoshop:    "from-teal-500 via-cyan-400 to-teal-200",
+  assistant:    "from-slate-500 via-gray-400 to-slate-200",
+  marketing:    "from-green-500 via-emerald-400 to-green-200",
+};
+
+const AVATAR_GRADIENT: Record<string, string> = {
+  admin:        "from-violet-500 to-purple-600",
+  photographer: "from-blue-500 to-indigo-600",
+  photo:        "from-blue-500 to-indigo-600",
+  makeup:       "from-pink-500 to-rose-600",
+  sale:         "from-orange-400 to-amber-500",
+  photoshop:    "from-teal-500 to-cyan-600",
+  assistant:    "from-slate-400 to-gray-500",
+  marketing:    "from-green-500 to-emerald-600",
+};
+
+const STATUS_DOT_CLS: Record<string, string> = {
+  active:    "bg-emerald-500 ring-emerald-100",
+  probation: "bg-amber-400 ring-amber-100",
+  inactive:  "bg-red-500 ring-red-100",
+};
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function StaffProfilePage() {
@@ -134,6 +161,12 @@ export default function StaffProfilePage() {
   const [notesForm, setNotesForm] = useState<Partial<InternalNotes>>({});
   const [jobDetailId, setJobDetailId] = useState<number | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+
+  // Avatar lightbox & menu
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [imgError, setImgError] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Leave form
   const [leaveForm, setLeaveForm] = useState({ startDate: "", endDate: "", reason: "", notes: "" });
@@ -256,6 +289,31 @@ export default function StaffProfilePage() {
 
   const { staff, monthStats, monthJobs, todayJobs, jobHistory, earnings, rates, leaveRequests, internalNotes } = profile;
 
+  // ── Avatar helpers ─────────────────────────────────────────────────────────
+  const avatarRaw = (staff as Record<string, unknown>).avatar as string | undefined;
+  const avatarUrl = !imgError ? avatarRaw : undefined;
+
+  const handleAvatarClick = () => {
+    if (canEdit) {
+      setProfileMenuOpen(v => !v);
+    } else if (avatarUrl) {
+      setLightboxOpen(true);
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setProfileMenuOpen(false);
+    try {
+      const compressed = await compressStaffAvatar(file);
+      await handleAvatarUpload(compressed);
+    } catch (err) {
+      console.error("Avatar compress error:", err);
+    }
+  };
+
   // ── Filter jobs for active stat card ──────────────────────────────────────
   const filteredJobs = activeFilter ? monthJobs.filter(j => {
     const s = (j.status || "").toLowerCase();
@@ -291,77 +349,177 @@ export default function StaffProfilePage() {
       </button>
 
       {/* ── A. IDENTITY CARD ─────────────────────────────────────────────── */}
-      <section className="bg-card border border-border rounded-2xl overflow-hidden">
-        {/* Top accent bar */}
-        <div className="h-1.5 w-full bg-gradient-to-r from-primary/70 via-primary to-primary/50" />
+      <section className="bg-card border border-border rounded-2xl shadow-md">
+        {/* Cover gradient – rounded top corners only */}
+        <div
+          className={cn(
+            "h-24 sm:h-28 rounded-t-2xl bg-gradient-to-br opacity-90",
+            COVER_GRADIENT[rolesDisplay[0]] ?? "from-primary/60 via-primary/30 to-primary/10"
+          )}
+        />
 
-        <div className="p-5 flex items-start gap-4">
-          {/* Avatar */}
-          <div className="flex-shrink-0 mt-0.5">
-            <StaffAvatar
-              name={staff.name}
-              avatar={(staff as Record<string, unknown>).avatar as string | undefined}
-              role={rolesDisplay[0]}
-              status={staffStatus}
-              isActive={staff.isActive}
-              size="xl"
-              editable={canEdit}
-              onUpload={handleAvatarUpload}
-              onDelete={handleAvatarDelete}
-              uploading={avatarUploading}
-            />
-            {canEdit && (
-              <p className="text-[10px] text-muted-foreground text-center mt-1.5 leading-tight">
-                {(staff as Record<string, unknown>).avatar ? "Bấm để đổi ảnh" : "Bấm để thêm ảnh"}
-              </p>
-            )}
-          </div>
+        {/* Body */}
+        <div className="px-4 sm:px-5 pb-5">
+          <div className="flex items-start gap-3 sm:gap-5">
 
-          {/* Info right */}
-          <div className="flex-1 min-w-0 space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <h1 className="text-xl font-bold tracking-tight leading-tight truncate">{staff.name}</h1>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  {staff.staffType === "official" ? "Chính thức" : "Cộng tác viên"}
-                  {staff.joinDate ? ` · Vào ${fmtDate(staff.joinDate)}` : ""}
-                </p>
-              </div>
-              <span className={cn("text-xs px-2.5 py-1 rounded-full font-medium shrink-0", statusCfg.cls)}>
-                {statusCfg.label}
-              </span>
-            </div>
+            {/* ── Avatar column ─────────────────────────────────────────── */}
+            <div className="relative flex-shrink-0 -mt-14 sm:-mt-16">
+              {/* Circle */}
+              <button
+                type="button"
+                onClick={handleAvatarClick}
+                disabled={!canEdit && !avatarUrl}
+                className={cn(
+                  "block relative focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-full",
+                  (canEdit || avatarUrl) ? "cursor-pointer" : "cursor-default"
+                )}
+                aria-label={canEdit ? "Chỉnh sửa ảnh đại diện" : "Xem ảnh đại diện"}
+              >
+                <div
+                  className={cn(
+                    "w-32 h-32 sm:w-40 sm:h-40 rounded-full overflow-hidden",
+                    "ring-[3px] ring-white shadow-[0_8px_32px_rgba(0,0,0,0.20)]",
+                    "border-2 border-primary/20",
+                    `bg-gradient-to-br ${AVATAR_GRADIENT[rolesDisplay[0]] ?? "from-slate-400 to-gray-500"}`
+                  )}
+                >
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt={staff.name}
+                      className="w-full h-full object-cover"
+                      onError={() => setImgError(true)}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <span className="text-4xl sm:text-5xl font-bold text-white select-none leading-none">
+                        {(staff.name || "?").trim().charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                  )}
 
-            {/* Role badges */}
-            <div className="flex flex-wrap gap-1.5">
-              {rolesDisplay.map(r => (
-                <span key={r} className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary font-medium">
-                  {ROLE_ICONS[r] || "•"} {ROLE_LABELS[r] || r}
-                </span>
-              ))}
-            </div>
+                  {/* Uploading overlay */}
+                  {avatarUploading && (
+                    <div className="absolute inset-0 bg-black/45 flex items-center justify-center">
+                      <div className="w-7 h-7 border-[3px] border-white border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  )}
 
-            {/* Contact info */}
-            <div className="space-y-1 pt-0.5">
-              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                <Phone className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="truncate">{staff.phone || "—"}</span>
-              </div>
-              {staff.email && (
-                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <Mail className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="truncate">{staff.email}</span>
+                  {/* Hover edit/view overlay */}
+                  {!avatarUploading && (canEdit || avatarUrl) && (
+                    <div className="absolute inset-0 bg-black/0 hover:bg-black/25 transition-colors flex items-center justify-center group">
+                      {canEdit
+                        ? <Camera size={26} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                        : <X size={0} className="hidden" />
+                      }
+                    </div>
+                  )}
                 </div>
+
+                {/* Status dot – large & prominent */}
+                <span
+                  className={cn(
+                    "absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2",
+                    "w-5 h-5 sm:w-6 sm:h-6 rounded-full",
+                    "ring-[3px] ring-white shadow-sm",
+                    STATUS_DOT_CLS[staffStatus || (staff.isActive ? "active" : "inactive")] ?? STATUS_DOT_CLS.active
+                  )}
+                />
+              </button>
+
+              {/* Context menu */}
+              {canEdit && profileMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setProfileMenuOpen(false)} />
+                  <div className="absolute left-full ml-3 top-0 z-50 bg-popover border border-border rounded-xl shadow-xl p-1 min-w-[160px] animate-in fade-in-0 zoom-in-95 duration-100">
+                    {avatarUrl && (
+                      <button
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors text-left"
+                        onClick={() => { setLightboxOpen(true); setProfileMenuOpen(false); }}
+                      >
+                        <Camera size={14} className="text-primary flex-shrink-0" />
+                        Xem ảnh lớn
+                      </button>
+                    )}
+                    <button
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors text-left"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <ImageUp size={14} className="text-primary flex-shrink-0" />
+                      {avatarUrl ? "Đổi ảnh" : "Tải ảnh lên"}
+                    </button>
+                    {avatarUrl && (
+                      <button
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg hover:bg-red-50 text-red-600 transition-colors text-left"
+                        onClick={() => { handleAvatarDelete(); setProfileMenuOpen(false); }}
+                      >
+                        <Trash2 size={14} className="flex-shrink-0" />
+                        Xóa ảnh
+                      </button>
+                    )}
+                  </div>
+                </>
               )}
-              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                <Briefcase className="w-3.5 h-3.5 flex-shrink-0" />
-                <span>{staff.staffType === "official" ? "Nhân viên chính thức" : "Freelancer / CTV"}</span>
+
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+            </div>
+
+            {/* ── Info column ───────────────────────────────────────────── */}
+            <div className="flex-1 min-w-0 pt-3 sm:pt-4">
+              {/* Name + status badge */}
+              <div className="flex items-start justify-between gap-2">
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight">{staff.name}</h1>
+                <span className={cn("text-xs px-2.5 py-1 rounded-full font-semibold shrink-0 mt-0.5", statusCfg.cls)}>
+                  {statusCfg.label}
+                </span>
               </div>
-              {staff.joinDate && (
+
+              {/* Role badges */}
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {rolesDisplay.map(r => (
+                  <span key={r} className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary font-medium">
+                    {ROLE_ICONS[r] || "•"} {ROLE_LABELS[r] || r}
+                  </span>
+                ))}
+              </div>
+
+              {/* Contact info */}
+              <div className="space-y-1.5 mt-3">
                 <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span>Vào làm {fmtDate(staff.joinDate)}</span>
+                  <Phone className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="truncate">{staff.phone || "—"}</span>
                 </div>
+                {staff.email && (
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <Mail className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span className="truncate">{staff.email}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Briefcase className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>{staff.staffType === "official" ? "Nhân viên chính thức" : "Freelancer / CTV"}</span>
+                </div>
+                {staff.joinDate && (
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>Vào làm {fmtDate(staff.joinDate)}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Upload hint */}
+              {canEdit && (
+                <p className="text-[10px] text-muted-foreground mt-3 flex items-center gap-1">
+                  <Camera size={10} />
+                  {avatarUrl ? "Bấm ảnh để đổi hoặc xem" : "Bấm ảnh để thêm avatar"}
+                </p>
               )}
             </div>
           </div>
@@ -778,6 +936,33 @@ export default function StaffProfilePage() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* ── Lightbox (xem ảnh đại diện) ─────────────────────────────────── */}
+      <Dialog open={lightboxOpen} onOpenChange={setLightboxOpen}>
+        <DialogContent className="max-w-xs sm:max-w-sm p-3 gap-0">
+          <div className="relative">
+            {avatarUrl && (
+              <img
+                src={avatarUrl}
+                alt={staff.name}
+                className="w-full rounded-2xl object-cover shadow-lg"
+              />
+            )}
+            <div className="absolute top-2 right-2">
+              <button
+                onClick={() => setLightboxOpen(false)}
+                className="bg-black/50 text-white rounded-full p-1 hover:bg-black/70 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 rounded-b-2xl bg-gradient-to-t from-black/60 to-transparent px-4 py-3">
+              <p className="text-white font-semibold text-sm">{staff.name}</p>
+              <p className="text-white/70 text-xs">{rolesDisplay.map(r => ROLE_LABELS[r] || r).join(" · ")}</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
