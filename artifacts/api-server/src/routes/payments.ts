@@ -35,9 +35,15 @@ function fmtBookingRow(row: any) {
     createdAt:       row.createdAt ?? null,
     notes:           row.notes ?? null,
     latestPaymentAt: row.latestPaymentAt ?? null,
+    isParentContract: Boolean(row.isParentContract),
+    serviceCount:    Number(row.serviceCount ?? 0),
   };
 }
 
+// Base SQL for booking rows — chỉ lấy hồ sơ tài chính thực sự:
+// - Booking đơn lẻ (parent_id IS NULL AND is_parent_contract = false)
+// - Booking cha đa dịch vụ (is_parent_contract = true)
+// → KHÔNG lấy booking con (parent_id IS NOT NULL) vì chúng chỉ là lịch chụp
 const BOOKING_JOIN_SQL = `
   SELECT
     b.id,
@@ -51,18 +57,21 @@ const BOOKING_JOIN_SQL = `
     b.paid_amount::numeric    AS "paidAmount",
     GREATEST(0, (b.total_amount - b.paid_amount)::numeric) AS "remainingAmount",
     b.status,
-    b.shoot_date  AS "shootDate",
-    b.created_at  AS "createdAt",
-    b.notes
+    b.shoot_date              AS "shootDate",
+    b.created_at              AS "createdAt",
+    b.notes,
+    b.is_parent_contract      AS "isParentContract",
+    (SELECT COUNT(*) FROM bookings ch WHERE ch.parent_id = b.id) AS "serviceCount"
   FROM bookings b
   LEFT JOIN customers c ON b.customer_id = c.id
+  WHERE b.parent_id IS NULL
 `;
 
 // GET /payments/suggestions — gợi ý thông minh khi mở ô tìm kiếm (chưa nhập)
 router.get("/payments/suggestions", async (req, res) => {
   const [bookingsResult, paymentsResult] = await Promise.all([
     pool.query(`${BOOKING_JOIN_SQL}
-      WHERE b.status IN ('pending', 'confirmed', 'in_progress')
+      AND b.status NOT IN ('cancelled')
       ORDER BY b.created_at DESC
       LIMIT 50`),
     pool.query(`
@@ -95,6 +104,7 @@ router.get("/payments/suggestions", async (req, res) => {
 });
 
 // GET /payments/search?q=... — tìm đơn hàng cần thu theo tên/SĐT/mã đơn
+// Hỗ trợ tìm kiếm có dấu/không dấu nhờ unaccent()
 router.get("/payments/search", async (req, res) => {
   const q = ((req.query.q as string) || "").trim();
   if (!q) { res.json([]); return; }
@@ -102,7 +112,12 @@ router.get("/payments/search", async (req, res) => {
   const pct = `%${q}%`;
   const result = await pool.query(
     `${BOOKING_JOIN_SQL}
-     WHERE c.name ILIKE $1 OR c.phone ILIKE $2 OR b.order_code ILIKE $3
+     AND (
+       unaccent(c.name) ILIKE unaccent($1)
+       OR c.phone ILIKE $2
+       OR b.order_code ILIKE $3
+     )
+     AND b.status != 'cancelled'
      ORDER BY b.created_at DESC
      LIMIT 20`,
     [pct, pct, pct]

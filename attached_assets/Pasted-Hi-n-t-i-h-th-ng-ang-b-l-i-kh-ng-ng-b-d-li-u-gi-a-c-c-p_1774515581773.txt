@@ -1,0 +1,48 @@
+Hiện tại hệ thống đang bị lỗi không đồng bộ dữ liệu giữa các phần Tạo đơn, Hồ sơ khách hàng và Phiếu thu.
+
+Lỗi thực tế:
+- Tôi vừa tạo đơn mới thành công cho khách Ma Thiền Ngọc Diệp.
+- Nhưng khi vào mục Phiếu thu và tìm tên khách hoặc đơn hàng thì không thấy hiện ra để thu thêm tiền.
+- Điều này chứng tỏ dữ liệu giữa phần tạo đơn và phần phiếu thu chưa liên kết với nhau hoặc chưa cập nhật đồng bộ ngay sau khi lưu.
+
+Yêu cầu cần sửa:
+1. Sau khi tạo đơn thành công, đơn hàng phải được lưu vào cùng một nguồn dữ liệu trung tâm.
+2. Đơn mới tạo phải xuất hiện ngay lập tức ở các mục:
+   - Danh sách đơn hàng
+   - Hồ sơ khách hàng
+   - Phiếu thu
+   - Lịch hẹn / lịch làm việc nếu đơn có ngày chụp
+3. Phiếu thu phải tìm được theo đầy đủ các tiêu chí:
+   - Tên khách
+   - Số điện thoại
+   - Mã đơn hàng
+4. Khi mở phiếu thu, hệ thống phải tự lấy đúng dữ liệu từ đơn hàng:
+   - Tên khách
+   - Số điện thoại
+   - Mã đơn
+   - Gói dịch vụ
+   - Tổng đơn
+   - Đã thu
+   - Còn lại
+5. Sau mỗi lần thu tiền:
+   - Cập nhật ngay số đã thu và còn lại trong đơn hàng
+   - Đồng bộ ngược về hồ sơ khách hàng
+   - Đồng bộ ra danh sách phiếu thu
+   - Nếu thu đủ thì trạng thái đơn phải đổi thành “Đã thanh toán” hoặc “Thu đủ”
+6. Cần kiểm tra lại toàn bộ luồng dữ liệu để bảo đảm các module không lưu riêng lẻ, mà phải liên kết chung theo đúng ID đơn hàng hoặc customer_id.
+7. Khi tạo đơn mới xong, không được cần tải lại thủ công mới thấy dữ liệu. Hệ thống phải refresh tự động hoặc cập nhật state ngay.
+8. Kiểm tra và sửa luôn các trường hợp:
+   - tạo đơn xong nhưng không tìm thấy ở phiếu thu
+   - sửa đơn xong nhưng phiếu thu không cập nhật
+   - thu tiền xong nhưng hồ sơ khách không đổi số dư
+   - tìm theo tên có dấu / không dấu bị sai
+   - tìm theo một phần tên vẫn không ra
+
+Đề nghị chuẩn hóa lại cấu trúc dữ liệu như sau:
+- 1 khách hàng có thể có nhiều đơn
+- 1 đơn có thể có nhiều lần thu tiền
+- Phiếu thu phải lấy theo đơn hàng, không phải tạo dữ liệu rời
+- Mọi màn hình phải dùng cùng một database record, không tạo bản sao riêng
+
+Mục tiêu cuối cùng:
+Tạo đơn ở đâu thì các phần còn lại phải nhìn thấy ngay, dữ liệu phải đồng bộ 100%, không được nhập lại thủ công.

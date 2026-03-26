@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import { customersTable, bookingsTable, paymentsTable } from "@workspace/db/schema";
-import { eq, ilike, or, desc } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -9,15 +9,21 @@ router.get("/customers", async (req, res) => {
   const search = req.query.search as string | undefined;
   let customers;
   if (search) {
-    customers = await db
-      .select()
-      .from(customersTable)
-      .where(or(
-        ilike(customersTable.name, `%${search}%`),
-        ilike(customersTable.phone, `%${search}%`),
-        ilike(customersTable.facebook, `%${search}%`)
-      ))
-      .orderBy(desc(customersTable.createdAt));
+    const pct = `%${search}%`;
+    const r = await pool.query(
+      `SELECT * FROM customers
+       WHERE unaccent(name) ILIKE unaccent($1)
+          OR phone ILIKE $2
+          OR facebook ILIKE $3
+       ORDER BY created_at DESC`,
+      [pct, pct, pct]
+    );
+    customers = r.rows.map((row: any) => ({
+      id: row.id, name: row.name, phone: row.phone, email: row.email,
+      address: row.address, notes: row.notes, facebook: row.facebook,
+      zalo: row.zalo, source: row.source, tags: row.tags, gender: row.gender,
+      avatar: row.avatar, customCode: row.custom_code, createdAt: row.created_at,
+    }));
   } else {
     customers = await db.select().from(customersTable).orderBy(desc(customersTable.createdAt));
   }

@@ -34,6 +34,8 @@ type Booking = {
   createdAt?: string;
   latestPaymentAt?: string | null;
   notes?: string;
+  isParentContract?: boolean;
+  serviceCount?: number;
 };
 
 type Payment = {
@@ -131,8 +133,20 @@ function BookingRow({
                   <span className="font-mono font-medium text-primary/70">{b.orderCode}</span>
                 </>
               )}
-              <span className="opacity-40">·</span>
-              <span className="truncate max-w-[120px]">{b.packageType}</span>
+              {b.isParentContract && (b.serviceCount ?? 0) > 0 && (
+                <>
+                  <span className="opacity-40">·</span>
+                  <span className="text-[10px] px-1 py-0.5 rounded bg-violet-100 text-violet-700 font-semibold">
+                    {b.serviceCount} dịch vụ
+                  </span>
+                </>
+              )}
+              {!b.isParentContract && (
+                <>
+                  <span className="opacity-40">·</span>
+                  <span className="truncate max-w-[120px]">{b.packageType}</span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -323,7 +337,7 @@ export default function PaymentsPage() {
   const { data: suggestions = [], isLoading: suggestionsLoading } = useQuery<Booking[]>({
     queryKey: ["payment-suggestions"],
     queryFn: () => fetchJson("/api/payments/suggestions"),
-    staleTime: 30_000,
+    staleTime: 0,
   });
 
   /* Selected booking */
