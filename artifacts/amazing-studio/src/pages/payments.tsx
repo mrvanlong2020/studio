@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Search, CreditCard, Banknote, Phone, Clock, Trash2,
   X, Upload, Eye, AlertCircle, Receipt, ChevronDown,
-  Sparkles, ListFilter,
+  Sparkles, ListFilter, History, TrendingUp, ChevronRight,
+  CalendarDays, Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -51,6 +52,38 @@ type Payment = {
   notes?: string;
   paidAt: string;
 };
+
+type RecentPaymentItem = {
+  id: number;
+  bookingId: number | null;
+  rentalId: number | null;
+  amount: number;
+  paymentMethod: string;
+  paymentType: string;
+  collectorName: string | null;
+  bankName: string | null;
+  proofImageUrl: string | null;
+  paidDate: string | null;
+  paidAt: string | null;
+  notes: string | null;
+  customerName: string | null;
+  customerPhone: string | null;
+  orderCode: string | null;
+  packageType: string | null;
+  totalAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
+  status: string | null;
+  isParentContract: boolean;
+  paymentCount: number;
+};
+
+type RecentData = {
+  payments: RecentPaymentItem[];
+  summary: { count: number; total: number };
+};
+
+type Period = "today" | "7days" | "month";
 
 const METHOD_LABEL: Record<string, string> = {
   cash: "Tiền mặt",
@@ -349,6 +382,41 @@ export default function PaymentsPage() {
     enabled: !!selectedBooking,
   });
 
+  /* Recent payment history section */
+  const [period, setPeriod] = useState<Period>("today");
+  const [showAll, setShowAll] = useState(false);
+  const recentLimit = showAll ? 50 : 10;
+
+  const { data: recentData, refetch: refetchRecent } = useQuery<RecentData>({
+    queryKey: ["payments-recent", period, recentLimit],
+    queryFn: () => fetchJson(`/api/payments/recent?period=${period}&limit=${recentLimit}`),
+    staleTime: 0,
+  });
+  const recentPayments  = recentData?.payments  ?? [];
+  const recentSummary   = recentData?.summary   ?? { count: 0, total: 0 };
+
+  /* Khi click vào phiếu thu gần đây → chọn booking tương ứng */
+  const handleSelectFromRecent = (p: RecentPaymentItem) => {
+    if (!p.bookingId) return;
+    const booking: Booking = {
+      id:              p.bookingId,
+      orderCode:       p.orderCode ?? "",
+      customerId:      0,
+      customerName:    p.customerName ?? "",
+      customerPhone:   p.customerPhone ?? "",
+      packageType:     p.packageType ?? "",
+      totalAmount:     p.totalAmount,
+      paidAmount:      p.paidAmount,
+      remainingAmount: p.remainingAmount,
+      status:          p.status ?? "",
+      shootDate:       "",
+      isParentContract: p.isParentContract,
+      serviceCount:    0,
+    };
+    handleSelectBooking(booking);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   /* Form */
   const [form, setForm] = useState({
     amount: "",
@@ -415,6 +483,7 @@ export default function PaymentsPage() {
         }),
       });
       await refetchHistory();
+      await refetchRecent();
       await refreshSelectedBooking(selectedBooking);
       setForm(f => ({
         ...f,
@@ -431,6 +500,7 @@ export default function PaymentsPage() {
     mutationFn: (id: number) => fetch(`${BASE}/api/payments/${id}`, { method: "DELETE" }),
     onSuccess: async () => {
       await refetchHistory();
+      await refetchRecent();
       if (selectedBooking) await refreshSelectedBooking(selectedBooking);
     },
   });
@@ -460,6 +530,201 @@ export default function PaymentsPage() {
           selectedId={selectedBooking?.id}
           onSelect={handleSelectBooking}
         />
+      </div>
+
+      {/* ── Lịch sử thu gần đây ──────────────────── */}
+      <div className="bg-card border border-border rounded-2xl overflow-hidden">
+        {/* Header */}
+        <div className="px-4 pt-4 pb-3 border-b border-border/60">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <History className="w-4 h-4 text-primary" />
+              <span className="text-sm font-semibold">Lịch sử thu gần đây</span>
+            </div>
+            {/* Period filter tabs */}
+            <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-xl">
+              {([
+                { v: "today",  label: "Hôm nay"   },
+                { v: "7days",  label: "7 ngày"     },
+                { v: "month",  label: "Tháng này"  },
+              ] as { v: Period; label: string }[]).map(tab => (
+                <button
+                  key={tab.v}
+                  onClick={() => { setPeriod(tab.v); setShowAll(false); }}
+                  className={cn(
+                    "px-3 py-1 rounded-lg text-xs font-semibold transition-all",
+                    period === tab.v
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Summary bar */}
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="bg-green-50 border border-green-100 rounded-xl px-3 py-2.5 flex items-center gap-2.5">
+              <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <TrendingUp className="w-4 h-4 text-green-600" />
+              </div>
+              <div>
+                <p className="text-[10px] text-green-600 font-medium">
+                  {period === "today" ? "Hôm nay đã thu" : period === "7days" ? "7 ngày đã thu" : "Tháng này đã thu"}
+                </p>
+                <p className="text-sm font-bold text-green-700">{fmtVND(recentSummary.total)}</p>
+              </div>
+            </div>
+            <div className="bg-blue-50 border border-blue-100 rounded-xl px-3 py-2.5 flex items-center gap-2.5">
+              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <Receipt className="w-4 h-4 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-[10px] text-blue-600 font-medium">Số giao dịch</p>
+                <p className="text-sm font-bold text-blue-700">{recentSummary.count} phiếu</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* List */}
+        <div>
+          {recentPayments.length === 0 ? (
+            <div className="py-10 text-center text-muted-foreground">
+              <History className="w-8 h-8 mx-auto mb-2 opacity-25" />
+              <p className="text-sm">
+                {period === "today" ? "Hôm nay chưa có phiếu thu nào" :
+                 period === "7days" ? "7 ngày qua chưa có phiếu thu" :
+                 "Tháng này chưa có phiếu thu nào"}
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="divide-y divide-border/40">
+                {recentPayments.map((p, idx) => {
+                  const isCash    = p.paymentMethod === "cash";
+                  const isPaidFull = p.remainingAmount <= 0;
+                  const isFirst   = p.paymentCount === 1;
+                  const txLabel   = isPaidFull ? "Thu đủ" : isFirst ? "Thu cọc" : "Thu thêm";
+                  const txCls     = isPaidFull
+                    ? "bg-green-100 text-green-700"
+                    : isFirst
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-blue-100 text-blue-700";
+                  const paidWhen  = p.paidDate
+                    ? fmtDate(p.paidDate)
+                    : p.paidAt
+                    ? fmtDate(p.paidAt)
+                    : "—";
+                  const paidTime  = p.paidAt
+                    ? new Date(p.paidAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
+                    : "";
+
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => handleSelectFromRecent(p)}
+                      className="w-full text-left px-4 py-3 hover:bg-muted/30 transition-colors flex items-center gap-3 group"
+                    >
+                      {/* Phương thức icon */}
+                      <div className={cn(
+                        "w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0",
+                        isCash ? "bg-emerald-100 text-emerald-600" : "bg-blue-100 text-blue-600"
+                      )}>
+                        {isCash ? <Banknote className="w-4 h-4" /> : <CreditCard className="w-4 h-4" />}
+                      </div>
+
+                      {/* Thông tin chính */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-sm font-semibold text-foreground truncate">
+                            {p.customerName ?? "Khách lẻ"}
+                          </span>
+                          <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0", txCls)}>
+                            {txLabel}
+                          </span>
+                          {p.isParentContract && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-violet-100 text-violet-700 flex-shrink-0 flex items-center gap-0.5">
+                              <Layers className="w-2.5 h-2.5" /> Đa DV
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-0.5 flex-wrap">
+                          {p.customerPhone && (
+                            <span className="flex items-center gap-0.5">
+                              <Phone className="w-2.5 h-2.5" />{p.customerPhone}
+                            </span>
+                          )}
+                          {p.orderCode && (
+                            <>
+                              <span className="opacity-40">·</span>
+                              <span className="font-mono font-medium text-primary/70">{p.orderCode}</span>
+                            </>
+                          )}
+                          <span className="opacity-40">·</span>
+                          <span className="flex items-center gap-0.5">
+                            <CalendarDays className="w-2.5 h-2.5" />
+                            {paidWhen}
+                            {paidTime && ` ${paidTime}`}
+                          </span>
+                          {p.collectorName && (
+                            <>
+                              <span className="opacity-40">·</span>
+                              <span>{p.collectorName}</span>
+                            </>
+                          )}
+                        </div>
+                        {p.notes && (
+                          <p className="text-[11px] text-muted-foreground italic mt-0.5 truncate">"{p.notes}"</p>
+                        )}
+                      </div>
+
+                      {/* Số tiền + mũi tên */}
+                      <div className="text-right flex-shrink-0 flex items-center gap-2">
+                        <div>
+                          <p className={cn(
+                            "text-sm font-bold",
+                            isCash ? "text-emerald-600" : "text-blue-600"
+                          )}>
+                            +{fmtVND(p.amount)}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            {METHOD_LABEL[p.paymentMethod] ?? p.paymentMethod}
+                          </p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors flex-shrink-0" />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Xem thêm */}
+              {!showAll && recentPayments.length >= 10 && (
+                <div className="px-4 py-3 border-t border-border/40 text-center">
+                  <button
+                    onClick={() => setShowAll(true)}
+                    className="text-xs font-semibold text-primary hover:text-primary/80 flex items-center gap-1 mx-auto transition-colors"
+                  >
+                    <ChevronDown className="w-3.5 h-3.5" /> Xem thêm giao dịch
+                  </button>
+                </div>
+              )}
+              {showAll && (
+                <div className="px-4 py-3 border-t border-border/40 text-center">
+                  <button
+                    onClick={() => setShowAll(false)}
+                    className="text-xs font-semibold text-muted-foreground hover:text-foreground flex items-center gap-1 mx-auto transition-colors"
+                  >
+                    Thu gọn
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* ── Phiếu thu + Lịch sử ──────────────────── */}

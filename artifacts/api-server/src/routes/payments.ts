@@ -103,6 +103,100 @@ router.get("/payments/suggestions", async (req, res) => {
   res.json(sorted);
 });
 
+// GET /payments/recent?period=today|7days|month&limit=10 — lịch sử thu gần đây
+router.get("/payments/recent", async (req, res) => {
+  const period = (req.query.period as string) || "today";
+  const limit  = Math.min(parseInt((req.query.limit as string) || "10"), 100);
+
+  let dateFilter: string;
+  if (period === "today") {
+    dateFilter = `p.paid_at >= date_trunc('day', NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh') AT TIME ZONE 'Asia/Ho_Chi_Minh'`;
+  } else if (period === "7days") {
+    dateFilter = `p.paid_at >= NOW() - INTERVAL '7 days'`;
+  } else {
+    // month
+    dateFilter = `p.paid_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh') AT TIME ZONE 'Asia/Ho_Chi_Minh'`;
+  }
+
+  const BASE_SELECT = `
+    SELECT
+      p.id,
+      p.booking_id         AS "bookingId",
+      p.rental_id          AS "rentalId",
+      p.amount::numeric    AS "amount",
+      p.payment_method     AS "paymentMethod",
+      p.payment_type       AS "paymentType",
+      p.collector_name     AS "collectorName",
+      p.bank_name          AS "bankName",
+      p.proof_image_url    AS "proofImageUrl",
+      p.paid_date          AS "paidDate",
+      p.paid_at            AS "paidAt",
+      p.notes,
+      c.name               AS "customerName",
+      c.phone              AS "customerPhone",
+      b.order_code         AS "orderCode",
+      b.package_type       AS "packageType",
+      b.total_amount::numeric  AS "totalAmount",
+      b.paid_amount::numeric   AS "paidAmount",
+      GREATEST(0, (b.total_amount - b.paid_amount)::numeric) AS "remainingAmount",
+      b.status             AS "status",
+      b.is_parent_contract AS "isParentContract",
+      (SELECT COUNT(*) FROM payments pp WHERE pp.booking_id = b.id) AS "paymentCount"
+    FROM payments p
+    LEFT JOIN bookings b ON p.booking_id = b.id
+    LEFT JOIN customers c ON b.customer_id = c.id
+    WHERE p.payment_type = 'payment'
+      AND ${dateFilter}
+    ORDER BY p.paid_at DESC
+    LIMIT $1`;
+
+  const [listResult, sumResult] = await Promise.all([
+    pool.query(BASE_SELECT, [limit]),
+    pool.query(
+      `SELECT
+         COUNT(*)::int          AS "count",
+         COALESCE(SUM(p.amount::numeric), 0) AS "total"
+       FROM payments p
+       WHERE p.payment_type = 'payment'
+         AND ${dateFilter}`
+    ),
+  ]);
+
+  const payments = listResult.rows.map((p: any) => ({
+    id:           Number(p.id),
+    bookingId:    p.bookingId ? Number(p.bookingId) : null,
+    rentalId:     p.rentalId  ? Number(p.rentalId)  : null,
+    amount:       parseFloat(p.amount),
+    paymentMethod: p.paymentMethod,
+    paymentType:  p.paymentType,
+    collectorName: p.collectorName ?? null,
+    bankName:     p.bankName ?? null,
+    proofImageUrl: p.proofImageUrl ?? null,
+    paidDate:     p.paidDate ?? null,
+    paidAt:       p.paidAt ?? null,
+    notes:        p.notes ?? null,
+    customerName: p.customerName ?? null,
+    customerPhone: p.customerPhone ?? null,
+    orderCode:    p.orderCode ?? null,
+    packageType:  p.packageType ?? null,
+    totalAmount:  parseFloat(p.totalAmount || 0),
+    paidAmount:   parseFloat(p.paidAmount  || 0),
+    remainingAmount: parseFloat(p.remainingAmount || 0),
+    status:       p.status ?? null,
+    isParentContract: Boolean(p.isParentContract),
+    paymentCount: Number(p.paymentCount ?? 0),
+  }));
+
+  const summary = sumResult.rows[0];
+  res.json({
+    payments,
+    summary: {
+      count: Number(summary.count),
+      total: parseFloat(summary.total),
+    },
+  });
+});
+
 // GET /payments/search?q=... — tìm đơn hàng cần thu theo tên/SĐT/mã đơn
 // Hỗ trợ tìm kiếm có dấu/không dấu nhờ unaccent()
 router.get("/payments/search", async (req, res) => {
