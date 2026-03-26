@@ -570,8 +570,10 @@ async function seedQuayPhimIfMissing() {
 }
 
 async function seedBeautyIfMissing() {
-  const ex = await db.select().from(serviceGroupsTable).where(eq(serviceGroupsTable.name, "CHỤP BEAUTY")).limit(1);
-  if (ex.length > 0) return;
+  // Check both old name AND new name to prevent re-creation after rename
+  const exOld = await db.select().from(serviceGroupsTable).where(eq(serviceGroupsTable.name, "CHỤP BEAUTY")).limit(1);
+  const exNew = await db.select().from(serviceGroupsTable).where(eq(serviceGroupsTable.name, "BEAUTY / THỜI TRANG")).limit(1);
+  if (exOld.length > 0 || exNew.length > 0) return;
   const [gr] = await db.insert(serviceGroupsTable).values([
     { name: "CHỤP BEAUTY", description: "Gói chụp ảnh beauty cá nhân", sortOrder: 7 },
   ]).returning();
@@ -917,14 +919,28 @@ updateGroupSortOrders().catch(console.error);
 
 // ─── Service groups ─────────────────────────────────────────────────────────
 router.get("/service-groups", async (_req, res) => {
-  const groups = await db.select().from(serviceGroupsTable).orderBy(asc(serviceGroupsTable.sortOrder));
-  res.json(groups.map(fmtGroup));
+  const all = await db.select().from(serviceGroupsTable).orderBy(asc(serviceGroupsTable.sortOrder));
+  // Deduplicate by name — keep the one with the lowest id (earliest created)
+  const seen = new Map<string, typeof all[0]>();
+  for (const g of all) {
+    if (!seen.has(g.name)) seen.set(g.name, g);
+  }
+  res.json(Array.from(seen.values()).map(fmtGroup));
 });
 
 router.post("/service-groups", async (req, res) => {
   const { name, description, sortOrder, isActive } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: "Tên nhóm không được để trống" });
+
+  // Reject duplicate names
+  const existing = await db.select().from(serviceGroupsTable)
+    .where(eq(serviceGroupsTable.name, name.trim())).limit(1);
+  if (existing.length > 0) {
+    return res.status(409).json({ error: `Nhóm "${name.trim()}" đã tồn tại`, existing: fmtGroup(existing[0]) });
+  }
+
   const [g] = await db.insert(serviceGroupsTable).values({
-    name, description, sortOrder: sortOrder ?? 0, isActive: isActive !== false ? 1 : 0,
+    name: name.trim(), description, sortOrder: sortOrder ?? 0, isActive: isActive !== false ? 1 : 0,
   }).returning();
   res.status(201).json(fmtGroup(g));
 });

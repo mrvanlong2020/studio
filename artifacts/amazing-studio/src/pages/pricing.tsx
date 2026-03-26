@@ -4,10 +4,29 @@ import { useLocation } from "wouter";
 import {
   Plus, Search, Edit2, Trash2, ChevronDown, ChevronRight,
   Package, Tag, Layers, X, Check, AlertCircle,
-  ShoppingCart, FileText, Eye, EyeOff, GripVertical
+  ShoppingCart, FileText, Eye, EyeOff, GripVertical,
+  Camera, BookOpen, MapPin, Star, Sparkles, Palette,
+  Film, Heart, Printer, Zap
 } from "lucide-react";
 import { formatVND } from "@/lib/utils";
 import { Button, Input, Badge } from "@/components/ui";
+
+type GroupMeta = { Icon: React.ElementType; iconCls: string; bgCls: string; ringCls: string };
+const GROUP_META: Record<string, GroupMeta> = {
+  "CHỤP CỔNG TẠI STUDIO":  { Icon: Camera,   iconCls: "text-rose-600",    bgCls: "bg-rose-50 dark:bg-rose-950/30",    ringCls: "ring-rose-200 dark:ring-rose-800" },
+  "ALBUM TẠI STUDIO":       { Icon: BookOpen,  iconCls: "text-violet-600",  bgCls: "bg-violet-50 dark:bg-violet-950/30", ringCls: "ring-violet-200 dark:ring-violet-800" },
+  "ALBUM NGOẠI CẢNH":       { Icon: MapPin,    iconCls: "text-sky-600",     bgCls: "bg-sky-50 dark:bg-sky-950/30",       ringCls: "ring-sky-200 dark:ring-sky-800" },
+  "CHỤP TIỆC CƯỚI":         { Icon: Star,      iconCls: "text-amber-600",   bgCls: "bg-amber-50 dark:bg-amber-950/30",   ringCls: "ring-amber-200 dark:ring-amber-800" },
+  "BEAUTY / THỜI TRANG":    { Icon: Sparkles,  iconCls: "text-pink-600",    bgCls: "bg-pink-50 dark:bg-pink-950/30",     ringCls: "ring-pink-200 dark:ring-pink-800" },
+  "COMBO CÓ MAKEUP":        { Icon: Palette,   iconCls: "text-purple-600",  bgCls: "bg-purple-50 dark:bg-purple-950/30", ringCls: "ring-purple-200 dark:ring-purple-800" },
+  "COMBO KHÔNG MAKEUP":     { Icon: Layers,    iconCls: "text-indigo-600",  bgCls: "bg-indigo-50 dark:bg-indigo-950/30", ringCls: "ring-indigo-200 dark:ring-indigo-800" },
+  "QUAY PHIM":              { Icon: Film,      iconCls: "text-red-600",     bgCls: "bg-red-50 dark:bg-red-950/30",       ringCls: "ring-red-200 dark:ring-red-800" },
+  "CHỤP GIA ĐÌNH":          { Icon: Heart,     iconCls: "text-green-600",   bgCls: "bg-green-50 dark:bg-green-950/30",   ringCls: "ring-green-200 dark:ring-green-800" },
+  "MAKEUP LẺ":              { Icon: Zap,       iconCls: "text-fuchsia-600", bgCls: "bg-fuchsia-50 dark:bg-fuchsia-950/30", ringCls: "ring-fuchsia-200 dark:ring-fuchsia-800" },
+  "IN ẢNH":                 { Icon: Printer,   iconCls: "text-slate-600",   bgCls: "bg-slate-50 dark:bg-slate-950/30",   ringCls: "ring-slate-200 dark:ring-slate-800" },
+};
+const DEFAULT_META: GroupMeta = { Icon: Package, iconCls: "text-primary", bgCls: "bg-primary/10", ringCls: "ring-primary/20" };
+function getGroupMeta(name: string): GroupMeta { return GROUP_META[name] ?? DEFAULT_META; }
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -48,6 +67,7 @@ export default function PricingPage() {
   const [editingSurcharge, setEditingSurcharge] = useState<Surcharge | null>(null);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [editingGroup, setEditingGroup] = useState<ServiceGroup | null>(null);
+  const [showAllFilterGroups, setShowAllFilterGroups] = useState(false);
 
   const { data: groups = [] } = useQuery<ServiceGroup[]>({
     queryKey: ["service-groups"],
@@ -190,8 +210,8 @@ export default function PricingPage() {
 
           {/* Search + Filter */}
           {tab === "packages" && (
-            <div className="flex gap-2 flex-wrap">
-              <div className="relative flex-1 min-w-48">
+            <div className="flex flex-col gap-2">
+              <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   className="pl-9 h-9 text-sm"
@@ -200,22 +220,37 @@ export default function PricingPage() {
                   onChange={e => setSearch(e.target.value)}
                 />
               </div>
-              <div className="flex gap-1 flex-wrap">
+              <div className="flex gap-1.5 flex-wrap items-center">
                 <button
                   onClick={() => setFilterGroup(null)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterGroup === null ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${filterGroup === null ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground"}`}
                 >
-                  Tất cả
+                  <Package className="w-3 h-3" /> Tất cả
                 </button>
-                {groups.map(g => (
+                {(showAllFilterGroups ? groups : groups.slice(0, 8)).map(g => {
+                  const meta = getGroupMeta(g.name);
+                  const active = filterGroup === g.id;
+                  return (
+                    <button
+                      key={g.id}
+                      onClick={() => setFilterGroup(g.id === filterGroup ? null : g.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        active ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <meta.Icon className="w-3 h-3" /> {g.name}
+                    </button>
+                  );
+                })}
+                {groups.length > 8 && (
                   <button
-                    key={g.id}
-                    onClick={() => setFilterGroup(g.id === filterGroup ? null : g.id)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterGroup === g.id ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
+                    onClick={() => setShowAllFilterGroups(v => !v)}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-muted/50 hover:bg-muted transition-colors text-muted-foreground border border-dashed border-border"
                   >
-                    {g.name}
+                    {showAllFilterGroups ? "Thu gọn" : `+${groups.length - 8} nhóm`}
+                    <ChevronDown className={`w-3 h-3 transition-transform ${showAllFilterGroups ? "rotate-180" : ""}`} />
                   </button>
-                ))}
+                )}
               </div>
             </div>
           )}
@@ -238,15 +273,16 @@ export default function PricingPage() {
                 if (pkgsInGroup.length === 0 && (filterGroup !== null || search)) return null;
                 if (pkgsInGroup.length === 0 && !filterGroup && !search) return null;
                 const expanded = isGroupExpanded(group.id);
+                const meta = getGroupMeta(group.name);
                 return (
                   <div key={group.id} className="border border-border rounded-xl overflow-hidden bg-card">
                     <button
                       onClick={() => toggleGroup(group.id)}
-                      className="w-full flex items-center justify-between px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors"
+                      className="w-full flex items-center justify-between px-4 py-3 bg-muted/20 hover:bg-muted/40 transition-colors"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                          <Package className="w-4 h-4 text-primary" />
+                        <div className={`w-8 h-8 rounded-lg ${meta.bgCls} ring-1 ${meta.ringCls} flex items-center justify-center`}>
+                          <meta.Icon className={`w-4 h-4 ${meta.iconCls}`} />
                         </div>
                         <div className="text-left">
                           <p className="font-semibold text-sm">{group.name}</p>
@@ -399,15 +435,19 @@ export default function PricingPage() {
             <div className="space-y-2">
               {groups.map(g => {
                 const count = packages.filter(p => p.groupId === g.id).length;
+                const meta = getGroupMeta(g.name);
                 return (
                   <div key={g.id} className={`flex items-center gap-3 p-4 rounded-xl border border-border bg-card hover:border-primary/20 transition-colors ${!g.isActive ? "opacity-60" : ""}`}>
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <Layers className="w-5 h-5 text-primary" />
+                    <div className={`w-10 h-10 rounded-xl ${meta.bgCls} ring-1 ${meta.ringCls} flex items-center justify-center flex-shrink-0`}>
+                      <meta.Icon className={`w-5 h-5 ${meta.iconCls}`} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold">{g.name}</p>
-                      {g.description && <p className="text-sm text-muted-foreground">{g.description}</p>}
-                      <p className="text-xs text-muted-foreground mt-0.5">{count} gói dịch vụ</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold">{g.name}</p>
+                        {!g.isActive && <Badge variant="outline" className="text-[10px] px-1.5 py-0">Ẩn</Badge>}
+                      </div>
+                      {g.description && <p className="text-sm text-muted-foreground truncate">{g.description}</p>}
+                      <p className="text-xs text-muted-foreground mt-0.5">{count} gói dịch vụ · thứ tự {g.sortOrder}</p>
                     </div>
                     <div className="flex items-center gap-1">
                       <button
@@ -938,7 +978,12 @@ function GroupModal({ group, onClose, onSaved }: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, sortOrder: parseInt(form.sortOrder) || 0 }),
       });
-      if (!resp.ok) throw new Error("Lỗi lưu nhóm");
+      if (resp.status === 409) {
+        const body = await resp.json();
+        setError(body.error ?? `Nhóm "${form.name.trim()}" đã tồn tại trong hệ thống`);
+        return;
+      }
+      if (!resp.ok) throw new Error("Lỗi lưu nhóm — vui lòng thử lại");
       onSaved();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Có lỗi xảy ra");
