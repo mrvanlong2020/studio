@@ -35,6 +35,7 @@ type Booking = {
   parentId: number | null;
   serviceLabel: string | null;
   isParentContract: boolean;
+  photoCount?: number | null;
   // Loaded on detail fetch
   siblings?: Booking[];
   parentContract?: Booking & { remainingAmount: number };
@@ -584,6 +585,7 @@ function ShowFormPanel({
   const [deposit, setDeposit] = useState(booking?.depositAmount?.toString() ?? "0");
   const [depositMethod, setDepositMethod] = useState<"cash" | "bank_transfer">("cash");
   const [notes, setNotes] = useState(booking?.notes ?? "");
+  const [photoCount, setPhotoCount] = useState<string>(() => String(booking?.photoCount ?? ""));
   const [surcharges, setSurcharges] = useState<SurchargeItem[]>(() => {
     const raw = booking?.surcharges ?? [];
     return raw.map((s: { name: string; amount: number }, i: number) => ({ id: `s${i}`, ...s }));
@@ -791,6 +793,7 @@ function ShowFormPanel({
         items: hasServices ? validLines.map(({ tempId: _t, ...rest }) => rest) : [],
         surcharges: cleanedSurcharges,
         assignedStaff, notes: notes || null,
+        photoCount: photoCount !== "" ? parseInt(photoCount) : null,
       };
 
       if (isEdit && booking) {
@@ -1122,6 +1125,17 @@ function ShowFormPanel({
             </div>
           </section>
 
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">📸 Số tấm ảnh chỉnh:</label>
+            <input
+              type="number" min="0" step="1"
+              className="w-24 border border-input rounded-lg px-2 py-1.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 tabular-nums"
+              placeholder="0"
+              value={photoCount}
+              onChange={e => setPhotoCount(e.target.value)}
+            />
+            <span className="text-xs text-muted-foreground">tấm (dùng tính cast)</span>
+          </div>
           <textarea
             className="w-full border border-input rounded-xl px-3 py-2 text-sm bg-background resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
             rows={2} placeholder="Ghi chú nội bộ..."
@@ -1545,15 +1559,21 @@ function ShowDetailPanel({
             </>
           )}
 
-          {/* 7. Ghi chú */}
+          {/* 7. Photo count + Ghi chú */}
+          {(booking.photoCount || booking.notes) && (
+            <div className="border-t border-border/40" />
+          )}
+          {booking.photoCount != null && booking.photoCount > 0 && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground">📸 Số tấm ảnh chỉnh:</span>
+              <span className="font-semibold text-sky-600">{booking.photoCount.toLocaleString("vi-VN")} tấm</span>
+            </div>
+          )}
           {booking.notes && (
-            <>
-              <div className="border-t border-border/40" />
-              <div className="space-y-1.5">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">📝 Ghi chú nội bộ</p>
-                <p className="text-sm text-muted-foreground bg-muted/30 rounded-xl px-3 py-2 leading-relaxed">{booking.notes}</p>
-              </div>
-            </>
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">📝 Ghi chú nội bộ</p>
+              <p className="text-sm text-muted-foreground bg-muted/30 rounded-xl px-3 py-2 leading-relaxed">{booking.notes}</p>
+            </div>
           )}
 
           {/* 8. Quick links — admin */}

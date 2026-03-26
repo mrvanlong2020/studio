@@ -26,6 +26,7 @@ export const bookingsTable = pgTable("bookings", {
   parentId: integer("parent_id"),               // null = root booking; set on child service bookings
   serviceLabel: text("service_label"),           // e.g. "Chụp album", "Đám hỏi", "Ngày cưới"
   isParentContract: boolean("is_parent_contract").notNull().default(false), // true = contract node, hidden from calendar
+  photoCount: integer("photo_count"),            // số tấm ảnh (dùng cho tính cast per_photo)
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

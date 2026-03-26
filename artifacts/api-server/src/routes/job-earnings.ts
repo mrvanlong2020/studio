@@ -58,15 +58,22 @@ async function findServiceIdByName(name: string): Promise<number | null> {
 }
 
 // ─── Resolve earning for a staff+role: per-staff > service split > null ────────
+// commissionBase: total amount eligible for sale commission (excludes beauty if applicable)
 async function resolveEarning(
   staffId: number, role: string, taskKey: string,
-  serviceId: number | null | undefined, bookingTotal: number
+  serviceId: number | null | undefined, bookingTotal: number,
+  photoCount: number = 0, commissionBase?: number
 ): Promise<{ rate: number; rateType: string } | null> {
   // 1. Per-staff individual rate (priority)
   const staffRate = await lookupStaffRate(staffId, role, taskKey);
   if (staffRate) {
     let rate = staffRate.rate;
-    if (role === "sale" && staffRate.rateType === "percent") rate = (bookingTotal * staffRate.rate) / 100;
+    if (staffRate.rateType === "percent") {
+      const base = commissionBase !== undefined ? commissionBase : bookingTotal;
+      rate = (base * staffRate.rate) / 100;
+    } else if (staffRate.rateType === "per_photo") {
+      rate = staffRate.rate * Math.max(photoCount, 1);
+    }
     return { rate, rateType: staffRate.rateType };
   }
 
@@ -74,7 +81,12 @@ async function resolveEarning(
   const serviceSplit = await lookupServiceSplit(serviceId, role);
   if (serviceSplit) {
     let rate = serviceSplit.rate;
-    if (serviceSplit.rateType === "percent") rate = (bookingTotal * serviceSplit.rate) / 100;
+    if (serviceSplit.rateType === "percent") {
+      const base = commissionBase !== undefined ? commissionBase : bookingTotal;
+      rate = (base * serviceSplit.rate) / 100;
+    } else if (serviceSplit.rateType === "per_photo") {
+      rate = serviceSplit.rate * Math.max(photoCount, 1);
+    }
     return { rate, rateType: serviceSplit.rateType };
   }
 
@@ -100,8 +112,28 @@ export async function computeBookingEarnings(bookingId: number): Promise<void> {
     serviceName?: string; serviceId?: number | null; price?: number;
     photoId?: number | null; photoTask?: string;
     makeupId?: number | null; makeupTask?: string;
+    serviceCategory?: string;
   }>;
-  const bookingTotal = items.reduce((sum, it) => sum + (it.price || 0), 0);
+
+  // Total of all items (or fall back to booking.totalAmount)
+  const bookingTotal = items.length > 0
+    ? items.reduce((sum, it) => sum + (it.price || 0), 0)
+    : parseFloat(booking.totalAmount as string) || 0;
+
+  // Commission base = total excluding beauty/makeup-only items (for Hoa's sale commission)
+  const beautyKeywords = ["beauty", "makeup", "trang điểm", "làm đẹp"];
+  const commissionBase = items.length > 0
+    ? items.reduce((sum, it) => {
+        const name = (it.serviceName || "").toLowerCase();
+        const cat = (it.serviceCategory || "").toLowerCase();
+        const isBeauty = beautyKeywords.some(k => name.includes(k) || cat.includes(k));
+        return isBeauty ? sum : sum + (it.price || 0);
+      }, 0)
+    : bookingTotal; // if no items breakdown, use full total as base
+
+  // Number of photos for per_photo calculation
+  const photoCount = booking.photoCount ?? 0;
+
   const assigned = (booking.assignedStaff || {}) as Record<string, unknown>;
 
   const earnings: Array<{
@@ -114,13 +146,12 @@ export async function computeBookingEarnings(bookingId: number): Promise<void> {
     const key = `${staffId}-${role}-${taskKey}`;
     if (seen.has(key)) return;
     seen.add(key);
-    earnings.push({ bookingId, staffId, role, serviceKey: taskKey, serviceName, rate: String(rate), earnedDate, month, year });
+    earnings.push({ bookingId, staffId, role, serviceKey: taskKey, serviceName, rate: String(Math.round(rate)), earnedDate, month, year });
   }
 
   // ── Per line: photographer and makeup ─────────────────────────────────────
   for (const item of items) {
     const lineName = item.serviceName || booking.packageType || "Dịch vụ";
-    // Resolve serviceId from stored serviceId or by looking up name
     let serviceId = item.serviceId || null;
     if (!serviceId && item.serviceName) {
       serviceId = await findServiceIdByName(item.serviceName);
@@ -128,21 +159,21 @@ export async function computeBookingEarnings(bookingId: number): Promise<void> {
 
     if (item.photoId) {
       const taskKey = item.photoTask || "mac_dinh";
-      const found = await resolveEarning(item.photoId, "photographer", taskKey, serviceId, item.price || bookingTotal);
+      const found = await resolveEarning(item.photoId, "photographer", taskKey, serviceId, item.price || bookingTotal, photoCount);
       if (found) addEarning(item.photoId, "photographer", taskKey, lineName, found.rate);
     }
 
     if (item.makeupId) {
       const taskKey = item.makeupTask || "mac_dinh";
-      const found = await resolveEarning(item.makeupId, "makeup", taskKey, serviceId, item.price || bookingTotal);
+      const found = await resolveEarning(item.makeupId, "makeup", taskKey, serviceId, item.price || bookingTotal, photoCount);
       if (found) addEarning(item.makeupId, "makeup", taskKey, lineName, found.rate);
     }
   }
 
-  // ── Booking-level: sale, photoshop ────────────────────────────────────────
-  // Try to get a representative serviceId from the first item
+  // ── Booking-level: sale (with commission base), photoshop (per_photo), marketing ─
   const firstServiceId = items[0]?.serviceId ||
     (items[0]?.serviceName ? await findServiceIdByName(items[0]?.serviceName || "") : null);
+  const bookingLabel = booking.packageType || items[0]?.serviceName || "Dịch vụ";
 
   type BookingRole = "sale" | "photoshop" | "marketing";
   const bookingLevelRoles: Array<{ role: BookingRole; staffKey: string; taskKey: string }> = [
@@ -155,11 +186,15 @@ export async function computeBookingEarnings(bookingId: number): Promise<void> {
     const staffId = assigned[staffKey] as number | undefined;
     if (!staffId) continue;
 
-    const found = await resolveEarning(staffId, role, taskKey, firstServiceId, bookingTotal);
+    // For sale commission (hoa_hong_*): use commissionBase (excludes beauty)
+    const isCommission = taskKey.startsWith("hoa_hong_");
+    const found = await resolveEarning(
+      staffId, role, taskKey, firstServiceId, bookingTotal,
+      photoCount, isCommission ? commissionBase : undefined
+    );
     if (!found) continue;
 
-    const serviceName = booking.packageType || items[0]?.serviceName || "Dịch vụ";
-    addEarning(staffId, role, taskKey, serviceName, found.rate);
+    addEarning(staffId, role, taskKey, bookingLabel, found.rate);
   }
 
   if (earnings.length > 0) {

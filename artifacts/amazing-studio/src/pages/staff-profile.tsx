@@ -51,7 +51,7 @@ interface EarningsRecord {
 
 interface RateEntry {
   id: number; role: string; taskKey: string; taskName: string;
-  rate: number | null; rateType: string;
+  rate: number | null; rateType: string; notes?: string | null;
 }
 
 interface LeaveRequest {
@@ -702,41 +702,126 @@ export default function StaffProfilePage() {
       </section>
 
       {/* ── G. BẢNG GIÁ CÁ NHÂN ────────────────────────────────────────── */}
-      <section className="bg-card border border-border rounded-2xl p-4 space-y-3">
+      <section className="bg-card border border-border rounded-2xl p-4 space-y-4">
         <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-          <TrendingUp className="w-3.5 h-3.5" /> Bảng giá cá nhân
+          <TrendingUp className="w-3.5 h-3.5" /> Bảng cast chính thức
         </p>
         {rates.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-4">Chưa có bảng giá nào</p>
-        ) : (
-          <div className="space-y-4">
-            {Object.entries(
-              rates.reduce((acc, r) => {
-                if (!acc[r.role]) acc[r.role] = [];
-                acc[r.role].push(r);
-                return acc;
-              }, {} as Record<string, RateEntry[]>)
-            ).map(([role, items]) => (
-              <div key={role}>
-                <p className="text-xs font-semibold text-muted-foreground mb-2">
-                  {ROLE_ICONS[role] || "•"} {ROLE_LABELS[role] || role}
-                </p>
-                <div className="space-y-1.5">
-                  {items.filter(r => r.rate !== null && r.rate !== undefined && r.rate! > 0).map(r => (
-                    <div key={r.id} className="flex items-center justify-between text-sm py-1.5 border-b border-border/40 last:border-0">
-                      <span className="text-foreground/80">{r.taskName}</span>
-                      <span className="font-semibold tabular-nums">
-                        {r.rateType === "percent"
-                          ? `${r.rate}%`
-                          : fmtVND(r.rate ?? 0)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+          <p className="text-sm text-muted-foreground text-center py-4">Chưa có bảng cast nào</p>
+        ) : (() => {
+          // Phân loại rates
+          const byRole = rates.reduce((acc, r) => {
+            if (!acc[r.role]) acc[r.role] = [];
+            acc[r.role].push(r);
+            return acc;
+          }, {} as Record<string, RateEntry[]>);
+
+          const renderRateValue = (r: RateEntry) => {
+            if (r.rate === null || r.rate === undefined) return "—";
+            if (r.rateType === "percent") return `${r.rate}%`;
+            if (r.rateType === "per_photo") return `${fmtVND(r.rate)} / tấm`;
+            return fmtVND(r.rate);
+          };
+
+          const renderRateRow = (r: RateEntry) => (
+            <div key={r.id} className="py-1.5 border-b border-border/30 last:border-0">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm text-foreground/85">{r.taskName}</span>
+                <span className={`text-sm font-semibold tabular-nums flex-shrink-0 ${
+                  r.rateType === "percent" ? "text-violet-600" :
+                  r.rateType === "per_photo" ? "text-sky-600" :
+                  "text-emerald-700"
+                }`}>{renderRateValue(r)}</span>
               </div>
-            ))}
-          </div>
-        )}
+              {r.notes && (
+                <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{r.notes}</p>
+              )}
+            </div>
+          );
+
+          return (
+            <div className="space-y-5">
+              {/* Nhiếp ảnh / PTS / Makeup */}
+              {(["photographer", "photoshop", "makeup"] as const).map(role => {
+                const items = byRole[role];
+                if (!items?.length) return null;
+                return (
+                  <div key={role}>
+                    <p className="text-xs font-bold text-muted-foreground mb-2 flex items-center gap-1.5">
+                      <span>{ROLE_ICONS[role] || "•"}</span>
+                      <span>{ROLE_LABELS[role] || role}</span>
+                      {role === "photoshop" && (
+                        <span className="ml-1 text-[10px] text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded font-semibold">/ tấm</span>
+                      )}
+                    </p>
+                    <div>{items.map(renderRateRow)}</div>
+                  </div>
+                );
+              })}
+
+              {/* Sale: KPI thưởng + Hoa hồng */}
+              {byRole["sale"]?.length > 0 && (() => {
+                const saleItems = byRole["sale"];
+                const kpiRows = saleItems.filter(r => r.taskKey.startsWith("kpi_"));
+                const commRows = saleItems.filter(r => r.taskKey.startsWith("hoa_hong_"));
+                const otherSale = saleItems.filter(r => !r.taskKey.startsWith("kpi_") && !r.taskKey.startsWith("hoa_hong_"));
+                return (
+                  <div className="space-y-4">
+                    {otherSale.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold text-muted-foreground mb-2">{ROLE_ICONS.sale} {ROLE_LABELS.sale}</p>
+                        <div>{otherSale.map(renderRateRow)}</div>
+                      </div>
+                    )}
+                    {kpiRows.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold text-amber-600 mb-2 flex items-center gap-1.5">
+                          🏆 Thưởng KPI doanh số
+                        </p>
+                        <div className="bg-amber-50 dark:bg-amber-950/20 rounded-xl px-3">
+                          {kpiRows.map(r => (
+                            <div key={r.id} className="py-2 border-b border-amber-100 dark:border-amber-900 last:border-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <div>
+                                  <p className="text-sm font-medium text-amber-800 dark:text-amber-200">{r.taskName}</p>
+                                  {r.notes && <p className="text-[11px] text-amber-600/80">{r.notes}</p>}
+                                </div>
+                                <span className="text-sm font-bold text-amber-700 dark:text-amber-300 tabular-nums">{fmtVND(r.rate ?? 0)}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {commRows.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold text-violet-600 mb-2 flex items-center gap-1.5">
+                          💼 Hoa hồng sale
+                        </p>
+                        <div className="bg-violet-50 dark:bg-violet-950/20 rounded-xl px-3">
+                          {commRows.map(r => (
+                            <div key={r.id} className="py-2 border-b border-violet-100 dark:border-violet-900 last:border-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium text-violet-800 dark:text-violet-200">{r.taskName}</p>
+                                  {r.notes && <p className="text-[11px] text-violet-500/80 leading-tight">{r.notes}</p>}
+                                </div>
+                                <span className="text-sm font-bold text-violet-700 dark:text-violet-300 tabular-nums flex-shrink-0">{r.rate}%</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-2">
+                          ⚠️ Beauty không tính %. Không tính trùng nhiều loại % trên cùng 1 đơn.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          );
+        })()}
       </section>
 
       {/* ── H. GHI CHÚ NỘI BỘ (Admin only) ────────────────────────────── */}

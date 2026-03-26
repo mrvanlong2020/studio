@@ -1,0 +1,137 @@
+XÓA TOÀN BỘ CAST CŨ trong hệ thống và cập nhật lại CAST CHÍNH THỨC cho nhân sự như sau.
+
+YÊU CẦU CHUNG:
+1. Xóa toàn bộ cast cũ của tất cả nhân viên.
+2. Chỉ giữ lại cast mới bên dưới.
+3. Mỗi nhân viên có bảng cast riêng.
+4. Khi gán nhân sự vào show, hệ thống phải tự lấy đúng cast theo loại dịch vụ.
+5. Cast chỉ được tính khi job hoàn thành.
+6. Các cast này dùng để tính:
+- chi phí sản xuất
+- lương nhân viên
+- lợi nhuận show
+
+==================================================
+1) NHÂN VIÊN PHOTO: LÝ PHƯỚC TRUNG
+Vai trò:
+- Nhiếp ảnh
+
+CAST CHÍNH THỨC:
+- Chụp cổng 1 layout: 150000
+- Chụp cổng 2 layout: 250000
+- Chụp album (2 layout): 300000
+- Chụp album 1 ngoại cảnh (2 layout): 400000
+- Tiệc truyền thống: 1000000
+- Tiệc phóng sự: 1400000
+- Chụp tiệc thêm buổi chiều: 800000
+- Chụp cổng cô: 500000
+- Chụp tiệc + chụp cổng cô: 1000000
+- Beauty giá rẻ: 200000
+- Beauty studio: 300000
+- Beauty ngoại cảnh: 300000
+- Gia đình 4 người: 300000
+- Gia đình trên 4 người: 400000
+- Chỉnh màu tiệc: 1000 / tấm
+- Support ngoại cảnh: 100000
+
+==================================================
+2) NHÂN VIÊN SALE + MAKEUP: HOA
+Vai trò:
+- Kinh doanh
+- Trang điểm
+
+CAST MAKEUP:
+- Makeup beauty: 150000
+- Makeup dâu chụp cổng 2 layout: 200000
+- Album phụ phí thêm: 50000
+- Makeup dâu album ngoại cảnh: 400000
+- Makeup tiệc tại tiệm: 150000
+- Makeup tiệc tại nhà: 250000
+- Makeup dâu tại nhà: 1000000
+- Makeup dâu buổi tối tại nhà: 500000
+- Makeup bà sui tại nhà: 300000
+- Support ngoại cảnh: 100000
+Lưu ý:
+- Support ngoại cảnh tính riêng cho cả dâu rể
+- Không gộp support ngoại cảnh vào tiền makeup
+
+KPIs SALE:
+- Doanh số 50000000: thưởng 500000
+- Doanh số 100000000: thưởng 1000000
+
+HOA HỒNG SALE / TAKE CARE:
+- Take care show chụp cổng, album và combo của anh: 3%
+- Đơn trên page: 4%
+  + ai chốt cũng tính cho Hoa , miển là đơn đó chụp cổng  và chụp abum cưới , combo váy cưới , có hoa phụ là tính 3%
+  + chỉ cần đơn đến từ page là Hoa được hưởng
+- Đơn tự chốt: 5%
+- Beauty: không tính %
+
+YÊU CẦU LOGIC HOA HỒNG:
+1. Beauty không được tính %.
+2. Nếu đơn thuộc nguồn "page" thì Hoa nhận 4%, bất kể ai chốt.
+3. Nếu đơn tự chốt thì Hoa nhận 5%.
+4. Nếu là take care các show chụp cổng, album, combo của anh thì Hoa nhận 3%.
+5. Không tính trùng nhiều loại % trên cùng 1 đơn. Hệ thống phải có rule ưu tiên rõ ràng.
+6. Admin có thể chọn đúng loại % áp dụng cho từng đơn.
+
+==================================================
+3) NHÂN VIÊN PTS: QUÂN LÊ
+Vai trò:
+- Chỉnh sửa ảnh / PTS
+
+CAST CHÍNH THỨC:
+- Chỉnh hình toàn bộ dịch vụ, trừ ảnh tiệc: 12000 / tấm
+- Chỉnh ảnh tiệc: 1000 / tấm
+
+YÊU CẦU LOGIC:
+1. Nếu show là ảnh tiệc thì lấy cast 1000 / tấm.
+2. Nếu show là các dịch vụ khác thì lấy cast 12000 / tấm.
+3. Phải có ô nhập số lượng ảnh đã chỉnh để hệ thống tự tính tiền.
+
+==================================================
+YÊU CẦU ĐỒNG BỘ TOÀN HỆ THỐNG
+
+1. Trong hồ sơ nhân viên:
+- Hiển thị đúng bảng cast mới
+- Không còn cast cũ
+
+2. Trong lúc tạo show / tạo đơn:
+- Khi chọn nhân sự, hệ thống lấy đúng cast mới
+- Tự tính chi phí sản xuất đúng theo cast mới
+
+3. Trong lợi nhuận show:
+- Tự trừ đúng cast mới
+- Không dùng dữ liệu cast cũ
+
+4. Trong bảng lương:
+- Chỉ cộng cast khi job hoàn thành
+- Chia rõ:
+  - cast photo
+  - cast makeup
+  - cast pts
+  - thưởng KPI
+  - hoa hồng sale
+
+5. Trong nhân sự:
+- Trung chỉ hiện cast photo
+- Hoa hiện cast makeup + KPI + hoa hồng sale
+- Quân hiện cast PTS
+
+==================================================
+YÊU CẦU KIỂM TRA CUỐI
+
+Sau khi cập nhật xong:
+1. Không còn bất kỳ cast cũ nào trong hệ thống.
+2. Tất cả show mới tạo phải dùng cast mới.
+3. Show cũ nếu cần thì có tùy chọn:
+- giữ nguyên cast cũ theo lịch sử
+hoặc
+- cập nhật sang cast mới
+Admin được chọn.
+
+Mục tiêu:
+- chuẩn hóa cast chính thức
+- tính lương đúng
+- tính lợi nhuận đúng
+- không bị lẫn cast demo / cast cũ
