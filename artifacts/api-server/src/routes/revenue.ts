@@ -198,6 +198,7 @@ router.get("/revenue/by-service", async (req, res) => {
   }
 
   const totalRevenue = valid.reduce((s, b) => s + parseFloat(b.totalAmount), 0);
+  const totalCount = valid.length;
 
   const rows = Array.from(map.entries())
     .map(([cat, data]) => ({
@@ -206,9 +207,10 @@ router.get("/revenue/by-service", async (req, res) => {
       count: data.count,
       revenue: data.revenue,
       profit: data.revenue - data.expenses,
-      percentage: totalRevenue > 0 ? Math.round((data.revenue / totalRevenue) * 100) : 0,
+      revenuePercentage: totalRevenue > 0 ? Math.round((data.revenue / totalRevenue) * 100) : 0,
+      countPercentage: totalCount > 0 ? Math.round((data.count / totalCount) * 100) : 0,
     }))
-    .sort((a, b) => b.revenue - a.revenue);
+    .sort((a, b) => b.count - a.count);
 
   res.json(rows);
 });

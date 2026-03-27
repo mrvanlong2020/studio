@@ -47,7 +47,8 @@ type ServiceRow = {
   count: number;
   revenue: number;
   profit: number;
-  percentage: number;
+  revenuePercentage: number;
+  countPercentage: number;
 };
 
 type SaleRow = {
@@ -232,7 +233,7 @@ export default function RevenuePage() {
               <input
                 type="checkbox"
                 checked={onlyConfirmed}
-                onChange={e => { setOnlyConfirmed(e.target.checked); if (e.target.checked) setOnlyPaid(false); }}
+                onChange={e => setOnlyConfirmed(e.target.checked)}
                 className="w-4 h-4 rounded accent-violet-600"
               />
               <span className="text-xs font-medium text-foreground">Chỉ đã xác nhận</span>
@@ -241,7 +242,7 @@ export default function RevenuePage() {
               <input
                 type="checkbox"
                 checked={onlyPaid}
-                onChange={e => { setOnlyPaid(e.target.checked); if (e.target.checked) setOnlyConfirmed(false); }}
+                onChange={e => setOnlyPaid(e.target.checked)}
                 className="w-4 h-4 rounded accent-violet-600"
               />
               <span className="text-xs font-medium text-foreground">Chỉ đã thu tiền</span>
@@ -372,18 +373,18 @@ export default function RevenuePage() {
                     <PieChart>
                       <Pie
                         data={serviceData}
-                        dataKey="revenue"
+                        dataKey="count"
                         nameKey="service"
                         cx="50%" cy="50%"
                         innerRadius="45%" outerRadius="70%"
                         labelLine={false}
-                        label={CustomPieLabel}
+                        label={(props) => <CustomPieLabel {...props} percentage={props.payload?.countPercentage ?? 0} />}
                       >
                         {serviceData.map((_, i) => (
                           <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(val: number) => vnd(val)} />
+                      <Tooltip formatter={(val: number, _name: string, entry: { payload?: ServiceRow }) => [`${val} show (${vnd(entry.payload?.revenue ?? 0)})`, "Số show"]} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -395,7 +396,7 @@ export default function RevenuePage() {
                         <span className="text-foreground font-medium truncate">{s.service}</span>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <span className="font-bold text-foreground">{s.percentage}%</span>
+                        <span className="font-bold text-foreground">{s.countPercentage}%</span>
                         <span className="text-muted-foreground ml-1">({s.count} show)</span>
                       </div>
                     </div>
@@ -510,9 +511,9 @@ export default function RevenuePage() {
                       <td className="py-2.5 text-right pr-4 sm:pr-0">
                         <div className="flex items-center justify-end gap-1.5">
                           <div className="w-16 bg-muted rounded-full h-1.5 overflow-hidden hidden sm:block">
-                            <div className="h-full rounded-full" style={{ width: `${Math.min(100, row.percentage)}%`, background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                            <div className="h-full rounded-full" style={{ width: `${Math.min(100, row.revenuePercentage)}%`, background: PIE_COLORS[i % PIE_COLORS.length] }} />
                           </div>
-                          <span className="font-bold text-foreground">{row.percentage}%</span>
+                          <span className="font-bold text-foreground">{row.revenuePercentage}%</span>
                         </div>
                       </td>
                     </tr>
