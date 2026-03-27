@@ -592,6 +592,17 @@ function CustomerSearchBox({
     onSelect(c);
   };
 
+  useEffect(() => {
+    const digits = query.replace(/\D/g, "");
+    if (digits.length >= 9 && !selected) {
+      const exactMatch = customers.find(c => c.phone.replace(/\D/g, "") === digits);
+      if (exactMatch) {
+        handleSelect(exactMatch);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, customers]);
+
   const handleClear = () => {
     setSelected(null);
     setQuery("");

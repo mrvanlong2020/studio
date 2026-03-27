@@ -116,6 +116,7 @@ function PhoneAutocomplete({ value, onChange, onSelect }: {
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const autoSelectedRef = useRef<string | null>(null);
   const { data: results = [] } = useQuery<Customer[]>({
     queryKey: ["customer-search", value],
     queryFn: () => fetch(`${BASE}/api/customers?search=${encodeURIComponent(value)}`).then(r => r.json()),
@@ -127,6 +128,18 @@ function PhoneAutocomplete({ value, onChange, onSelect }: {
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, []);
+  useEffect(() => {
+    const digits = value.replace(/\D/g, "");
+    if (digits.length >= 9 && results.length > 0 && autoSelectedRef.current !== digits) {
+      const exact = results.find(c => c.phone.replace(/\D/g, "") === digits);
+      if (exact) {
+        autoSelectedRef.current = digits;
+        onSelect(exact);
+        setOpen(false);
+      }
+    }
+    if (digits.length < 9) autoSelectedRef.current = null;
+  }, [results, value, onSelect]);
   return (
     <div className="relative" ref={ref}>
       <div className="relative">

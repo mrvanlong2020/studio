@@ -71,6 +71,14 @@ router.get("/customers", async (req, res) => {
   res.json(result);
 });
 
+router.get("/customers/by-phone", async (req, res) => {
+  const phone = (req.query.phone as string | undefined)?.trim();
+  if (!phone) return res.status(400).json({ error: "Thiếu số điện thoại" });
+  const [customer] = await db.select().from(customersTable).where(eq(customersTable.phone, phone));
+  if (!customer) return res.status(404).json({ error: "Không tìm thấy" });
+  res.json(customer);
+});
+
 router.post("/customers", async (req, res) => {
   const { name, phone, email, address, notes, facebook, zalo, source, tags, gender, avatar } = req.body;
   if (!phone?.trim()) return res.status(400).json({ error: "Số điện thoại là bắt buộc" });
@@ -84,7 +92,12 @@ router.post("/customers", async (req, res) => {
     res.status(201).json({ ...customer, totalBookings: 0, totalPaid: 0, totalDebt: 0 });
   } catch (err: unknown) {
     if (isPgConstraintError(err) && err.code === "23505" && err.constraint?.includes("phone")) {
-      return res.status(409).json({ error: `Số điện thoại "${phone}" đã tồn tại trong hệ thống. Vui lòng kiểm tra lại.` });
+      const [existing] = await db.select().from(customersTable).where(eq(customersTable.phone, phone.trim()));
+      return res.status(409).json({
+        conflict: true,
+        existingCustomer: existing ?? null,
+        error: `Số điện thoại "${phone}" đã tồn tại trong hệ thống.`,
+      });
     }
     throw err;
   }

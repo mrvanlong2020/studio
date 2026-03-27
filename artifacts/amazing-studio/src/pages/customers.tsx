@@ -108,6 +108,8 @@ export default function CustomersPage() {
   const [formSuccess, setFormSuccess] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const phoneDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [phoneDuplicate, setPhoneDuplicate] = useState<{ id: number; name: string; customCode?: string } | null>(null);
 
   // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: customers = [], isLoading } = useQuery<Customer[]>({
@@ -165,6 +167,7 @@ export default function CustomersPage() {
     setEditingId(null);
     setFormError("");
     setFormSuccess("");
+    setPhoneDuplicate(null);
     setIsOpen(true);
   };
 
@@ -179,7 +182,31 @@ export default function CustomersPage() {
     setEditingId(c.id);
     setFormError("");
     setFormSuccess("");
+    setPhoneDuplicate(null);
     setIsOpen(true);
+  };
+
+  const checkPhoneDuplicate = (phone: string) => {
+    const trimmed = phone.replace(/\s/g, "");
+    if (trimmed.length < 9) { setPhoneDuplicate(null); return; }
+    if (phoneDebounceRef.current) clearTimeout(phoneDebounceRef.current);
+    phoneDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`${BASE}/api/customers/by-phone?phone=${encodeURIComponent(trimmed)}`);
+        if (res.ok) {
+          const found = await res.json() as { id: number; name: string; customCode?: string };
+          if (found.id !== editingId) {
+            setPhoneDuplicate(found);
+          } else {
+            setPhoneDuplicate(null);
+          }
+        } else {
+          setPhoneDuplicate(null);
+        }
+      } catch {
+        setPhoneDuplicate(null);
+      }
+    }, 400);
   };
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -197,12 +224,8 @@ export default function CustomersPage() {
     setFormError("");
     if (!form.name.trim()) { setFormError("Vui lòng nhập họ và tên khách hàng"); return; }
     if (!form.phone.trim()) { setFormError("Vui lòng nhập số điện thoại"); return; }
-
-    // Kiểm tra trùng số điện thoại (khi tạo mới hoặc đổi SĐT khi sửa)
-    const normalizedPhone = form.phone.replace(/\s/g, "");
-    const existing = customers.find(c => c.phone.replace(/\s/g, "") === normalizedPhone && c.id !== editingId);
-    if (existing) {
-      setFormError(`Số điện thoại này đã có trong hệ thống (${existing.name}${existing.customCode ? ` – ${existing.customCode}` : ""}). Vui lòng kiểm tra lại.`);
+    if (phoneDuplicate) {
+      setFormError(`Số điện thoại này đã thuộc về "${phoneDuplicate.name}"${phoneDuplicate.customCode ? ` (${phoneDuplicate.customCode})` : ""}. Không thể tạo trùng.`);
       return;
     }
 
@@ -510,8 +533,35 @@ export default function CustomersPage() {
                 <Input
                   placeholder="0912 345 678"
                   value={form.phone}
-                  onChange={e => { setForm(f => ({ ...f, phone: e.target.value })); setFormError(""); }}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setForm(f => ({ ...f, phone: v }));
+                    setFormError("");
+                    checkPhoneDuplicate(v);
+                  }}
                 />
+                {phoneDuplicate && (
+                  <div className="mt-1.5 flex items-center justify-between gap-2 p-2.5 bg-orange-50 border border-orange-300 rounded-xl text-xs">
+                    <div className="flex items-center gap-2 text-orange-800">
+                      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 text-orange-500" />
+                      <span>
+                        Khách này đã có: <strong>{phoneDuplicate.name}</strong>
+                        {phoneDuplicate.customCode && <> – {phoneDuplicate.customCode}</>}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOpen(false);
+                        setSelectedId(phoneDuplicate.id);
+                        setPhoneDuplicate(null);
+                      }}
+                      className="shrink-0 text-orange-700 font-semibold underline hover:text-orange-900"
+                    >
+                      Xem hồ sơ
+                    </button>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Giới tính</label>
