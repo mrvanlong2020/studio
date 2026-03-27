@@ -1,0 +1,122 @@
+Tạo thêm một module riêng tên: “Doanh thu & Lợi nhuận”.
+
+Mục tiêu:
+- Theo dõi doanh thu theo ngày / tuần / tháng / năm
+- Xem dịch vụ nào đang bán nhiều nhất
+- Xem sale nào mang doanh thu và lợi nhuận nhiều nhất cho studio
+
+Yêu cầu chi tiết:
+
+1. Tạo menu/module mới:
+- Tên module: Doanh thu & Lợi nhuận
+- Đặt ở sidebar gần phần Tổng quan / Thu tiền / Đơn hàng
+- Mobile và desktop đều xem được
+
+2. Thẻ thống kê nhanh ở đầu trang:
+Hiển thị 4 ô:
+- Doanh thu hôm nay
+- Doanh thu tuần này
+- Doanh thu tháng này
+- Doanh thu năm nay
+
+3. Thêm 4 ô lợi nhuận:
+- Lợi nhuận hôm nay
+- Lợi nhuận tuần này
+- Lợi nhuận tháng này
+- Lợi nhuận năm nay
+
+4. Biểu đồ doanh thu theo thời gian:
+- Cho chọn bộ lọc: ngày / tuần / tháng / năm
+- Hiển thị biểu đồ cột hoặc đường
+- Ví dụ:
+  - xem 7 ngày gần nhất
+  - xem 4 tuần gần nhất
+  - xem 12 tháng gần nhất
+
+5. Biểu đồ dịch vụ bán nhiều nhất:
+- Dùng biểu đồ tròn / donut chart
+- Thống kê số lượng show theo từng nhóm dịch vụ
+Ví dụ:
+- Chụp cổng
+- Album studio
+- Album ngoại cảnh
+- Chụp tiệc
+- Beauty / thời trang
+- Combo có makeup
+- Combo không makeup
+- Quay phim
+- Makeup lẻ
+- In ảnh
+- Gia đình
+
+- Phải có:
+  - tên nhóm dịch vụ
+  - số show
+  - phần trăm chiếm
+- Nhìn vào là biết dịch vụ nào đang chiếm nhiều nhất
+
+6. Biểu đồ doanh thu theo sale:
+- Thống kê từng nhân viên sale / take care
+- Cho biết:
+  - số đơn chốt được
+  - tổng doanh thu mang về
+- Hiển thị bảng xếp hạng từ cao xuống thấp
+
+7. Biểu đồ lợi nhuận theo sale:
+- Mỗi sale phải có:
+  - tổng doanh thu
+  - tổng chi phí liên quan
+  - lợi nhuận thực mang về cho studio
+- Hiển thị rõ sale nào đang mang lợi nhuận cao nhất
+
+8. Cách tính doanh thu:
+- Lấy từ tổng giá trị đơn hàng / show
+- Có thể lọc theo:
+  - đã xác nhận
+  - đang làm
+  - hoàn thành
+  - tất cả
+- Ưu tiên có checkbox:
+  - chỉ tính đơn đã xác nhận trở lên
+  - hoặc chỉ tính đơn đã thu tiền
+
+9. Cách tính lợi nhuận:
+Lợi nhuận = Doanh thu - chi phí
+Chi phí gồm:
+- Cast chụp
+- Cast makeup
+- Cast photoshop
+- In ấn
+- Vận hành
+- % sale
+- các chi phí phát sinh nếu có
+
+10. Thêm bảng top sale:
+Các cột:
+- Tên sale
+- Số đơn
+- Doanh thu
+- Lợi nhuận
+- % đóng góp
+
+11. Thêm bảng top dịch vụ:
+Các cột:
+- Tên nhóm dịch vụ
+- Số show
+- Doanh thu
+- Lợi nhuận
+- Tỷ trọng %
+
+12. Mobile UI:
+- Thẻ thống kê xếp 2 cột
+- Biểu đồ phải responsive
+- Bảng top sale / top dịch vụ có thể kéo ngang nếu dài
+- Nhìn gọn, dễ đọc
+
+13. Mục tiêu cuối:
+- Vào module này là biết ngay:
+  - hôm nay / tuần / tháng / năm thu được bao nhiêu
+  - lời được bao nhiêu
+  - dịch vụ nào bán mạnh nhất
+  - sale nào đang mang tiền về nhiều nhất
+  - sale nào đang mang lợi nhuận cao nhất cho studio
