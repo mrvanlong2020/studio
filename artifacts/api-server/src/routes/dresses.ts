@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { dressesTable } from "@workspace/db/schema";
-import { eq, ilike, or } from "drizzle-orm";
+import { eq, ilike, or, desc, sql } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -16,7 +16,7 @@ function fmt(d: typeof dressesTable.$inferSelect) {
 router.get("/dresses", async (req, res) => {
   try {
     const { rentalStatus, search } = req.query as Record<string, string>;
-    let rows = await db.select().from(dressesTable).orderBy(dressesTable.code);
+    let rows = await db.select().from(dressesTable).orderBy(desc(dressesTable.createdAt));
     if (rentalStatus && rentalStatus !== "all") rows = rows.filter(d => d.rentalStatus === rentalStatus);
     if (search) {
       const q = search.toLowerCase();
@@ -48,6 +48,17 @@ router.post("/dresses", async (req, res) => {
       imageUrl: imageUrl || null,
     }).returning();
     res.status(201).json(fmt(dress));
+  } catch (e) { res.status(500).json({ error: String(e) }); }
+});
+
+router.get("/dresses/categories", async (_req, res) => {
+  try {
+    const rows = await db
+      .selectDistinct({ category: dressesTable.category })
+      .from(dressesTable)
+      .where(sql`${dressesTable.category} != ''`)
+      .orderBy(dressesTable.category);
+    res.json(rows.map(r => r.category).filter(Boolean));
   } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 

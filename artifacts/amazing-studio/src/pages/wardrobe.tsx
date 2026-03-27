@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Search, Shirt, Edit2, Trash2, X, Check,
@@ -52,7 +52,6 @@ const CONDITION: Record<string, string> = {
   poor:      "Kém",
 };
 
-const DRESS_CATEGORIES = ["Váy cưới", "Vest cô dâu", "Vest chú rể", "Áo dài", "Trang phục chụp cổng", "Phụ kiện", "Khác"];
 
 const EMPTY_FORM = {
   code: "", name: "", category: "", color: "", size: "", style: "",
@@ -93,11 +92,30 @@ export default function WardrobePage() {
     queryFn: () => fetch(`${BASE}/api/dresses`).then(r => r.json()),
   });
 
+  const { data: dbCategories = [] } = useQuery<string[]>({
+    queryKey: ["dress-categories"],
+    queryFn: () => fetch(`${BASE}/api/dresses/categories`).then(r => r.json()),
+  });
+
+  const [catInput, setCatInput] = useState("");
+  const [catOpen, setCatOpen] = useState(false);
+  const catRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (catRef.current && !catRef.current.contains(e.target as Node)) {
+        setCatOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const createDress = useMutation({
     mutationFn: (data: typeof EMPTY_FORM) => fetch(`${BASE}/api/dresses`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
     }).then(r => r.json()),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["dresses"] }); closeModal(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["dresses"] }); qc.invalidateQueries({ queryKey: ["dress-categories"] }); closeModal(); },
   });
 
   const updateDress = useMutation({
@@ -105,7 +123,7 @@ export default function WardrobePage() {
       fetch(`${BASE}/api/dresses/${id}`, {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
       }).then(r => r.json()),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["dresses"] }); closeModal(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["dresses"] }); qc.invalidateQueries({ queryKey: ["dress-categories"] }); closeModal(); },
   });
 
   const deleteDress = useMutation({
@@ -126,22 +144,27 @@ export default function WardrobePage() {
     setEditingDress(null);
     const num = (dresses.length + 1).toString().padStart(3, "0");
     setForm({ ...EMPTY_FORM, code: `VP-${num}` });
+    setCatInput("");
+    setCatOpen(false);
     setShowModal(true);
   }
 
   function openEdit(d: Dress) {
     setEditingDress(d);
+    const cat = d.category ?? "";
     setForm({
-      code: d.code, name: d.name, category: d.category ?? "",
+      code: d.code, name: d.name, category: cat,
       color: d.color, size: d.size, style: d.style ?? "",
       rentalPrice: d.rentalPrice, depositRequired: d.depositRequired,
       rentalStatus: d.rentalStatus, condition: d.condition,
       notes: d.notes ?? "", imageUrl: d.imageUrl ?? ""
     });
+    setCatInput(cat);
+    setCatOpen(false);
     setShowModal(true);
   }
 
-  function closeModal() { setShowModal(false); setEditingDress(null); }
+  function closeModal() { setShowModal(false); setEditingDress(null); setCatOpen(false); }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -331,13 +354,44 @@ export default function WardrobePage() {
                     className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
                     placeholder="VD: VP-001" />
                 </div>
-                <div>
+                <div ref={catRef} className="relative">
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Nhóm trang phục</label>
-                  <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none">
-                    <option value="">-- Chọn nhóm --</option>
-                    {DRESS_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                  <input
+                    value={catInput}
+                    onChange={e => {
+                      setCatInput(e.target.value);
+                      setForm(f => ({ ...f, category: e.target.value }));
+                      setCatOpen(true);
+                    }}
+                    onFocus={() => setCatOpen(true)}
+                    placeholder="Chọn hoặc nhập nhóm mới..."
+                    autoComplete="off"
+                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                  {catOpen && (
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-background border border-border rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                      {dbCategories
+                        .filter(c => c.toLowerCase().includes(catInput.toLowerCase()))
+                        .map(c => (
+                          <button key={c} type="button"
+                            onMouseDown={e => { e.preventDefault(); setCatInput(c); setForm(f => ({ ...f, category: c })); setCatOpen(false); }}
+                            className={`w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors flex items-center justify-between ${form.category === c ? "text-primary font-medium" : ""}`}>
+                            {c}
+                            {form.category === c && <Check className="w-3.5 h-3.5" />}
+                          </button>
+                        ))}
+                      {catInput.trim() && !dbCategories.some(c => c.toLowerCase() === catInput.trim().toLowerCase()) && (
+                        <button type="button"
+                          onMouseDown={e => { e.preventDefault(); const v = catInput.trim(); setCatInput(v); setForm(f => ({ ...f, category: v })); setCatOpen(false); }}
+                          className="w-full text-left px-3 py-2 text-sm text-primary hover:bg-primary/5 transition-colors flex items-center gap-2 border-t border-border">
+                          <Plus className="w-3.5 h-3.5" /> Tạo nhóm mới: <span className="font-medium">"{catInput.trim()}"</span>
+                        </button>
+                      )}
+                      {dbCategories.length === 0 && !catInput.trim() && (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">Gõ tên nhóm để tạo mới</div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
