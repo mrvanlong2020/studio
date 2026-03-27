@@ -78,7 +78,7 @@ router.post("/auth/login", async (req, res) => {
   const secret = process.env.SESSION_SECRET ?? "amazing-studio-secret-2025";
   const { createHmac } = await import("crypto");
   const jwtHeader = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
-  const jwtBody = Buffer.from(JSON.stringify({ id: u.id, exp: Math.floor(Date.now() / 1000) + 30 * 24 * 3600 })).toString("base64url");
+  const jwtBody = Buffer.from(JSON.stringify({ id: u.id, exp: Math.floor(Date.now() / 1000) + 365 * 24 * 3600 })).toString("base64url");
   const sig = createHmac("sha256", secret).update(`${jwtHeader}.${jwtBody}`).digest("base64url");
 
   res.json({
