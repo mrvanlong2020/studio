@@ -708,6 +708,7 @@ function ShowFormPanel({
 
   const [deposit, setDeposit] = useState(booking?.depositAmount?.toString() ?? "0");
   const [depositMethod, setDepositMethod] = useState<"cash" | "bank_transfer">("cash");
+  const [discount, setDiscount] = useState(booking?.discountAmount?.toString() ?? "0");
   const [notes, setNotes] = useState(booking?.notes ?? "");
   const [photoCount, setPhotoCount] = useState<string>(() => String(booking?.photoCount ?? ""));
   const [surcharges, setSurcharges] = useState<SurchargeItem[]>(() => {
@@ -788,7 +789,9 @@ function ShowFormPanel({
   const surchargesTotal = surcharges.reduce((s, i) => s + (i.amount || 0), 0);
   const totalAmount = subDraftsTotal + surchargesTotal;
   const depositNum = parseFloat(deposit) || 0;
-  const remaining = Math.max(0, totalAmount - depositNum);
+  const discountNum = parseFloat(discount) || 0;
+  const afterDiscount = Math.max(0, totalAmount - discountNum);
+  const remaining = Math.max(0, afterDiscount - depositNum);
 
   const handleSelectCustomer = (c: Customer) => {
     setCustomerId(c.id); setCustomerName(c.name); setPhone(c.phone);
@@ -866,7 +869,7 @@ function ShowFormPanel({
           totalAmount: subDraftsTotal,
           depositAmount: depositNum,
           depositPaymentMethod: depositMethod,
-          discountAmount: 0,
+          discountAmount: discountNum,
           isParentContract: true,
           packageType: subDrafts.map(s => s.serviceLabel || "Dịch vụ").join(" + "),
           assignedStaff,
@@ -916,7 +919,7 @@ function ShowFormPanel({
         location: location || null, status: finalStatus,
         totalAmount: finalTotal, depositAmount: finalDeposit,
         depositPaymentMethod: finalDeposit > 0 ? depositMethod : undefined,
-        discountAmount: 0,
+        discountAmount: discountNum,
         items: hasServices ? validLines.map(({ tempId: _t, ...rest }) => rest) : [],
         surcharges: cleanedSurcharges,
         assignedStaff, notes: notes || null,
@@ -1224,6 +1227,16 @@ function ShowFormPanel({
                 <span className="text-sm text-muted-foreground">Tổng tiền:</span>
                 <span className="font-bold text-base">{formatVND(totalAmount)}</span>
               </div>
+              <div className="flex justify-between items-center gap-3">
+                <span className="text-sm text-muted-foreground flex-shrink-0">Giảm giá:</span>
+                <Input type="number" className="h-8 text-sm text-right w-40" value={discount} placeholder="0" onChange={e => setDiscount(e.target.value)} />
+              </div>
+              {discountNum > 0 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Sau giảm giá:</span>
+                  <span className="font-semibold text-emerald-600">{formatVND(afterDiscount)}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center gap-3">
                 <span className="text-sm text-muted-foreground flex-shrink-0">Đặt cọc:</span>
                 <Input type="number" className="h-8 text-sm text-right w-40" value={deposit} placeholder="0" onChange={e => setDeposit(e.target.value)} />
