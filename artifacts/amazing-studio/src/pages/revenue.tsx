@@ -59,11 +59,6 @@ type SaleRow = {
   contribution: number;
 };
 
-const STATUS_FILTERS = [
-  { key: "all", label: "Tất cả đơn" },
-  { key: "confirmed", label: "Đã xác nhận" },
-  { key: "completed", label: "Đã hoàn thành" },
-];
 
 const PERIOD_MODES = [
   { key: "7days", label: "7 ngày" },
@@ -141,31 +136,41 @@ function CustomPieLabel({ cx, cy, midAngle, innerRadius, outerRadius, percentage
 
 export default function RevenuePage() {
   const { effectiveIsAdmin } = useStaffAuth();
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [onlyConfirmed, setOnlyConfirmed] = useState(false);
+  const [onlyPaid, setOnlyPaid] = useState(false);
   const [periodMode, setPeriodMode] = useState("12months");
   const [chartTab, setChartTab] = useState("bar");
 
+  function buildFilterParams() {
+    const p = new URLSearchParams();
+    if (onlyConfirmed) p.set("onlyConfirmed", "true");
+    if (onlyPaid) p.set("onlyPaid", "true");
+    return p.toString();
+  }
+
+  const filterKey = `${onlyConfirmed}-${onlyPaid}`;
+
   const { data: stats, isLoading: statsLoading } = useQuery<Stats>({
-    queryKey: ["revenue-stats", statusFilter],
-    queryFn: () => fetch(`${BASE}/api/revenue/stats?statusFilter=${statusFilter}`).then(r => r.json()),
+    queryKey: ["revenue-stats", filterKey],
+    queryFn: () => fetch(`${BASE}/api/revenue/stats?${buildFilterParams()}`).then(r => r.json()),
     refetchInterval: 60000,
   });
 
   const { data: periodData = [], isLoading: periodLoading } = useQuery<PeriodPoint[]>({
-    queryKey: ["revenue-by-period", statusFilter, periodMode],
-    queryFn: () => fetch(`${BASE}/api/revenue/by-period?statusFilter=${statusFilter}&mode=${periodMode}`).then(r => r.json()),
+    queryKey: ["revenue-by-period", filterKey, periodMode],
+    queryFn: () => fetch(`${BASE}/api/revenue/by-period?${buildFilterParams()}&mode=${periodMode}`).then(r => r.json()),
     refetchInterval: 60000,
   });
 
   const { data: serviceData = [], isLoading: serviceLoading } = useQuery<ServiceRow[]>({
-    queryKey: ["revenue-by-service", statusFilter],
-    queryFn: () => fetch(`${BASE}/api/revenue/by-service?statusFilter=${statusFilter}`).then(r => r.json()),
+    queryKey: ["revenue-by-service", filterKey],
+    queryFn: () => fetch(`${BASE}/api/revenue/by-service?${buildFilterParams()}`).then(r => r.json()),
     refetchInterval: 60000,
   });
 
   const { data: saleData = [], isLoading: saleLoading } = useQuery<SaleRow[]>({
-    queryKey: ["revenue-by-sale", statusFilter],
-    queryFn: () => fetch(`${BASE}/api/revenue/by-sale?statusFilter=${statusFilter}`).then(r => r.json()),
+    queryKey: ["revenue-by-sale", filterKey],
+    queryFn: () => fetch(`${BASE}/api/revenue/by-sale?${buildFilterParams()}`).then(r => r.json()),
     refetchInterval: 60000,
   });
 
@@ -221,14 +226,26 @@ export default function RevenuePage() {
             </div>
           </div>
 
-          {/* Status filter */}
-          <div className="flex gap-1.5 flex-wrap">
-            {STATUS_FILTERS.map(f => (
-              <button key={f.key} onClick={() => setStatusFilter(f.key)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-colors ${statusFilter === f.key ? "bg-violet-600 text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>
-                {f.label}
-              </button>
-            ))}
+          {/* Status filter checkboxes */}
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={onlyConfirmed}
+                onChange={e => { setOnlyConfirmed(e.target.checked); if (e.target.checked) setOnlyPaid(false); }}
+                className="w-4 h-4 rounded accent-violet-600"
+              />
+              <span className="text-xs font-medium text-foreground">Chỉ đã xác nhận</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={onlyPaid}
+                onChange={e => { setOnlyPaid(e.target.checked); if (e.target.checked) setOnlyConfirmed(false); }}
+                className="w-4 h-4 rounded accent-violet-600"
+              />
+              <span className="text-xs font-medium text-foreground">Chỉ đã thu tiền</span>
+            </label>
           </div>
         </div>
 
