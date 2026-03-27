@@ -594,7 +594,7 @@ function CustomerSearchBox({
 
   useEffect(() => {
     const digits = query.replace(/\D/g, "");
-    if (digits.length >= 9 && !selected) {
+    if (digits.length >= 10 && !selected) {
       const exactMatch = customers.find(c => c.phone.replace(/\D/g, "") === digits);
       if (exactMatch) {
         handleSelect(exactMatch);

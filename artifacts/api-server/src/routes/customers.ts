@@ -43,7 +43,7 @@ router.get("/customers", async (req, res) => {
     const r = await pool.query(
       `SELECT * FROM customers
        WHERE unaccent(name) ILIKE unaccent($1)
-          OR REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', '') ILIKE $2
+          OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '') ILIKE $2
           OR facebook ILIKE $3
        ORDER BY created_at DESC`,
       [pct, normPct, pct]
@@ -82,7 +82,7 @@ router.get("/customers/by-phone", async (req, res) => {
   if (!phone) return res.status(400).json({ error: "Thiếu số điện thoại" });
   const r = await pool.query(
     `SELECT * FROM customers
-     WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', '') = $1
+     WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '') = $1
      LIMIT 1`,
     [phone]
   );

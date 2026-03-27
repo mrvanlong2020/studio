@@ -130,7 +130,7 @@ function PhoneAutocomplete({ value, onChange, onSelect }: {
   }, []);
   useEffect(() => {
     const digits = value.replace(/\D/g, "");
-    if (digits.length >= 9 && results.length > 0 && autoSelectedRef.current !== digits) {
+    if (digits.length >= 10 && results.length > 0 && autoSelectedRef.current !== digits) {
       const exact = results.find(c => c.phone.replace(/\D/g, "") === digits);
       if (exact) {
         autoSelectedRef.current = digits;
@@ -138,7 +138,7 @@ function PhoneAutocomplete({ value, onChange, onSelect }: {
         setOpen(false);
       }
     }
-    if (digits.length < 9) autoSelectedRef.current = null;
+    if (digits.length < 10) autoSelectedRef.current = null;
   }, [results, value, onSelect]);
   return (
     <div className="relative" ref={ref}>

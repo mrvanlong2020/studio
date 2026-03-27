@@ -188,7 +188,7 @@ export default function CustomersPage() {
 
   const checkPhoneDuplicate = (phone: string) => {
     const trimmed = phone.replace(/[\s\-\(\)\+\.]/g, "");
-    if (trimmed.length < 9) { setPhoneDuplicate(null); return; }
+    if (trimmed.length < 10) { setPhoneDuplicate(null); return; }
     if (phoneDebounceRef.current) clearTimeout(phoneDebounceRef.current);
     phoneDebounceRef.current = setTimeout(async () => {
       try {
