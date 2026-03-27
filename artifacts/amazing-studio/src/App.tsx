@@ -20,6 +20,7 @@ import ContractsPage from "@/pages/contracts";
 import ReportsPage from "@/pages/reports";
 import PaymentsPage from "@/pages/payments";
 import ExpensesPage from "@/pages/expenses";
+import RevenuePage from "@/pages/revenue";
 import PhotoshopJobsPage from "@/pages/photoshop-jobs";
 import InternalCommsPage from "@/pages/internal-comms";
 import NotFound from "@/pages/not-found";
@@ -56,6 +57,7 @@ function Router() {
         <Route path="/bookings" component={BookingsPage} />
         <Route path="/payments" component={PaymentsPage} />
         <Route path="/expenses" component={ExpensesPage} />
+        <Route path="/revenue" component={RevenuePage} />
         <Route path="/contracts" component={ContractsPage} />
         <Route path="/reports" component={ReportsPage} />
         <Route path="/photoshop-jobs" component={PhotoshopJobsPage} />

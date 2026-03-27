@@ -20,6 +20,7 @@ const ALL_NAV_ITEMS = [
   { href: "/bookings",        label: "Đơn hàng",             icon: ClipboardList,   adminOnly: false },
   { href: "/payments",        label: "Thu tiền",             icon: CreditCard,      adminOnly: true  },
   { href: "/expenses",        label: "Chi tiền",             icon: TrendingDown,    adminOnly: true  },
+  { href: "/revenue",         label: "Doanh thu & Lợi nhuận", icon: TrendingUp,    adminOnly: true  },
   { href: "/pricing",         label: "Dịch vụ & Bảng giá",  icon: LayoutList,      adminOnly: true  },
   { href: "/staff",           label: "Nhân sự",              icon: UserCog,         adminOnly: true  },
   { href: "/tasks",           label: "Giao việc",            icon: CheckSquare,     adminOnly: false },
