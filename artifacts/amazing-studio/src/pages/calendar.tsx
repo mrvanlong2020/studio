@@ -191,6 +191,7 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
 }) {
   const [useCustom, setUseCustom] = useState(!line.serviceId && !line.serviceKey && !!line.serviceName);
   const [uploadingConcept, setUploadingConcept] = useState(false);
+  const [uploadConceptError, setUploadConceptError] = useState<string | null>(null);
   const conceptImgRef = useRef<HTMLInputElement>(null);
 
   const selectedSvc = line.serviceKey ? services.find(s => s.key === line.serviceKey) : null;
@@ -563,6 +564,9 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
           >
             {uploadingConcept ? <span>Đang tải ảnh...</span> : <><Plus className="w-3 h-3" /> Thêm ảnh concept</>}
           </button>
+          {uploadConceptError && (
+            <p className="text-xs text-red-500 mt-1">{uploadConceptError}</p>
+          )}
           <input
             ref={conceptImgRef}
             type="file"
@@ -572,6 +576,7 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
               const file = e.target.files?.[0];
               if (!file) return;
               setUploadingConcept(true);
+              setUploadConceptError(null);
               try {
                 const res = await fetch(`${BASE}/api/storage/uploads/request-url`, {
                   method: "POST",
@@ -585,6 +590,7 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
                 onChange({ ...line, conceptImages: [...(line.conceptImages ?? []), objectPath] });
               } catch (err) {
                 console.error("Concept image upload failed:", err);
+                setUploadConceptError("Tải ảnh thất bại, vui lòng thử lại.");
               } finally {
                 setUploadingConcept(false);
                 e.target.value = "";
