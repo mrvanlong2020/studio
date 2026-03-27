@@ -1,0 +1,199 @@
+Tạo module “Kho trang phục” để quản lý toàn bộ váy cưới, vest, áo dài, trang phục beauty và phụ kiện trong studio.
+
+Mục tiêu
+
+Tôi muốn có một module riêng để:
+
+nhập trang phục mới
+quản lý tồn kho
+giữ lịch trang phục theo show
+theo dõi tình trạng trang phục
+xem lịch sử sử dụng của từng món
+1. Tạo menu sidebar
+
+Thêm menu:
+Kho trang phục
+
+2. Chia nhóm trang phục
+
+Tạo các nhóm chính:
+
+Váy cưới
+Vest nam
+Áo dài
+Beauty / concept
+Phụ kiện
+Khác
+
+Cho phép admin thêm nhóm mới nếu cần.
+
+3. Mỗi trang phục cần có các trường dữ liệu
+mã trang phục
+tên trang phục
+nhóm trang phục
+loại / style
+size
+màu sắc
+giá thuê
+giá cọc
+giá đền
+tình trạng
+trạng thái kho
+ngày nhập kho
+ghi chú
+ảnh đại diện / nhiều ảnh nếu có
+4. Tình trạng trang phục
+
+Cho chọn:
+
+Mới
+Tốt
+Hơi cũ
+Cần giặt
+Cần sửa
+Hư / ngưng dùng
+5. Trạng thái kho
+
+Cho chọn:
+
+Có sẵn
+Đã giữ lịch
+Đang sử dụng
+Đang giặt
+Đang sửa
+Ngưng hoạt động
+6. Màn hình danh sách kho
+
+Hiển thị danh sách trang phục với:
+
+ảnh
+mã
+tên
+nhóm
+size
+màu
+tình trạng
+trạng thái kho
+
+Có tìm kiếm theo:
+
+mã
+tên
+nhóm
+màu
+size
+trạng thái
+
+Có bộ lọc nhanh:
+
+Có sẵn
+Đã giữ lịch
+Đang sử dụng
+Cần giặt
+Cần sửa
+7. Form nhập trang phục mới
+
+Thêm nút:
++ Thêm trang phục
+
+Form nhập gồm đầy đủ:
+
+mã
+tên
+nhóm
+loại
+size
+màu
+giá thuê
+giá cọc
+giá đền
+tình trạng
+trạng thái
+ghi chú
+upload ảnh
+8. Liên kết với show / đơn hàng
+
+Khi tạo show hoặc tạo đơn hàng, nếu dịch vụ có dùng trang phục thì phải cho chọn trang phục từ kho.
+
+Ví dụ:
+
+chọn váy cưới
+chọn vest
+chọn áo dài
+chọn phụ kiện
+
+Khi chọn xong, hệ thống tự:
+
+giữ lịch trang phục theo ngày chụp
+đổi trạng thái sang “Đã giữ lịch”
+9. Kiểm tra trùng lịch
+
+Nếu một trang phục đã được giữ cho show khác cùng ngày hoặc trùng thời gian,
+hệ thống phải cảnh báo:
+Trang phục đã có lịch / bị trùng lịch
+
+Không cho chọn trùng nếu chưa xác nhận.
+
+10. Lịch sử sử dụng
+
+Mỗi trang phục cần có tab:
+Lịch sử sử dụng
+
+Hiển thị:
+
+đã dùng cho khách nào
+show nào
+ngày nào
+ai giao
+ai nhận lại
+sau khi nhận lại tình trạng ra sao
+11. Phiếu xuất / nhận trang phục
+
+Cho phép tạo log đơn giản:
+
+ngày giao đồ
+người giao
+người nhận
+show liên quan
+ghi chú tình trạng trước khi giao
+
+Khi trả đồ:
+
+ngày trả
+người nhận lại
+tình trạng sau khi trả
+cần giặt / sửa hay không
+12. Dashboard đầu module
+
+Hiển thị 6 ô tổng quan:
+
+Tổng số trang phục
+Có sẵn
+Đã giữ lịch
+Đang sử dụng
+Cần giặt / sửa
+Ngưng dùng
+13. Chi tiết từng trang phục
+
+Khi bấm vào 1 món, mở trang chi tiết gồm:
+
+ảnh lớn
+thông tin cơ bản
+giá thuê / cọc / đền
+tình trạng hiện tại
+lịch đã giữ
+lịch sử sử dụng
+ghi chú nội bộ
+14. Phân quyền
+Admin: xem, thêm, sửa, xóa, giữ lịch
+Nhân viên: chỉ xem và cập nhật tình trạng nếu được cấp quyền
+15. Mục tiêu cuối cùng
+
+Tôi muốn module này giúp studio quản lý rõ:
+
+món nào còn
+món nào đã giữ
+món nào đang dùng
+món nào cần giặt / sửa
+món nào bị trùng lịch
+món nào đã dùng cho khách nào
