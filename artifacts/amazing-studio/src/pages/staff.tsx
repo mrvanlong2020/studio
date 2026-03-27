@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Users, Plus, Pencil, Banknote, DollarSign, Briefcase, ClipboardList, ChevronDown, ChevronUp, AlertCircle, UserCircle, LogOut, ChevronRight } from "lucide-react";
+import { Users, Plus, Pencil, Banknote, DollarSign, Briefcase, ClipboardList, ChevronDown, ChevronUp, AlertCircle, UserCircle, LogOut, ChevronRight, KeyRound, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { useStaffAuth, type ViewerUser } from "@/contexts/StaffAuthContext";
 import StaffAvatar from "@/components/StaffAvatar";
 
@@ -373,6 +373,14 @@ function StaffFormSheet({ open, onClose, editStaff }: StaffFormSheetProps) {
                   <Label>Số điện thoại</Label>
                   <Input value={form.phone} onChange={e => setField("phone", e.target.value)}
                     placeholder="0901234567" className="mt-1" />
+                  {!isEdit && form.phone && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      🔑 Tài khoản đăng nhập: <span className="font-mono font-medium">{form.phone}</span> / mật khẩu mặc định: <span className="font-mono font-medium">{form.phone}</span>
+                    </p>
+                  )}
+                  {!isEdit && !form.phone && (
+                    <p className="text-xs text-muted-foreground mt-1">💡 Số điện thoại sẽ là tên đăng nhập</p>
+                  )}
                 </div>
                 <div>
                   <Label>Email</Label>
@@ -640,8 +648,10 @@ interface StaffCardProps {
   earnings: Array<{ staffId: number; rate: number; earnedDate: string }>;
   onEdit: (s: Record<string, unknown>) => void;
   onEditPrice: (s: Record<string, unknown>) => void;
+  onSetPassword: (s: Record<string, unknown>) => void;
+  isAdmin: boolean;
 }
-function StaffCard({ staff, earnings, onEdit, onEditPrice }: StaffCardProps) {
+function StaffCard({ staff, earnings, onEdit, onEditPrice, onSetPassword, isAdmin }: StaffCardProps) {
   const [, navigate] = useLocation();
   const roles = getRoles(staff);
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -740,7 +750,113 @@ function StaffCard({ staff, earnings, onEdit, onEditPrice }: StaffCardProps) {
           <DollarSign className="w-3.5 h-3.5" /> Sửa bảng giá
         </Button>
       </div>
+      {isAdmin && (
+        <Button size="sm" variant="ghost" className="w-full gap-1.5 text-muted-foreground hover:text-foreground border border-dashed" onClick={() => onSetPassword(staff)}>
+          <KeyRound className="w-3.5 h-3.5" /> Đặt mật khẩu đăng nhập
+        </Button>
+      )}
     </div>
+  );
+}
+
+// ─── Set Password Dialog ──────────────────────────────────────────────────────
+function SetPasswordDialog({ staff, onClose }: { staff: Record<string, unknown> | null; onClose: () => void }) {
+  const { token } = useStaffAuth();
+  const [newPw, setNewPw] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showNew, setShowNew] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  const [done, setDone] = useState(false);
+
+  const loginName = (staff?.phone as string | null) || "admin";
+  const staffName = String(staff?.name || "");
+
+  async function handleSave() {
+    if (!staff) return;
+    if (newPw.length < 4) { setErr("Mật khẩu phải có ít nhất 4 ký tự"); return; }
+    if (newPw !== confirm) { setErr("Mật khẩu xác nhận không khớp"); return; }
+    setSaving(true); setErr("");
+    try {
+      const res = await fetch(`${BASE}/api/auth/change-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+        body: JSON.stringify({ targetId: staff.id, newPassword: newPw }),
+      });
+      const data = await res.json() as { success?: boolean; error?: string };
+      if (!res.ok) { setErr(data.error ?? "Lỗi cập nhật mật khẩu"); return; }
+      setDone(true);
+    } catch { setErr("Lỗi kết nối máy chủ"); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <Dialog open={!!staff} onOpenChange={v => { if (!v) { onClose(); setNewPw(""); setConfirm(""); setErr(""); setDone(false); } }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <KeyRound className="w-5 h-5 text-primary" /> Đặt mật khẩu
+          </DialogTitle>
+        </DialogHeader>
+        {done ? (
+          <div className="py-6 text-center space-y-3">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-emerald-100 mx-auto">
+              <ShieldCheck className="w-7 h-7 text-emerald-600" />
+            </div>
+            <p className="font-semibold text-emerald-700">Đặt mật khẩu thành công!</p>
+            <p className="text-sm text-muted-foreground">
+              <strong>{staffName}</strong> sẽ dùng mật khẩu mới lần đăng nhập tiếp theo.
+            </p>
+            <Button className="w-full mt-2" onClick={() => { onClose(); setNewPw(""); setConfirm(""); setDone(false); }}>Đóng</Button>
+          </div>
+        ) : (
+          <div className="space-y-4 py-1">
+            <div className="bg-muted/50 rounded-xl px-4 py-3 space-y-1 text-sm">
+              <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Thông tin đăng nhập</p>
+              <p><span className="text-muted-foreground">Nhân viên:</span> <strong>{staffName}</strong></p>
+              <p><span className="text-muted-foreground">Tên đăng nhập:</span> <strong className="font-mono">{loginName || "—"}</strong></p>
+              {!loginName && (
+                <p className="text-xs text-amber-600 mt-1">⚠️ Nhân viên này chưa có số điện thoại — cần thêm SĐT trước khi đặt mật khẩu</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Mật khẩu mới</Label>
+              <div className="relative">
+                <Input
+                  type={showNew ? "text" : "password"}
+                  placeholder="Ít nhất 4 ký tự"
+                  value={newPw}
+                  onChange={e => setNewPw(e.target.value)}
+                  className="pr-10"
+                  disabled={!loginName}
+                />
+                <button type="button" onClick={() => setShowNew(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Xác nhận mật khẩu</Label>
+              <Input
+                type="password"
+                placeholder="Nhập lại mật khẩu"
+                value={confirm}
+                onChange={e => setConfirm(e.target.value)}
+                disabled={!loginName}
+              />
+            </div>
+            {err && <p className="text-sm text-destructive">{err}</p>}
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => { onClose(); setNewPw(""); setConfirm(""); setErr(""); }}>Hủy</Button>
+              <Button className="flex-1 gap-1.5" onClick={handleSave} disabled={saving || !newPw || !loginName}>
+                {saving ? "Đang lưu..." : <><KeyRound className="w-4 h-4" /> Lưu mật khẩu</>}
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -871,11 +987,12 @@ export default function StaffPage() {
   const [showForm, setShowForm] = useState(false);
   const [editStaff, setEditStaff] = useState<Record<string, unknown> | null>(null);
   const [priceStaff, setPriceStaff] = useState<Record<string, unknown> | null>(null);
+  const [passwordStaff, setPasswordStaff] = useState<Record<string, unknown> | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "official" | "freelancer">("all");
   const [roleFilter, setRoleFilter] = useState("all");
   const [viewerSheet, setViewerSheet] = useState(false);
-  const { viewer, setViewer, logout } = useStaffAuth();
+  const { viewer, setViewer, logout, isAdmin } = useStaffAuth();
 
   const { data: staffList = [] } = useQuery<Array<Record<string, unknown>>>({
     queryKey: ["staff"],
@@ -1034,6 +1151,8 @@ export default function StaffPage() {
                   earnings={allEarnings}
                   onEdit={s => { setEditStaff(s); setShowForm(true); }}
                   onEditPrice={setPriceStaff}
+                  onSetPassword={setPasswordStaff}
+                  isAdmin={!!isAdmin}
                 />
               ))}
             </div>
@@ -1054,6 +1173,11 @@ export default function StaffPage() {
       <PriceEditDialog
         staff={priceStaff}
         onClose={() => setPriceStaff(null)}
+      />
+
+      <SetPasswordDialog
+        staff={passwordStaff}
+        onClose={() => setPasswordStaff(null)}
       />
 
       {/* ── Chọn tài khoản ─────────────────────────────────────── */}
