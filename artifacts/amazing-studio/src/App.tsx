@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import Dashboard from "@/pages/dashboard";
@@ -28,6 +28,12 @@ import LoginPage from "@/pages/login";
 import { StaffAuthProvider, useStaffAuth } from "@/contexts/StaffAuthContext";
 import { Camera } from "lucide-react";
 
+function AdminRoute({ component: Component }: { component: React.ComponentType }) {
+  const { effectiveIsAdmin } = useStaffAuth();
+  if (!effectiveIsAdmin) return <Redirect to="/calendar" />;
+  return <Component />;
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -42,26 +48,26 @@ function Router() {
   return (
     <Layout>
       <Switch>
-        <Route path="/" component={Dashboard} />
+        <Route path="/" component={() => <AdminRoute component={Dashboard} />} />
         <Route path="/calendar" component={CalendarPage} />
         <Route path="/tasks" component={TasksPage} />
         <Route path="/customers" component={CustomersPage} />
-        <Route path="/quotes" component={QuotesPage} />
+        <Route path="/quotes" component={() => <AdminRoute component={QuotesPage} />} />
         <Route path="/wardrobe" component={WardrobePage} />
-        <Route path="/pricing" component={PricingPage} />
+        <Route path="/pricing" component={() => <AdminRoute component={PricingPage} />} />
         <Route path="/services/:id" component={ServiceDetailPage} />
         <Route path="/services" component={ServicesPage} />
         <Route path="/staff/:id" component={StaffProfilePage} />
-        <Route path="/staff" component={StaffPage} />
+        <Route path="/staff" component={() => <AdminRoute component={StaffPage} />} />
         <Route path="/accounting" component={AccountingHrPage} />
         <Route path="/ai-assistant" component={AiAssistantPage} />
-        <Route path="/settings" component={SettingsPage} />
+        <Route path="/settings" component={() => <AdminRoute component={SettingsPage} />} />
         <Route path="/bookings" component={BookingsPage} />
         <Route path="/payments" component={PaymentsPage} />
-        <Route path="/expenses" component={ExpensesPage} />
-        <Route path="/revenue" component={RevenuePage} />
-        <Route path="/contracts" component={ContractsPage} />
-        <Route path="/reports" component={ReportsPage} />
+        <Route path="/expenses" component={() => <AdminRoute component={ExpensesPage} />} />
+        <Route path="/revenue" component={() => <AdminRoute component={RevenuePage} />} />
+        <Route path="/contracts" component={() => <AdminRoute component={ContractsPage} />} />
+        <Route path="/reports" component={() => <AdminRoute component={ReportsPage} />} />
         <Route path="/photoshop-jobs" component={PhotoshopJobsPage} />
         <Route path="/internal-comms" component={InternalCommsPage} />
         <Route component={NotFound} />

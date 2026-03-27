@@ -74,17 +74,17 @@ export default function LoginPage({ onLogin }: Props) {
         <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl shadow-2xl shadow-rose-100/50 dark:shadow-black/30 border border-white/50 dark:border-white/10 p-8">
           <h2 className="text-xl font-bold text-center mb-1">Đăng nhập</h2>
           <p className="text-sm text-muted-foreground text-center mb-6">
-            Dùng số điện thoại đã đăng ký
+            Dùng số điện thoại hoặc tên đăng nhập
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Phone */}
+            {/* Phone / Username */}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Số điện thoại</label>
+              <label className="text-sm font-medium text-foreground">Số điện thoại / Tên đăng nhập</label>
               <input
-                type="tel"
-                inputMode="numeric"
-                placeholder="VD: 0912345678"
+                type="text"
+                inputMode="text"
+                placeholder="SĐT hoặc tên đăng nhập"
                 value={phone}
                 onChange={e => setPhone(e.target.value)}
                 required

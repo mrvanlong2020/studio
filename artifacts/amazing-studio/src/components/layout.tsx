@@ -14,11 +14,11 @@ import { useStaffAuth, type SimulateRole } from "@/contexts/StaffAuthContext";
 
 // ─── Navigation Items ──────────────────────────────────────────────────────────
 const ALL_NAV_ITEMS = [
-  { href: "/",                label: "Tổng quan",           icon: LayoutDashboard, adminOnly: false },
+  { href: "/",                label: "Tổng quan",           icon: LayoutDashboard, adminOnly: true  },
   { href: "/calendar",        label: "Lịch chụp",            icon: CalendarDays,    adminOnly: false },
   { href: "/customers",       label: "Khách hàng",           icon: Users,           adminOnly: false },
   { href: "/bookings",        label: "Đơn hàng",             icon: ClipboardList,   adminOnly: false },
-  { href: "/payments",        label: "Thu tiền",             icon: CreditCard,      adminOnly: true  },
+  { href: "/payments",        label: "Thu tiền",             icon: CreditCard,      adminOnly: false },
   { href: "/expenses",        label: "Chi tiền",             icon: TrendingDown,    adminOnly: true  },
   { href: "/revenue",         label: "Doanh thu & Lợi nhuận", icon: TrendingUp,    adminOnly: true  },
   { href: "/pricing",         label: "Dịch vụ & Bảng giá",  icon: LayoutList,      adminOnly: true  },

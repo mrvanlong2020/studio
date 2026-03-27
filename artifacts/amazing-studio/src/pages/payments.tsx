@@ -7,6 +7,7 @@ import {
   CalendarDays, Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useStaffAuth } from "@/contexts/StaffAuthContext";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const fetchJson = (url: string, opts?: RequestInit) =>
@@ -365,6 +366,7 @@ function SmartSearchBox({
 /* ─── Main Page ──────────────────────────── */
 export default function PaymentsPage() {
   const qc = useQueryClient();
+  const { effectiveIsAdmin, viewer } = useStaffAuth();
 
   /* Suggestions */
   const { data: suggestions = [], isLoading: suggestionsLoading } = useQuery<Booking[]>({
@@ -418,14 +420,18 @@ export default function PaymentsPage() {
   };
 
   /* Form */
+  const defaultCollector = viewer ? String(viewer.name || viewer.phone || "Quản Trị Viên") : "Quản Trị Viên";
   const [form, setForm] = useState({
     amount: "",
     paymentMethod: "cash",
     bankName: "",
-    collectorName: "Quản Trị Viên",
+    collectorName: defaultCollector,
     paidDate: today(),
     notes: "",
   });
+  useEffect(() => {
+    if (viewer) setForm(f => ({ ...f, collectorName: String(viewer.name || viewer.phone || "Quản Trị Viên") }));
+  }, [viewer?.id]);
   const [proofImage, setProofImage]   = useState<string | null>(null);
   const [proofPreview, setProofPreview] = useState(false);
   const [saving, setSaving]           = useState(false);
@@ -531,19 +537,28 @@ export default function PaymentsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Thu tiền</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Chọn hồ sơ → Điền thông tin → Lưu phiếu thu
+            {effectiveIsAdmin ? "Chọn hồ sơ → Điền thông tin → Lưu phiếu thu" : `Thu hộ bởi ${viewer?.name ?? "nhân viên"} — chụp ảnh biên nhận khi thu tiền mặt`}
           </p>
         </div>
-        <button
-          onClick={handleSyncDeposits}
-          disabled={syncing}
-          title="Đồng bộ tiền cọc cũ thành phiếu thu"
-          className="flex-shrink-0 flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl border border-border bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-        >
-          <History className="w-3.5 h-3.5" />
-          {syncing ? "Đang đồng bộ..." : "Đồng bộ cọc cũ"}
-        </button>
+        {effectiveIsAdmin && (
+          <button
+            onClick={handleSyncDeposits}
+            disabled={syncing}
+            title="Đồng bộ tiền cọc cũ thành phiếu thu"
+            className="flex-shrink-0 flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl border border-border bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+          >
+            <History className="w-3.5 h-3.5" />
+            {syncing ? "Đang đồng bộ..." : "Đồng bộ cọc cũ"}
+          </button>
+        )}
       </div>
+
+      {!effectiveIsAdmin && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          <Receipt className="w-4 h-4 shrink-0" />
+          <span>Nhớ chụp ảnh biên nhận hoặc ảnh chuyển khoản khi thu tiền để quản lý kiểm tra.</span>
+        </div>
+      )}
 
       {/* ── Search box thông minh ─────────────────── */}
       <div className="bg-card border border-border rounded-2xl p-4 space-y-2">
@@ -902,9 +917,10 @@ export default function PaymentsPage() {
               <div>
                 <label className="text-xs font-semibold text-muted-foreground block mb-1">👤 Người thu</label>
                 <input
-                  className="w-full px-3 py-2 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className={`w-full px-3 py-2 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 ${effectiveIsAdmin ? "bg-background" : "bg-muted/40 cursor-default"}`}
                   value={form.collectorName}
-                  onChange={e => setForm(f => ({ ...f, collectorName: e.target.value }))}
+                  onChange={e => effectiveIsAdmin && setForm(f => ({ ...f, collectorName: e.target.value }))}
+                  readOnly={!effectiveIsAdmin}
                 />
               </div>
               <div>
@@ -1040,12 +1056,14 @@ export default function PaymentsPage() {
                             <Eye className="w-3 h-3" /> Ảnh
                           </button>
                         )}
-                        <button
-                          onClick={() => { if (confirm("Xóa phiếu thu này?")) deletePayment.mutate(p.id); }}
-                          className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {effectiveIsAdmin && (
+                          <button
+                            onClick={() => { if (confirm("Xóa phiếu thu này?")) deletePayment.mutate(p.id); }}
+                            className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                     <div className="text-xs text-muted-foreground space-y-0.5 pl-10">
