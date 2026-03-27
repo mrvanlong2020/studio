@@ -5,6 +5,31 @@ import { eq, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
+interface PgConstraintError {
+  code: string;
+  constraint?: string;
+}
+
+function isPgConstraintError(err: unknown): err is PgConstraintError {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    typeof (err as Record<string, unknown>).code === "string"
+  );
+}
+
+async function ensureCustomerPhoneUnique() {
+  await pool.query(`
+    ALTER TABLE customers
+    ADD CONSTRAINT customers_phone_unique UNIQUE (phone)
+  `).catch((err: unknown) => {
+    if (isPgConstraintError(err) && (err.code === "42710" || err.code === "42P07")) return;
+    throw err;
+  });
+}
+ensureCustomerPhoneUnique().catch(console.error);
+
 router.get("/customers", async (req, res) => {
   const search = req.query.search as string | undefined;
   let customers;
@@ -18,7 +43,7 @@ router.get("/customers", async (req, res) => {
        ORDER BY created_at DESC`,
       [pct, pct, pct]
     );
-    customers = r.rows.map((row: any) => ({
+    customers = r.rows.map((row: Record<string, unknown>) => ({
       id: row.id, name: row.name, phone: row.phone, email: row.email,
       address: row.address, notes: row.notes, facebook: row.facebook,
       zalo: row.zalo, source: row.source, tags: row.tags, gender: row.gender,
@@ -32,7 +57,7 @@ router.get("/customers", async (req, res) => {
 
   const result = await Promise.all(
     customers.map(async (c) => {
-      const bookings = await db.select().from(bookingsTable).where(eq(bookingsTable.customerId, c.id));
+      const bookings = await db.select().from(bookingsTable).where(eq(bookingsTable.customerId, c.id as number));
       const bookingIds = bookings.map((b) => b.id);
       const totalPaid = allPayments
         .filter((p) => p.bookingId && bookingIds.includes(p.bookingId))
@@ -57,8 +82,8 @@ router.post("/customers", async (req, res) => {
       .values({ name, phone: phone.trim(), email, address, notes, facebook, zalo, source: source || "other", tags: tags || [], gender, avatar, customCode })
       .returning();
     res.status(201).json({ ...customer, totalBookings: 0, totalPaid: 0, totalDebt: 0 });
-  } catch (err: any) {
-    if (err?.code === "23505" && err?.constraint?.includes("phone")) {
+  } catch (err: unknown) {
+    if (isPgConstraintError(err) && err.code === "23505" && err.constraint?.includes("phone")) {
       return res.status(409).json({ error: `Số điện thoại "${phone}" đã tồn tại trong hệ thống. Vui lòng kiểm tra lại.` });
     }
     throw err;
@@ -81,17 +106,25 @@ router.get("/customers/:id", async (req, res) => {
 router.put("/customers/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   const { name, phone, email, address, notes, facebook, zalo, source, tags, gender, avatar } = req.body;
-  if (!phone?.trim()) return res.status(400).json({ error: "Số điện thoại là bắt buộc" });
+  if (phone !== undefined && !String(phone).trim()) {
+    return res.status(400).json({ error: "Số điện thoại không được để trống" });
+  }
   try {
+    const setFields: Record<string, unknown> = {
+      name, email, address, notes, facebook, zalo, source, tags: tags || [], gender, avatar,
+    };
+    if (phone !== undefined) {
+      setFields.phone = String(phone).trim();
+    }
     const [customer] = await db
       .update(customersTable)
-      .set({ name, phone: phone.trim(), email, address, notes, facebook, zalo, source, tags: tags || [], gender, avatar })
+      .set(setFields)
       .where(eq(customersTable.id, id))
       .returning();
     if (!customer) return res.status(404).json({ error: "Không tìm thấy khách hàng" });
     res.json({ ...customer, totalBookings: 0, totalPaid: 0, totalDebt: 0 });
-  } catch (err: any) {
-    if (err?.code === "23505" && err?.constraint?.includes("phone")) {
+  } catch (err: unknown) {
+    if (isPgConstraintError(err) && err.code === "23505" && err.constraint?.includes("phone")) {
       return res.status(409).json({ error: `Số điện thoại "${phone}" đã được dùng bởi khách hàng khác. Vui lòng kiểm tra lại.` });
     }
     throw err;
