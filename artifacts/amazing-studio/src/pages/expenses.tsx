@@ -1,0 +1,620 @@
+import { useState, useRef } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  TrendingDown, Plus, X, Banknote, CreditCard, ChevronDown,
+  Calendar, User, Tag, FileText, Receipt, CheckCircle2,
+  AlertCircle, Trash2, Edit2, Camera, Building2, Clock,
+} from "lucide-react";
+import { useStaffAuth } from "@/contexts/StaffAuthContext";
+import { getImageSrc } from "@/lib/imageUtils";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const vnd = (n: number) =>
+  new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
+
+const DEFAULT_CATEGORIES = [
+  "Mua bàn ghế",
+  "Thiết bị",
+  "Phụ kiện",
+  "In ấn",
+  "Trang phục",
+  "Ăn uống ekip",
+  "Vận chuyển / xăng xe",
+  "Sửa chữa",
+  "Văn phòng phẩm",
+  "Chi khác",
+];
+
+const CATEGORY_COLORS: Record<string, string> = {
+  "Mua bàn ghế": "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300",
+  "Thiết bị": "bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300",
+  "Phụ kiện": "bg-violet-100 text-violet-700 dark:bg-violet-950/30 dark:text-violet-300",
+  "In ấn": "bg-sky-100 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300",
+  "Trang phục": "bg-pink-100 text-pink-700 dark:bg-pink-950/30 dark:text-pink-300",
+  "Ăn uống ekip": "bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-300",
+  "Vận chuyển / xăng xe": "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300",
+  "Sửa chữa": "bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-300",
+  "Văn phòng phẩm": "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  "Chi khác": "bg-muted text-muted-foreground",
+};
+
+type Expense = {
+  id: number;
+  expenseCode: string | null;
+  type: string;
+  category: string;
+  amount: number;
+  description: string;
+  bookingId: number | null;
+  paymentMethod: string;
+  expenseDate: string;
+  receiptUrl: string | null;
+  bankName: string | null;
+  bankAccount: string | null;
+  createdBy: string | null;
+  notes: string | null;
+  createdAt: string;
+};
+
+type Stats = {
+  today: number; todayCount: number;
+  week: number; weekCount: number;
+  month: number; monthCount: number;
+  total: number; totalCount: number;
+};
+
+const EMPTY_FORM = {
+  category: "Chi khác",
+  amount: "",
+  description: "",
+  paymentMethod: "cash",
+  expenseDate: new Date().toISOString().slice(0, 10),
+  bankName: "",
+  bankAccount: "",
+  createdBy: "",
+  notes: "",
+  receiptUrl: "",
+};
+
+export default function ExpensesPage() {
+  const qc = useQueryClient();
+  const { effectiveIsAdmin, viewer } = useStaffAuth();
+
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [dateRange, setDateRange] = useState("month");
+  const [filterCategory, setFilterCategory] = useState("");
+  const [customCategory, setCustomCategory] = useState("");
+  const [showCustomCat, setShowCustomCat] = useState(false);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  const [viewDetail, setViewDetail] = useState<Expense | null>(null);
+  const receiptInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: expenses = [], isLoading } = useQuery<Expense[]>({
+    queryKey: ["expenses", dateRange, filterCategory],
+    queryFn: () => {
+      const p = new URLSearchParams();
+      if (dateRange) p.set("dateRange", dateRange);
+      if (filterCategory) p.set("category", filterCategory);
+      return fetch(`${BASE}/api/expenses?${p}`).then(r => r.json());
+    },
+    refetchInterval: 30000,
+  });
+
+  const { data: stats } = useQuery<Stats>({
+    queryKey: ["expense-stats"],
+    queryFn: () => fetch(`${BASE}/api/expenses/stats`).then(r => r.json()),
+    refetchInterval: 30000,
+  });
+
+  const createExpense = useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      fetch(`${BASE}/api/expenses`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }).then(r => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+      qc.invalidateQueries({ queryKey: ["expense-stats"] });
+      resetForm();
+    },
+  });
+
+  const updateExpense = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) =>
+      fetch(`${BASE}/api/expenses/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }).then(r => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+      qc.invalidateQueries({ queryKey: ["expense-stats"] });
+      resetForm();
+    },
+  });
+
+  const deleteExpense = useMutation({
+    mutationFn: (id: number) => fetch(`${BASE}/api/expenses/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+      qc.invalidateQueries({ queryKey: ["expense-stats"] });
+      setViewDetail(null);
+    },
+  });
+
+  function resetForm() {
+    setForm({ ...EMPTY_FORM, createdBy: viewer?.name ?? "" });
+    setEditingId(null);
+    setShowForm(false);
+    setShowCustomCat(false);
+    setCustomCategory("");
+  }
+
+  function openCreate() {
+    setForm({ ...EMPTY_FORM, createdBy: viewer?.name ?? "" });
+    setEditingId(null);
+    setShowForm(true);
+  }
+
+  function openEdit(e: Expense) {
+    setForm({
+      category: e.category,
+      amount: String(e.amount),
+      description: e.description,
+      paymentMethod: e.paymentMethod,
+      expenseDate: e.expenseDate,
+      bankName: e.bankName ?? "",
+      bankAccount: e.bankAccount ?? "",
+      createdBy: e.createdBy ?? "",
+      notes: e.notes ?? "",
+      receiptUrl: e.receiptUrl ?? "",
+    });
+    setEditingId(e.id);
+    setShowForm(true);
+    setViewDetail(null);
+  }
+
+  function handleSubmit(ev: React.FormEvent) {
+    ev.preventDefault();
+    const cat = showCustomCat && customCategory.trim() ? customCategory.trim() : form.category;
+    const payload = {
+      ...form,
+      category: cat,
+      amount: parseFloat(form.amount) || 0,
+      bankName: form.paymentMethod === "bank" ? form.bankName : null,
+      bankAccount: form.paymentMethod === "bank" ? form.bankAccount : null,
+    };
+    if (editingId) {
+      updateExpense.mutate({ id: editingId, data: payload });
+    } else {
+      createExpense.mutate(payload);
+    }
+  }
+
+  async function uploadReceipt(file: File) {
+    setUploadingReceipt(true);
+    try {
+      const res = await fetch(`${BASE}/api/storage/uploads/request-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name, contentType: file.type, folder: "receipts" }),
+      });
+      const { uploadURL, objectPath } = await res.json();
+      await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      setForm(f => ({ ...f, receiptUrl: objectPath }));
+    } catch (err) {
+      console.error("Upload failed", err);
+    } finally {
+      setUploadingReceipt(false);
+    }
+  }
+
+  const allCategories = Array.from(new Set([...DEFAULT_CATEGORIES, ...expenses.map(e => e.category)]));
+  const catColor = (cat: string) => CATEGORY_COLORS[cat] ?? "bg-muted text-muted-foreground";
+
+  const DATE_RANGES = [
+    { key: "today", label: "Hôm nay" },
+    { key: "7days", label: "7 ngày" },
+    { key: "month", label: "Tháng này" },
+    { key: "", label: "Tất cả" },
+  ];
+
+  return (
+    <div className="min-h-full bg-background">
+      {/* Header */}
+      <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-border">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+              <TrendingDown className="w-5 h-5 text-red-600" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold">Chi tiền</h1>
+              <p className="text-xs text-muted-foreground">Quản lý các khoản chi phí của studio</p>
+            </div>
+          </div>
+          <button onClick={openCreate}
+            className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold text-sm transition-colors shadow-sm">
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Tạo phiếu chi</span>
+            <span className="sm:hidden">Thêm</span>
+          </button>
+        </div>
+
+        {/* Stats dashboard */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+          {[
+            { label: "Hôm nay", amount: stats?.today ?? 0, count: stats?.todayCount ?? 0, color: "text-red-600" },
+            { label: "7 ngày", amount: stats?.week ?? 0, count: stats?.weekCount ?? 0, color: "text-orange-600" },
+            { label: "Tháng này", amount: stats?.month ?? 0, count: stats?.monthCount ?? 0, color: "text-amber-600" },
+            { label: "Tổng cộng", amount: stats?.total ?? 0, count: stats?.totalCount ?? 0, color: "text-muted-foreground" },
+          ].map(s => (
+            <div key={s.label} className="rounded-xl bg-card border border-border p-3">
+              <p className="text-xs text-muted-foreground">{s.label}</p>
+              <p className={`text-base sm:text-lg font-bold ${s.color} mt-0.5`}>{vnd(s.amount)}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{s.count} phiếu</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="px-4 sm:px-6 py-3 border-b border-border flex flex-wrap gap-2 items-center">
+        <div className="flex gap-1">
+          {DATE_RANGES.map(r => (
+            <button key={r.key} onClick={() => setDateRange(r.key)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-colors ${dateRange === r.key ? "bg-red-600 text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>
+              {r.label}
+            </button>
+          ))}
+        </div>
+
+        <select
+          value={filterCategory}
+          onChange={e => setFilterCategory(e.target.value)}
+          className="text-xs border border-border rounded-xl px-3 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-red-300">
+          <option value="">Tất cả nhóm</option>
+          {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+
+      {/* Expense list */}
+      <div className="p-4 sm:p-6">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-32 text-muted-foreground">
+            <div className="animate-spin w-5 h-5 border-2 border-red-300 border-t-red-600 rounded-full mr-2" />
+            Đang tải...
+          </div>
+        ) : expenses.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
+            <Receipt className="w-12 h-12 mb-3 opacity-20" />
+            <p className="font-medium">Chưa có phiếu chi nào</p>
+            <p className="text-sm mt-1">Bấm "+ Tạo phiếu chi" để ghi chi phí</p>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {expenses.map(e => (
+              <div key={e.id}
+                className="rounded-2xl border border-border bg-card hover:shadow-sm transition-shadow cursor-pointer"
+                onClick={() => setViewDetail(e)}>
+                <div className="p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      {e.paymentMethod === "bank" ? <CreditCard className="w-4 h-4 text-red-500" /> : <Banknote className="w-4 h-4 text-red-500" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm truncate">{e.description}</p>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${catColor(e.category)}`}>
+                              {e.category}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground font-mono">{e.expenseCode}</span>
+                            {e.createdBy && (
+                              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                                <User className="w-2.5 h-2.5" />{e.createdBy}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="font-bold text-red-600 text-base">-{vnd(e.amount)}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            {new Date(e.expenseDate).toLocaleDateString("vi-VN")}
+                          </p>
+                        </div>
+                      </div>
+                      {e.notes && (
+                        <p className="text-xs text-muted-foreground mt-1.5 line-clamp-1">{e.notes}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Create/Edit Form modal */}
+      {showForm && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-background w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b sticky top-0 bg-background">
+              <h2 className="font-bold text-base">{editingId ? "Sửa phiếu chi" : "Tạo phiếu chi mới"}</h2>
+              <button onClick={resetForm} className="p-1.5 rounded-xl hover:bg-muted">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSubmit} className="p-5 space-y-4">
+              {/* Amount */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                  Số tiền chi <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-bold">₫</span>
+                  <input
+                    type="number"
+                    value={form.amount}
+                    onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+                    placeholder="0"
+                    required
+                    className="w-full pl-7 pr-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-red-300 text-lg font-bold"
+                  />
+                </div>
+                {/* Quick amounts */}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {[50000, 100000, 200000, 500000, 1000000].map(v => (
+                    <button type="button" key={v}
+                      onClick={() => setForm(f => ({ ...f, amount: String(v) }))}
+                      className="px-2.5 py-1 text-xs rounded-lg border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                      {v >= 1000000 ? `${v / 1000000}M` : `${v / 1000}k`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                  Nội dung chi <span className="text-red-500">*</span>
+                </label>
+                <input
+                  value={form.description}
+                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="Mô tả khoản chi..."
+                  required
+                  className="w-full px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-red-300 text-sm"
+                />
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                  Nhóm chi phí
+                </label>
+                {!showCustomCat ? (
+                  <div className="flex gap-2">
+                    <select
+                      value={form.category}
+                      onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                      className="flex-1 px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-red-300 text-sm">
+                      {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <button type="button"
+                      onClick={() => setShowCustomCat(true)}
+                      className="px-3 py-2 border border-dashed border-border rounded-xl text-xs text-muted-foreground hover:text-foreground hover:border-foreground transition-colors">
+                      + Mới
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      value={customCategory}
+                      onChange={e => setCustomCategory(e.target.value)}
+                      placeholder="Tên nhóm mới..."
+                      className="flex-1 px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-red-300 text-sm"
+                      autoFocus
+                    />
+                    <button type="button" onClick={() => { setShowCustomCat(false); setCustomCategory(""); }}
+                      className="px-3 py-2 border border-border rounded-xl text-xs text-muted-foreground">Hủy</button>
+                  </div>
+                )}
+              </div>
+
+              {/* Date + Who */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Ngày chi</label>
+                  <input type="date" value={form.expenseDate}
+                    onChange={e => setForm(f => ({ ...f, expenseDate: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-red-300 text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Người chi</label>
+                  <input value={form.createdBy}
+                    onChange={e => setForm(f => ({ ...f, createdBy: e.target.value }))}
+                    placeholder="Tên người chi..."
+                    className="w-full px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-red-300 text-sm" />
+                </div>
+              </div>
+
+              {/* Payment method */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Hình thức thanh toán</label>
+                <div className="flex gap-2">
+                  {[
+                    { key: "cash", label: "Tiền mặt", icon: Banknote },
+                    { key: "bank", label: "Chuyển khoản", icon: CreditCard },
+                  ].map(({ key, label, icon: Icon }) => (
+                    <button type="button" key={key}
+                      onClick={() => setForm(f => ({ ...f, paymentMethod: key }))}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-medium transition-colors ${form.paymentMethod === key ? "bg-red-600 text-white border-red-600" : "border-border text-muted-foreground hover:bg-muted"}`}>
+                      <Icon className="w-4 h-4" />{label}
+                    </button>
+                  ))}
+                </div>
+                {form.paymentMethod === "bank" && (
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Ngân hàng</label>
+                      <input value={form.bankName}
+                        onChange={e => setForm(f => ({ ...f, bankName: e.target.value }))}
+                        placeholder="VD: Vietcombank"
+                        className="w-full px-3 py-2 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-red-300 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Số TK / ghi chú CK</label>
+                      <input value={form.bankAccount}
+                        onChange={e => setForm(f => ({ ...f, bankAccount: e.target.value }))}
+                        placeholder="Số tài khoản..."
+                        className="w-full px-3 py-2 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-red-300 text-sm" />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Ghi chú</label>
+                <textarea value={form.notes}
+                  onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="Ghi chú thêm..."
+                  rows={2}
+                  className="w-full px-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-red-300 text-sm resize-none" />
+              </div>
+
+              {/* Receipt upload */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Ảnh bằng chứng / hóa đơn</label>
+                <input type="file" ref={receiptInputRef} accept="image/*" className="hidden"
+                  onChange={async e => { const f = e.target.files?.[0]; if (f) await uploadReceipt(f); }} />
+                {form.receiptUrl ? (
+                  <div className="relative w-full h-32 rounded-xl overflow-hidden border border-border">
+                    <img src={getImageSrc(form.receiptUrl) ?? undefined} alt="receipt" className="w-full h-full object-cover" />
+                    <div className="absolute top-2 right-2 flex gap-1">
+                      <button type="button" onClick={() => receiptInputRef.current?.click()}
+                        className="p-1.5 rounded-lg bg-black/50 text-white hover:bg-black/70">
+                        <Camera className="w-3.5 h-3.5" />
+                      </button>
+                      <button type="button" onClick={() => setForm(f => ({ ...f, receiptUrl: "" }))}
+                        className="p-1.5 rounded-lg bg-black/50 text-white hover:bg-black/70">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button"
+                    onClick={() => receiptInputRef.current?.click()}
+                    disabled={uploadingReceipt}
+                    className="w-full h-24 rounded-xl border-2 border-dashed border-border hover:border-red-300 transition-colors flex flex-col items-center justify-center text-muted-foreground hover:text-red-500">
+                    {uploadingReceipt ? (
+                      <div className="animate-spin w-5 h-5 border-2 border-red-300 border-t-red-600 rounded-full" />
+                    ) : (
+                      <>
+                        <Camera className="w-6 h-6 mb-1" />
+                        <span className="text-xs">Chụp / chọn ảnh bằng chứng</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={resetForm}
+                  className="flex-1 py-2.5 border border-border rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted transition-colors">
+                  Hủy
+                </button>
+                <button type="submit"
+                  disabled={createExpense.isPending || updateExpense.isPending || !form.amount || !form.description}
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-colors">
+                  {createExpense.isPending || updateExpense.isPending ? "Đang lưu..." : editingId ? "Cập nhật" : "Lưu phiếu chi"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Detail drawer */}
+      {viewDetail && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-background w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <div>
+                <h2 className="font-bold text-base">Chi tiết phiếu chi</h2>
+                <p className="text-xs text-muted-foreground font-mono">{viewDetail.expenseCode}</p>
+              </div>
+              <button onClick={() => setViewDetail(null)} className="p-1.5 rounded-xl hover:bg-muted">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              {/* Amount */}
+              <div className="text-center py-4">
+                <p className="text-3xl font-black text-red-600">-{vnd(viewDetail.amount)}</p>
+                <span className={`inline-block mt-2 text-xs font-bold px-3 py-1 rounded-full ${catColor(viewDetail.category)}`}>
+                  {viewDetail.category}
+                </span>
+              </div>
+              <div className="border-t border-border/40" />
+              <div className="space-y-2.5 text-sm">
+                <div className="flex gap-3">
+                  <FileText className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                  <span>{viewDetail.description}</span>
+                </div>
+                <div className="flex gap-3">
+                  <Calendar className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <span>{new Date(viewDetail.expenseDate).toLocaleDateString("vi-VN", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>
+                </div>
+                {viewDetail.createdBy && (
+                  <div className="flex gap-3">
+                    <User className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <span>{viewDetail.createdBy}</span>
+                  </div>
+                )}
+                <div className="flex gap-3">
+                  {viewDetail.paymentMethod === "bank" ? <CreditCard className="w-4 h-4 text-muted-foreground flex-shrink-0" /> : <Banknote className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
+                  <span>{viewDetail.paymentMethod === "bank" ? "Chuyển khoản" : "Tiền mặt"}
+                    {viewDetail.bankName && ` · ${viewDetail.bankName}`}
+                    {viewDetail.bankAccount && ` · ${viewDetail.bankAccount}`}
+                  </span>
+                </div>
+                {viewDetail.notes && (
+                  <div className="flex gap-3">
+                    <Tag className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <span className="text-muted-foreground">{viewDetail.notes}</span>
+                  </div>
+                )}
+              </div>
+              {viewDetail.receiptUrl && (
+                <div className="rounded-xl overflow-hidden border border-border">
+                  <img src={getImageSrc(viewDetail.receiptUrl) ?? undefined} alt="receipt" className="w-full object-cover max-h-48" />
+                </div>
+              )}
+              {effectiveIsAdmin && (
+                <div className="flex gap-2 pt-2">
+                  <button onClick={() => openEdit(viewDetail)}
+                    className="flex-1 flex items-center justify-center gap-2 py-2 border border-border rounded-xl text-sm hover:bg-muted transition-colors">
+                    <Edit2 className="w-4 h-4" /> Sửa
+                  </button>
+                  <button
+                    onClick={() => { if (confirm("Xóa phiếu chi này?")) deleteExpense.mutate(viewDetail.id); }}
+                    className="flex-1 flex items-center justify-center gap-2 py-2 border border-destructive/30 text-destructive rounded-xl text-sm hover:bg-destructive/10 transition-colors">
+                    <Trash2 className="w-4 h-4" /> Xóa
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

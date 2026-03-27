@@ -32,6 +32,7 @@ const bookingFields = {
   serviceLabel: bookingsTable.serviceLabel,
   isParentContract: bookingsTable.isParentContract,
   photoCount: bookingsTable.photoCount,
+  bannerUrl: bookingsTable.bannerUrl,
   createdAt: bookingsTable.createdAt,
 };
 
@@ -332,7 +333,7 @@ router.put("/bookings/:id", async (req, res) => {
   const {
     shootDate, shootTime, serviceCategory, packageType, location, status,
     totalAmount, depositAmount, discountAmount, items, surcharges, notes, internalNotes,
-    assignedStaff, parentId, serviceLabel, isParentContract, photoCount,
+    assignedStaff, parentId, serviceLabel, isParentContract, photoCount, bannerUrl,
   } = req.body;
 
   const updateData: Record<string, unknown> = {};
@@ -354,6 +355,7 @@ router.put("/bookings/:id", async (req, res) => {
   if (serviceLabel !== undefined) updateData.serviceLabel = serviceLabel;
   if (isParentContract !== undefined) updateData.isParentContract = isParentContract;
   if (photoCount !== undefined) updateData.photoCount = photoCount !== null ? parseInt(String(photoCount)) : null;
+  if (bannerUrl !== undefined) updateData.bannerUrl = bannerUrl;
 
   if (Object.keys(updateData).length > 0) {
     const payments = await db.select().from(paymentsTable).where(eq(paymentsTable.bookingId, id));

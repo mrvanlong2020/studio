@@ -1,0 +1,72 @@
+Cập nhật module “Trao đổi & Nhắc việc nội bộ” để tối ưu cho điện thoại, theo hướng app chat thật sự.
+
+1. Giao diện mobile:
+- Không dùng layout chia 2 cột trái/phải như desktop nữa
+- Trên điện thoại phải chuyển thành layout 1 cột full width
+- Phần trên chỉ giữ 3 nút:
+  - Tạo nhóm chat
+  - Nhắc deadline
+  - Thông báo
+- Phần dưới là 1 khung “Chat nội bộ” lớn, full chiều ngang, dễ bấm dễ nhập tin nhắn
+
+2. Chat nội bộ mobile:
+- Danh sách phòng chat hiển thị dạng list
+- Bấm vào phòng chat thì mở giao diện chat full màn hình
+- Có nút quay lại
+- Ô nhập tin nhắn cố định ở đáy màn hình
+- Tin nhắn hiển thị kiểu app chat điện thoại (bubble trái/phải)
+- Tự scroll xuống tin nhắn mới nhất
+
+3. Quyền chat:
+- Admin chat được
+- Tất cả nhân viên có tài khoản đều chat được
+- Ví dụ Trung, Hoa, Photoshop, Sale, Support đều vào chat được nếu có tài khoản
+- Không giới hạn chỉ admin
+
+4. Tạo nhóm chat:
+- Nút “Tạo nhóm chat” đưa lên trên cùng
+- Có thể tạo nhóm theo:
+  - Nhóm studio nội bộ
+  - Nhóm makeup
+  - Nhóm photo
+  - Nhóm photoshop
+  - Nhóm theo show / đơn hàng
+
+5. Deadline & nhắc việc:
+- Deadline của job / lịch / công việc phải tự động sinh thông báo
+- Đồng thời tự động gửi 1 tin nhắn hệ thống vào phòng chat nội bộ liên quan
+
+Ví dụ tin nhắn hệ thống:
+- “[Nhắc deadline] Job DH0036 còn 1 ngày tới hạn”
+- “[Quá hạn] Job chỉnh ảnh của khách Nhan đã trễ deadline”
+- “[Nhắc lịch] Ngày mai 07:00 có show makeup của Hoa”
+
+6. Thông báo trên app:
+- Có badge đỏ ở icon chuông khi có deadline / nhắc việc mới
+- Tab “Thông báo” phải hiện danh sách:
+  - deadline sắp tới
+  - job quá hạn
+  - lịch ngày mai
+  - nhắc việc nội bộ
+
+7. Chat + thông báo liên kết nhau:
+- Khi có tin nhắn hệ thống về deadline:
+  - vừa hiện ở tab Thông báo
+  - vừa hiện trong phòng chat liên quan
+- Nếu là job photoshop thì đẩy vào nhóm photoshop
+- Nếu là lịch chụp thì đẩy vào nhóm nội bộ hoặc nhóm show đó
+
+8. UI/UX mobile:
+- Nút chat phải to, dễ bấm
+- Ô nhập tin nhắn cao vừa phải, có placeholder rõ
+- Danh sách chat phải có:
+  - tên nhóm
+  - tin nhắn cuối
+  - thời gian
+  - badge số tin chưa đọc
+
+9. Mục tiêu cuối:
+- Mobile chat phải giống app chat thật
+- Nhân viên vào là chat được ngay
+- Deadline phải tự nhắc bằng thông báo + tin nhắn nội bộ
+- Không còn giao diện desktop ép vào điện thoại

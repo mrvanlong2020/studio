@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   MessageSquare, Bell, AlertTriangle, Clock, CheckCircle2,
   Send, Plus, X, Users, Film, Calendar, User,
-  AlertCircle, Check, RefreshCw, ChevronRight, Zap
+  AlertCircle, Check, RefreshCw, ChevronRight, Zap,
+  ArrowLeft, Search, ChevronDown,
 } from "lucide-react";
 import { useStaffAuth } from "@/contexts/StaffAuthContext";
 
@@ -52,6 +53,8 @@ type DeadlineAlert = {
   internalDeadline: string;
   status: string;
   progressPercent: number;
+  totalPhotos: number;
+  donePhotos: number;
   daysLeft: number;
   urgency: string;
 };
@@ -76,6 +79,13 @@ function timeAgo(dateStr: string) {
 
 type Tab = "alerts" | "notifications" | "chat";
 
+const PRESET_ROOMS = [
+  { name: "Studio nội bộ", type: "group" },
+  { name: "Nhóm Chụp ảnh", type: "group" },
+  { name: "Nhóm Makeup", type: "group" },
+  { name: "Nhóm Photoshop", type: "group" },
+];
+
 export default function InternalCommsPage() {
   const qc = useQueryClient();
   const { viewer } = useStaffAuth();
@@ -84,7 +94,9 @@ export default function InternalCommsPage() {
   const [newMessage, setNewMessage] = useState("");
   const [showNewRoom, setShowNewRoom] = useState(false);
   const [newRoomName, setNewRoomName] = useState("");
+  const [chatOpen, setChatOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: notifications = [], isLoading: notifLoading } = useQuery<Notification[]>({
     queryKey: ["notifications"],
@@ -108,7 +120,7 @@ export default function InternalCommsPage() {
     queryKey: ["messages", selectedRoom?.id],
     queryFn: () => selectedRoom ? fetch(`${BASE}/api/message-rooms/${selectedRoom.id}/messages`).then(r => r.json()) : Promise.resolve([]),
     enabled: !!selectedRoom,
-    refetchInterval: 10000,
+    refetchInterval: 8000,
   });
 
   const markRead = useMutation({
@@ -134,6 +146,7 @@ export default function InternalCommsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["messages", selectedRoom?.id] });
       setNewMessage("");
+      setTimeout(() => inputRef.current?.focus(), 50);
     },
   });
 
@@ -147,11 +160,11 @@ export default function InternalCommsPage() {
       setShowNewRoom(false);
       setNewRoomName("");
       setSelectedRoom(room);
+      setChatOpen(true);
       setActiveTab("chat");
     },
   });
 
-  // Auto scroll to bottom on new messages
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
@@ -174,37 +187,137 @@ export default function InternalCommsPage() {
     sendMessage.mutate({ roomId: selectedRoom.id, content: newMessage.trim() });
   }
 
+  function openRoom(room: Room) {
+    setSelectedRoom(room);
+    setChatOpen(true);
+  }
+
+  function closeChatView() {
+    setChatOpen(false);
+  }
+
+  // ─── Full-screen chat view (mobile: overlay; desktop: right panel) ─────────
+  const ChatView = () => (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Room header */}
+      <div className="px-4 py-3 border-b border-border flex items-center gap-3 bg-background flex-shrink-0">
+        <button onClick={closeChatView}
+          className="p-1.5 rounded-xl hover:bg-muted text-muted-foreground lg:hidden">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+          <Users className="w-4 h-4 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm truncate">{selectedRoom?.name}</p>
+          <p className="text-[10px] text-muted-foreground">Nhóm · {messages.length} tin nhắn</p>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 overscroll-contain">
+        {messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-12">
+            <MessageSquare className="w-12 h-12 mb-3 opacity-20" />
+            <p className="font-medium text-sm">Chưa có tin nhắn</p>
+            <p className="text-xs mt-1">Hãy gửi tin nhắn đầu tiên</p>
+          </div>
+        ) : (
+          messages.map(msg => {
+            const isMe = msg.senderStaffId !== null && msg.senderStaffId === (viewer?.id ?? -1);
+            if (msg.isSystem) {
+              return (
+                <div key={msg.id} className="flex justify-center">
+                  <div className="max-w-xs bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl px-3 py-2 text-center">
+                    <Zap className="w-3 h-3 inline mr-1 text-amber-500" />
+                    <span className="text-xs text-amber-700 dark:text-amber-300">{msg.content}</span>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{timeAgo(msg.createdAt)}</p>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"} items-end gap-2`}>
+                {!isMe && (
+                  <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 text-xs font-bold text-primary">
+                    {msg.senderName.charAt(0)}
+                  </div>
+                )}
+                <div className={`max-w-[75%] sm:max-w-sm flex flex-col ${isMe ? "items-end" : "items-start"}`}>
+                  {!isMe && (
+                    <p className="text-[10px] text-muted-foreground mb-0.5 px-2">{msg.senderName}</p>
+                  )}
+                  <div className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${isMe
+                    ? "bg-primary text-primary-foreground rounded-br-sm"
+                    : "bg-muted rounded-bl-sm"
+                  }`}>
+                    {msg.content}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1 px-1">{timeAgo(msg.createdAt)}</p>
+                </div>
+                {isMe && (
+                  <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0 text-xs font-bold text-primary-foreground">
+                    {(viewer?.name ?? "?").charAt(0)}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Message input — fixed at bottom */}
+      <form onSubmit={handleSendMessage}
+        className="px-3 py-3 border-t border-border flex gap-2 bg-background flex-shrink-0">
+        <input
+          ref={inputRef}
+          value={newMessage}
+          onChange={e => setNewMessage(e.target.value)}
+          placeholder="Nhập tin nhắn..."
+          className="flex-1 text-sm border border-border rounded-2xl px-4 py-3 bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[44px]"
+        />
+        <button type="submit"
+          disabled={!newMessage.trim() || sendMessage.isPending}
+          className="w-11 h-11 bg-primary text-primary-foreground rounded-2xl flex items-center justify-center hover:bg-primary/90 disabled:opacity-50 transition-colors flex-shrink-0">
+          <Send className="w-4 h-4" />
+        </button>
+      </form>
+    </div>
+  );
+
   return (
-    <div className="h-full flex flex-col bg-background">
+    <div className="h-full flex flex-col bg-background overflow-hidden">
       {/* Header */}
-      <div className="flex-shrink-0 px-6 py-4 border-b border-border">
-        <div className="flex items-center justify-between">
+      <div className="flex-shrink-0 px-4 sm:px-6 py-4 border-b border-border">
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
               <MessageSquare className="w-5 h-5 text-indigo-600" />
             </div>
             <div>
-              <h1 className="text-xl font-bold">Trao đổi & Nhắc việc nội bộ</h1>
-              <p className="text-xs text-muted-foreground">
+              <h1 className="text-lg sm:text-xl font-bold">Trao đổi & Nhắc việc</h1>
+              <p className="text-xs text-muted-foreground hidden sm:block">
                 {overdueCount > 0 && <span className="text-red-500 font-medium">{overdueCount} quá hạn · </span>}
                 {urgentCount > 0 && <span className="text-amber-500 font-medium">{urgentCount} sắp hết hạn · </span>}
-                {unreadCount > 0 && <span className="text-blue-500 font-medium">{unreadCount} thông báo chưa đọc</span>}
+                {unreadCount > 0 && <span className="text-blue-500 font-medium">{unreadCount} chưa đọc</span>}
                 {overdueCount === 0 && urgentCount === 0 && unreadCount === 0 && "Không có cảnh báo mới"}
               </p>
             </div>
           </div>
         </div>
 
-        {/* Tab bar */}
-        <div className="flex gap-1 mt-3">
+        {/* Tab bar — large touch targets on mobile */}
+        <div className="flex gap-1 overflow-x-auto pb-0.5">
           {TABS.map(tab => (
             <button key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-colors relative ${activeTab === tab.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}>
+              className={`flex items-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-xl text-sm font-medium transition-colors relative whitespace-nowrap flex-shrink-0 ${activeTab === tab.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}>
               <tab.icon className="w-4 h-4" />
-              {tab.label}
+              <span className="hidden xs:inline">{tab.label}</span>
+              <span className="xs:hidden">{tab.key === "alerts" ? "Deadline" : tab.key === "notifications" ? "Thông báo" : "Chat"}</span>
               {tab.badge > 0 && (
-                <span className={`ml-1 text-xs font-bold px-1.5 py-0.5 rounded-full ${activeTab === tab.key ? "bg-white/20 text-white" : "bg-red-500 text-white"}`}>
+                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${activeTab === tab.key ? "bg-white/20 text-white" : "bg-red-500 text-white"}`}>
                   {tab.badge}
                 </span>
               )}
@@ -214,11 +327,11 @@ export default function InternalCommsPage() {
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-hidden flex">
+      <div className="flex-1 overflow-hidden flex relative">
 
-        {/* ── Tab: Deadline Alerts ──────────────────────────────────────────── */}
+        {/* ── Tab: Deadline Alerts ── */}
         {activeTab === "alerts" && (
-          <div className="flex-1 overflow-auto p-6">
+          <div className="flex-1 overflow-auto p-4 sm:p-6">
             {alertsLoading ? (
               <div className="flex items-center justify-center h-32 text-muted-foreground">
                 <RefreshCw className="w-5 h-5 animate-spin mr-2" /> Đang tải...
@@ -230,22 +343,19 @@ export default function InternalCommsPage() {
                 <p className="text-sm mt-1">Tất cả job đang trong thời hạn</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-3 max-w-2xl">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
                   {alerts.length} job cần chú ý
                 </p>
                 {alerts.map(alert => {
                   const cfg = URGENCY_CONFIG[alert.urgency as keyof typeof URGENCY_CONFIG] ?? URGENCY_CONFIG.soon;
                   return (
-                    <div key={alert.id}
-                      className={`rounded-2xl border p-4 bg-card ${cfg.border}`}>
+                    <div key={alert.id} className={`rounded-2xl border p-4 bg-card ${cfg.border}`}>
                       <div className="flex items-start gap-3">
-                        <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${cfg.dot}`} />
+                        <div className={`w-2.5 h-2.5 rounded-full mt-2 flex-shrink-0 ${cfg.dot}`} />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cfg.cls}`}>
-                              {cfg.label}
-                            </span>
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cfg.cls}`}>{cfg.label}</span>
                             <span className="font-semibold text-sm">{alert.jobCode}</span>
                             <span className="text-sm text-muted-foreground">· {alert.customerName}</span>
                           </div>
@@ -255,13 +365,12 @@ export default function InternalCommsPage() {
                             )}
                             <span className="flex items-center gap-1">
                               <Calendar className="w-3 h-3" />
-                              Deadline khách: {new Date(alert.customerDeadline).toLocaleDateString("vi-VN")}
+                              Deadline: {new Date(alert.customerDeadline).toLocaleDateString("vi-VN")}
                             </span>
                             <span className={`font-semibold ${alert.daysLeft < 0 ? "text-red-600" : alert.daysLeft === 0 ? "text-orange-600" : "text-amber-600"}`}>
                               {alert.daysLeft < 0 ? `Trễ ${-alert.daysLeft} ngày` : alert.daysLeft === 0 ? "Hôm nay!" : `Còn ${alert.daysLeft} ngày`}
                             </span>
                           </div>
-                          {/* Progress */}
                           <div className="mt-2">
                             <div className="h-1.5 bg-muted rounded-full overflow-hidden w-full max-w-48">
                               <div
@@ -285,10 +394,10 @@ export default function InternalCommsPage() {
           </div>
         )}
 
-        {/* ── Tab: Notifications ───────────────────────────────────────────── */}
+        {/* ── Tab: Notifications ── */}
         {activeTab === "notifications" && (
-          <div className="flex-1 overflow-auto p-6">
-            <div className="flex items-center justify-between mb-4">
+          <div className="flex-1 overflow-auto p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4 max-w-2xl">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                 {notifications.length} thông báo · {unreadCount} chưa đọc
               </p>
@@ -299,7 +408,6 @@ export default function InternalCommsPage() {
                 </button>
               )}
             </div>
-
             {notifLoading ? (
               <div className="flex items-center justify-center h-32 text-muted-foreground">
                 <RefreshCw className="w-5 h-5 animate-spin mr-2" /> Đang tải...
@@ -310,13 +418,13 @@ export default function InternalCommsPage() {
                 <p className="font-medium">Chưa có thông báo</p>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2 max-w-2xl">
                 {notifications.map(n => (
                   <div key={n.id}
-                    className={`rounded-xl border p-3.5 bg-card cursor-pointer hover:bg-muted/30 transition-colors ${!n.isRead ? "border-primary/30 bg-primary/5" : "border-border"}`}
+                    className={`rounded-xl border p-4 bg-card cursor-pointer hover:bg-muted/30 transition-colors ${!n.isRead ? "border-primary/30 bg-primary/5" : "border-border"}`}
                     onClick={() => { if (!n.isRead) markRead.mutate(n.id); }}>
                     <div className="flex items-start gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${n.type === "warning" ? "bg-amber-100 text-amber-600" : n.type === "error" ? "bg-red-100 text-red-600" : n.type === "success" ? "bg-emerald-100 text-emerald-600" : "bg-blue-100 text-blue-600"}`}>
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${n.type === "warning" ? "bg-amber-100 text-amber-600" : n.type === "error" ? "bg-red-100 text-red-600" : n.type === "success" ? "bg-emerald-100 text-emerald-600" : "bg-blue-100 text-blue-600"}`}>
                         {n.type === "warning" ? <AlertTriangle className="w-4 h-4" /> : n.type === "error" ? <AlertCircle className="w-4 h-4" /> : n.type === "success" ? <CheckCircle2 className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -335,129 +443,102 @@ export default function InternalCommsPage() {
           </div>
         )}
 
-        {/* ── Tab: Chat ────────────────────────────────────────────────────── */}
+        {/* ── Tab: Chat ── */}
         {activeTab === "chat" && (
-          <div className="flex-1 flex overflow-hidden">
-            {/* Room list */}
-            <div className="w-64 flex-shrink-0 border-r border-border flex flex-col bg-muted/10">
-              <div className="p-3 border-b border-border flex items-center justify-between">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Phòng chat</p>
+          <>
+            {/* Mobile: show room list OR full-screen chat (overlay) */}
+            {/* Desktop: show both side-by-side */}
+            <div className={`${chatOpen ? "hidden lg:flex" : "flex"} flex-1 flex-col overflow-hidden`}>
+              {/* Action buttons */}
+              <div className="p-4 border-b border-border flex flex-wrap gap-2">
                 <button onClick={() => setShowNewRoom(true)}
-                  className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-primary">
+                  className="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors min-h-[44px]">
                   <Plus className="w-4 h-4" />
+                  Tạo nhóm chat
                 </button>
+                {PRESET_ROOMS.map(preset => {
+                  const exists = rooms.some(r => r.name === preset.name);
+                  if (exists) return null;
+                  return (
+                    <button key={preset.name}
+                      onClick={() => createRoom.mutate(preset.name)}
+                      className="flex items-center gap-2 px-3 py-2 border border-dashed border-border rounded-xl text-xs text-muted-foreground hover:text-foreground hover:border-foreground transition-colors">
+                      <Plus className="w-3.5 h-3.5" /> {preset.name}
+                    </button>
+                  );
+                })}
               </div>
 
+              {/* Create room form */}
               {showNewRoom && (
-                <div className="p-3 border-b border-border">
-                  <input
-                    value={newRoomName}
-                    onChange={e => setNewRoomName(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter" && newRoomName.trim()) createRoom.mutate(newRoomName.trim()); }}
-                    placeholder="Tên phòng..."
-                    autoFocus
-                    className="w-full text-sm border border-border rounded-lg px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary/30"
-                  />
-                  <div className="flex gap-1 mt-1.5">
+                <div className="p-4 border-b border-border bg-muted/30">
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">Tên phòng chat mới</p>
+                  <div className="flex gap-2">
+                    <input
+                      value={newRoomName}
+                      onChange={e => setNewRoomName(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter" && newRoomName.trim()) createRoom.mutate(newRoomName.trim()); }}
+                      placeholder="VD: Nhóm ekip T4..."
+                      autoFocus
+                      className="flex-1 text-sm border border-border rounded-xl px-3 py-2.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[44px]"
+                    />
                     <button onClick={() => newRoomName.trim() && createRoom.mutate(newRoomName.trim())}
-                      className="flex-1 py-1 bg-primary text-primary-foreground rounded-lg text-xs">Tạo</button>
+                      className="px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-semibold">Tạo</button>
                     <button onClick={() => { setShowNewRoom(false); setNewRoomName(""); }}
-                      className="py-1 px-2 border border-border rounded-lg text-xs">Hủy</button>
+                      className="p-2 border border-border rounded-xl text-muted-foreground hover:bg-muted"><X className="w-4 h-4" /></button>
                   </div>
                 </div>
               )}
 
-              <div className="flex-1 overflow-auto">
+              {/* Room list */}
+              <div className="flex-1 overflow-y-auto">
                 {rooms.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-muted-foreground">
-                    Chưa có phòng chat.<br />Bấm + để tạo.
+                  <div className="p-8 text-center text-muted-foreground">
+                    <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                    <p className="font-medium text-sm">Chưa có phòng chat nào</p>
+                    <p className="text-xs mt-1">Bấm "Tạo nhóm chat" để bắt đầu</p>
                   </div>
                 ) : (
-                  rooms.map(room => (
-                    <button key={room.id}
-                      onClick={() => setSelectedRoom(room)}
-                      className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-muted transition-colors text-sm ${selectedRoom?.id === room.id ? "bg-primary/10 text-primary font-medium" : ""}`}>
-                      <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                        <Users className="w-3.5 h-3.5 text-primary" />
-                      </div>
-                      <span className="truncate">{room.name}</span>
-                    </button>
-                  ))
+                  <div className="divide-y divide-border">
+                    {rooms.map(room => (
+                      <button key={room.id}
+                        onClick={() => openRoom(room)}
+                        className={`w-full flex items-center gap-3 px-4 py-4 text-left hover:bg-muted/50 transition-colors ${selectedRoom?.id === room.id ? "bg-primary/5 border-l-2 border-primary" : ""}`}>
+                        <div className="w-11 h-11 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                          <Users className="w-5 h-5 text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm truncate">{room.name}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 truncate">Bấm để mở chat</p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
 
-            {/* Chat panel */}
-            {selectedRoom ? (
-              <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Room header */}
-                <div className="px-4 py-3 border-b border-border flex items-center gap-2 bg-background">
-                  <Users className="w-4 h-4 text-muted-foreground" />
-                  <span className="font-medium text-sm">{selectedRoom.name}</span>
+            {/* Desktop: chat panel alongside list */}
+            <div className="hidden lg:flex flex-1 border-l border-border overflow-hidden">
+              {selectedRoom ? (
+                <ChatView />
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
+                  <MessageSquare className="w-12 h-12 mb-3 opacity-20" />
+                  <p className="font-medium">Chọn phòng để bắt đầu chat</p>
+                  <p className="text-sm mt-1">Hoặc tạo phòng mới bằng nút trên</p>
                 </div>
+              )}
+            </div>
 
-                {/* Messages */}
-                <div className="flex-1 overflow-auto p-4 space-y-3">
-                  {messages.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                      <MessageSquare className="w-10 h-10 mb-2 opacity-20" />
-                      <p className="text-sm">Chưa có tin nhắn nào</p>
-                    </div>
-                  ) : (
-                    messages.map(msg => {
-                      const isMe = msg.senderStaffId === (viewer?.id ?? null);
-                      return (
-                        <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-                          {!isMe && (
-                            <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mr-2 mt-0.5">
-                              <span className="text-xs font-bold">{msg.senderName.charAt(0)}</span>
-                            </div>
-                          )}
-                          <div className={`max-w-xs lg:max-w-sm ${isMe ? "items-end" : "items-start"} flex flex-col`}>
-                            {!isMe && (
-                              <p className="text-[10px] text-muted-foreground mb-0.5 px-1">{msg.senderName}</p>
-                            )}
-                            <div className={`px-3 py-2 rounded-2xl text-sm ${isMe
-                              ? "bg-primary text-primary-foreground rounded-tr-sm"
-                              : msg.isSystem
-                                ? "bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/20 dark:text-amber-300 dark:border-amber-800"
-                                : "bg-muted rounded-tl-sm"
-                            }`}>
-                              {msg.isSystem && <Zap className="w-3 h-3 inline mr-1 text-amber-500" />}
-                              {msg.content}
-                            </div>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 px-1">{timeAgo(msg.createdAt)}</p>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                  <div ref={messagesEndRef} />
-                </div>
-
-                {/* Message input */}
-                <form onSubmit={handleSendMessage}
-                  className="px-4 py-3 border-t border-border flex gap-2 bg-background">
-                  <input
-                    value={newMessage}
-                    onChange={e => setNewMessage(e.target.value)}
-                    placeholder="Nhập tin nhắn..."
-                    className="flex-1 text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
-                  <button type="submit" disabled={!newMessage.trim() || sendMessage.isPending}
-                    className="p-2.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-50 transition-colors">
-                    <Send className="w-4 h-4" />
-                  </button>
-                </form>
-              </div>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
-                <MessageSquare className="w-12 h-12 mb-3 opacity-20" />
-                <p className="font-medium">Chọn phòng để bắt đầu chat</p>
-                <p className="text-sm mt-1">Hoặc tạo phòng mới bằng nút +</p>
+            {/* Mobile: Full-screen chat overlay */}
+            {chatOpen && selectedRoom && (
+              <div className="absolute inset-0 z-10 bg-background flex flex-col lg:hidden">
+                <ChatView />
               </div>
             )}
-          </div>
+          </>
         )}
       </div>
     </div>

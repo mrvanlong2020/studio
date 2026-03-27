@@ -27,6 +27,7 @@ export const bookingsTable = pgTable("bookings", {
   serviceLabel: text("service_label"),           // e.g. "Chụp album", "Đám hỏi", "Ngày cưới"
   isParentContract: boolean("is_parent_contract").notNull().default(false), // true = contract node, hidden from calendar
   photoCount: integer("photo_count"),            // số tấm ảnh (dùng cho tính cast per_photo)
+  bannerUrl: text("banner_url"),                  // cover banner ảnh cho trang chi tiết show
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
