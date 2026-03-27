@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Link, useLocation } from "wouter";
+import { SmartSearch } from "./SmartSearch";
 import { 
   LayoutDashboard, CalendarDays, CheckSquare, Users, 
   FileText, Shirt, Bot, Settings, 
@@ -23,7 +24,7 @@ const ALL_NAV_ITEMS = [
   { href: "/tasks",           label: "Giao việc",            icon: CheckSquare,     adminOnly: false },
   { href: "/photoshop-jobs",  label: "Tiến độ hậu kỳ",       icon: Film,            adminOnly: false },
   { href: "/internal-comms",  label: "Trao đổi & Nhắc việc", icon: MessageSquare,   adminOnly: false },
-  { href: "/contracts",       label: "Hợp đồng",             icon: ScrollText,      adminOnly: true  },
+  { href: "/contracts",       label: "Hóa đơn dịch vụ",      icon: ScrollText,      adminOnly: true  },
   { href: "/quotes",          label: "Báo giá",              icon: FileText,        adminOnly: true  },
 ];
 
@@ -260,6 +261,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
           
           <div className="flex items-center gap-2 sm:gap-4">
+            <SmartSearch />
             <Link href="/customers"
               className="flex items-center gap-2 text-sm font-medium text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full transition-colors">
               <UserPlus className="w-4 h-4" />

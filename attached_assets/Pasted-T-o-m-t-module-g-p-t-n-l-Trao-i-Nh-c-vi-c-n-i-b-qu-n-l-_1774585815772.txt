@@ -1,0 +1,161 @@
+Tạo một module gộp tên là “Trao đổi & Nhắc việc nội bộ” để quản lý chat nội bộ, thông báo công việc và nhắc deadline ngay trong phần mềm. Không dùng Zalo ở giai đoạn này. Tất cả phải hoạt động trong app.
+
+1. Tạo menu sidebar
+
+Thêm menu mới:
+Trao đổi & Nhắc việc nội bộ
+
+Module này phải gộp 3 phần trong 1:
+
+Chat nội bộ
+Thông báo nội bộ
+Nhắc deadline công việc
+2. Chat nội bộ
+
+Cho phép tạo các loại phòng chat:
+
+Nhóm chung studio
+Nhóm Photo
+Nhóm Makeup
+Nhóm Photoshop
+Nhóm Sale
+Nhóm theo show
+Nhóm theo đơn hàng
+Nhóm theo job hậu kỳ
+
+Mỗi phòng chat phải có:
+
+tên phòng
+thành viên
+tin nhắn text
+thời gian gửi
+người gửi
+tag nhân viên bằng @
+đếm số tin chưa đọc
+3. Chat gắn với công việc
+
+Trong mỗi:
+
+show
+đơn hàng
+job hậu kỳ
+
+thêm tab:
+Trao đổi nội bộ
+
+Khi mở công việc ra phải chat được ngay trong chính công việc đó, không cần chuyển sang nơi khác.
+
+4. Thông báo nội bộ
+
+Tạo hệ thống chuông thông báo trong app.
+
+Thông báo phải sinh ra khi:
+
+có tin nhắn mới
+có người tag mình
+có việc mới được giao
+có job sắp tới hạn
+có job quá hạn
+có job bị trả về / cần sửa lại
+có show mới phân công cho mình
+
+Mỗi thông báo cần có:
+
+tiêu đề
+nội dung ngắn
+loại thông báo
+người nhận
+thời gian
+trạng thái đã đọc / chưa đọc
+link mở nhanh tới công việc liên quan
+5. Nhắc deadline nội bộ
+
+Tích hợp thẳng vào module này.
+
+Đối với các job hậu kỳ / photoshop / công việc được giao:
+
+còn 2 ngày: cảnh báo nhẹ
+còn 1 ngày: cảnh báo gấp
+quá hạn: cảnh báo đỏ
+
+Khi đến mốc deadline, hệ thống tự động:
+
+tạo thông báo nội bộ cho người phụ trách
+tạo thông báo cho admin nếu quá hạn
+đẩy job đó lên đầu danh sách
+hiện badge đỏ ở module “Trao đổi & Nhắc việc nội bộ”
+nếu job có phòng chat thì tự gửi 1 tin nhắn hệ thống vào phòng chat:
+“Job X còn 1 ngày tới hạn”
+“Job X đã quá hạn”
+6. Dashboard trong module
+
+Ở đầu module hiển thị 4 khối:
+
+Tin nhắn chưa đọc
+Việc sắp tới hạn
+Việc quá hạn
+Việc được giao cho tôi
+7. Bộ lọc nhanh
+
+Trong module phải có filter:
+
+Tất cả
+Tin nhắn
+Thông báo
+Sắp tới hạn
+Quá hạn
+Được tag
+Của tôi
+8. Giao diện danh sách công việc cần chú ý
+
+Hiển thị card công việc gồm:
+
+tên job / tên show / tên đơn
+khách hàng
+người phụ trách
+trạng thái
+deadline nội bộ
+deadline khách
+màu cảnh báo
+nút mở nhanh
+nút chat nhanh
+9. Quy tắc màu deadline
+xanh: còn trên 3 ngày
+vàng: còn 2–3 ngày
+cam: còn 1 ngày
+đỏ: quá hạn
+10. Tự động tạo nhắc việc
+
+Hệ thống phải có cron hoặc scheduler chạy định kỳ để quét deadline và tạo thông báo nội bộ tự động.
+
+Tần suất:
+
+mỗi 30 phút hoặc 1 giờ
+11. Phân quyền
+Admin thấy tất cả phòng chat, thông báo, deadline
+Nhân viên chỉ thấy:
+phòng chat mình tham gia
+công việc của mình
+thông báo gửi cho mình
+Không để nhân viên thấy dữ liệu nhạy cảm của người khác
+12. Badge và số lượng
+
+Hiển thị số đỏ ở:
+
+icon chuông
+menu “Trao đổi & Nhắc việc nội bộ”
+
+Phải đếm được:
+
+bao nhiêu thông báo chưa đọc
+bao nhiêu việc quá hạn
+bao nhiêu tin nhắn chưa xem
+13. Mục tiêu cuối
+
+Tôi muốn nhân viên mở app là thấy ngay:
+
+ai nhắn mình
+việc nào sắp trễ
+việc nào quá hạn
+vào chat ngay trong job đó
+không cần dùng Zalo ở giai đoạn này

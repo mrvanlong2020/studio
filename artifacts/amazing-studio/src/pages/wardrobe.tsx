@@ -1,10 +1,16 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Search, Shirt, Edit2, Trash2, X, Check,
-  RefreshCw, Tag, Palette, Ruler, Package
+  RefreshCw, Tag, Palette, Ruler, Package, Camera, Loader2
 } from "lucide-react";
 import { formatVND } from "@/lib/utils";
+
+function getImageSrc(imageUrl: string | null): string | null {
+  if (!imageUrl) return null;
+  if (imageUrl.startsWith("/objects/")) return `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api/storage${imageUrl}`;
+  return imageUrl;
+}
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -54,10 +60,29 @@ const EMPTY_FORM = {
   condition: "tot", notes: "", imageUrl: ""
 };
 
+async function uploadDressImage(file: File): Promise<string | null> {
+  try {
+    const res = await fetch(`${BASE}/api/storage/uploads/request-url`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+    });
+    const { uploadURL, objectPath } = await res.json();
+    if (!uploadURL) return null;
+    await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
+    return objectPath as string;
+  } catch (err) {
+    console.error("Upload error:", err);
+    return null;
+  }
+}
+
 export default function WardrobePage() {
   const qc = useQueryClient();
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const imgFileRef = useRef<HTMLInputElement>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingDress, setEditingDress] = useState<Dress | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -213,7 +238,7 @@ export default function WardrobePage() {
                   {/* Image */}
                   <div className="aspect-[3/4] bg-muted relative">
                     {dress.imageUrl ? (
-                      <img src={dress.imageUrl} alt={dress.name}
+                      <img src={getImageSrc(dress.imageUrl) ?? dress.imageUrl} alt={dress.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-muted-foreground/20">
@@ -382,12 +407,68 @@ export default function WardrobePage() {
                 </div>
               </div>
 
-              {/* Image URL */}
+              {/* Image Upload */}
               <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 block">Link ảnh</label>
-                <input value={form.imageUrl} onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))}
-                  className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none"
-                  placeholder="https://..." />
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Ảnh trang phục</label>
+                <div className="flex items-center gap-3">
+                  {form.imageUrl ? (
+                    <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-border flex-shrink-0">
+                      <img
+                        src={getImageSrc(form.imageUrl) ?? form.imageUrl}
+                        alt="preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setForm(f => ({ ...f, imageUrl: "" }))}
+                        className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => imgFileRef.current?.click()}
+                      className="w-20 h-20 rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors flex-shrink-0"
+                    >
+                      {isUploading
+                        ? <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                        : <Camera className="w-5 h-5 text-muted-foreground" />}
+                    </div>
+                  )}
+                  <div className="flex-1 space-y-1.5">
+                    <button
+                      type="button"
+                      onClick={() => imgFileRef.current?.click()}
+                      disabled={isUploading}
+                      className="w-full flex items-center justify-center gap-2 py-2 border border-border rounded-xl text-sm text-muted-foreground hover:text-primary hover:border-primary/50 transition-colors disabled:opacity-50"
+                    >
+                      {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                      {isUploading ? "Đang tải ảnh..." : "Tải ảnh lên"}
+                    </button>
+                    <input
+                      value={form.imageUrl.startsWith("/objects/") ? "" : form.imageUrl}
+                      onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))}
+                      className="w-full text-xs border border-border rounded-lg px-2.5 py-1.5 bg-background focus:outline-none text-muted-foreground"
+                      placeholder="Hoặc dán link ảnh..."
+                    />
+                  </div>
+                </div>
+                <input
+                  ref={imgFileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setIsUploading(true);
+                    const objectPath = await uploadDressImage(file);
+                    setIsUploading(false);
+                    if (objectPath) setForm(f => ({ ...f, imageUrl: objectPath }));
+                    e.target.value = "";
+                  }}
+                />
               </div>
 
               {/* Notes */}

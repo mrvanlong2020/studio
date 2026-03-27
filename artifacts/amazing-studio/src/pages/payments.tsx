@@ -434,7 +434,7 @@ export default function PaymentsPage() {
   /* Khi chọn hồ sơ */
   const handleSelectBooking = (b: Booking) => {
     setSelectedBooking(b);
-    setForm(f => ({ ...f, amount: String(Math.max(0, b.remainingAmount)) }));
+    setForm(f => ({ ...f, amount: "" }));   // Không tự điền — người dùng phải nhập
     setProofImage(null);
     if (fileRef.current) fileRef.current.value = "";
   };
@@ -487,7 +487,7 @@ export default function PaymentsPage() {
       await refreshSelectedBooking(selectedBooking);
       setForm(f => ({
         ...f,
-        amount: String(Math.max(0, (selectedBooking?.remainingAmount ?? 0) - amt)),
+        amount: "",   // Xóa trắng sau khi lưu, tránh bấm nhầm
         notes: "",
         bankName: "",
       }));
@@ -819,23 +819,37 @@ export default function PaymentsPage() {
               <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
                 💰 Số tiền thu lần này *
               </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  className="w-full px-3 py-3 border border-border rounded-xl text-base font-bold bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 pr-20"
-                  value={form.amount}
-                  onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-                  placeholder="0"
-                />
+              <input
+                type="number"
+                className="w-full px-3 py-3 border border-border rounded-xl text-base font-bold bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+                value={form.amount}
+                onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+                placeholder="Nhập số tiền cần thu..."
+              />
+
+              {/* Quick suggestion buttons */}
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {[500000, 1000000, 2000000].map(amt => (
+                  <button key={amt} type="button"
+                    onClick={() => setForm(f => ({ ...f, amount: String(amt) }))}
+                    className="text-xs px-2.5 py-1.5 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground border border-border rounded-lg font-medium transition-colors">
+                    {(amt / 1000).toFixed(0)}k
+                  </button>
+                ))}
                 {selectedBooking.remainingAmount > 0 && (
-                  <button
+                  <button type="button"
                     onClick={() => setForm(f => ({ ...f, amount: String(selectedBooking.remainingAmount) }))}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] px-2.5 py-1 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors"
-                  >
-                    Thu đủ
+                    className="text-xs px-2.5 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 rounded-lg font-semibold transition-colors">
+                    Thu đủ ({fmtVND(selectedBooking.remainingAmount)})
                   </button>
                 )}
               </div>
+
+              {!form.amount && (
+                <p className="mt-1.5 text-xs text-muted-foreground italic">
+                  Vui lòng nhập số tiền cần thu hoặc chọn gợi ý bên trên
+                </p>
+              )}
               {amtNum > 0 && (
                 <div className={cn(
                   "mt-1.5 flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-2",

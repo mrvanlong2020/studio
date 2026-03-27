@@ -41,6 +41,27 @@ A wedding photography studio and wedding dress rental management system for "Ama
   - **Duplicate prevention**: `service_groups.name` has UNIQUE constraint; API POST /service-groups returns 409 for duplicates; `seedBeautyIfMissing()` checks both old and new names; GET /service-groups deduplicates by name in-memory as safety net
   - **Bug fix (2026-03-26)**: `seedBeautyIfMissing` was creating a new "CHỤP BEAUTY" group on every restart (because `updateGroupSortOrders` renamed it to "BEAUTY / THỜI TRANG", so the old-name check always missed it). Resulted in 57 duplicate groups (700+ packages). Fixed by checking both names. DB cleaned up (56 duplicate groups + 112 packages deleted). UNIQUE constraint added to prevent future duplicates.
   - **Inline edit (2026-03-27)**: Detail panel now has pencil icon buttons for Mô tả, Ghi chú, Chi tiết hạng mục. Click pencil → inline textarea/item editor appears; save → PUT /api/service-packages/:id; items editor supports add/remove/reorder (ArrowUp/ArrowDown)
+- **Object Storage (Image Upload)**:
+  - Server: `artifacts/api-server/src/lib/objectStorage.ts` (GCS client wrapper), `objectAcl.ts`, `routes/storage.ts`
+  - Endpoints: `POST /api/storage/uploads/request-url` (presigned URL), `GET /api/storage/objects/*` (serve uploaded files), `GET /api/storage/public-objects/*`
+  - Client: Custom upload via presigned URL; `getImageSrc(url)` helper converts `/objects/xxx` paths to full API URL
+  - Wardrobe uses this for dress photo upload (click to upload + instant preview)
+- **Hóa đơn dịch vụ (Contracts)** `/contracts`:
+  - Renamed from "Hợp đồng" to "Hóa đơn dịch vụ" throughout
+  - `printInvoice(contract)` generates HTML popup with professional formatting
+  - DEFAULT_TERMS constant with 5 sections (DỊCH VỤ, DỜI/HỦY LỊCH, TRANG PHỤC, GIAO SẢN PHẨM, PHÁT SINH)
+  - Form has editable terms textarea + "↺ Khôi phục điều khoản mặc định" button
+  - STUDIO_INFO: name="Amazing Studio", address="Số 80, Hẻm 71, CMT8, KP Hiệp Bình, P. Hiệp Ninh, Tây Ninh", phone="0392817079"
+  - Calendar `generateContractHTML` also renamed to "Hóa Đơn Dịch Vụ"
+- **SmartSearch** (`src/components/SmartSearch.tsx`): Global search bar in layout header
+  - Searches `/api/bookings?q=...` with debounce; shows customer name, order code, phone, shoot date, status dot
+  - Keyboard Escape clears; results link to calendar page
+- **Booking detail cover banner**: Facebook-style gradient banner at top of `ShowDetailPanel`
+  - Purple gradient with decorative circles, service label badge (top-left), order code (top-right), customer avatar circle (bottom-left overlapping body)
+- **Payment form improvements**:
+  - Amount field blank by default (no auto-fill on booking select)
+  - Quick suggestion buttons: 500k, 1M, 2M, Thu đủ (with remaining amount shown)
+  - Helper text when field is empty; amount clears after successful save
 - **Tiến độ hậu kỳ (Photoshop Jobs)** `/photoshop-jobs`: Job tracking module for post-production work
   - DB table: `photoshop_jobs` (job_code, customer info, assigned staff, shoot_date, received_file_date, internal_deadline, customer_deadline, status, progress_percent, total_photos, done_photos, notes)
   - Status: `chua_nhan` (Chưa nhận), `dang_xu_ly` (Đang xử lý), `cho_duyet` (Chờ duyệt), `hoan_thanh` (Hoàn thành)

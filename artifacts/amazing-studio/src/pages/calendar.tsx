@@ -1354,7 +1354,7 @@ function generateContractHTML(booking: Booking, siblings: Booking[], allPackages
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hợp Đồng Dịch Vụ - ${contractCode}</title>
+<title>Hóa Đơn Dịch Vụ - ${contractCode}</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -1387,7 +1387,7 @@ function generateContractHTML(booking: Booking, siblings: Booking[], allPackages
       <div style="color:#666;font-size:12px;margin-top:2px;">📞 ${STUDIO_INFO.phone}</div>
     </div>
     <div style="text-align:right;min-width:180px;">
-      <div style="font-size:20px;font-weight:800;color:#8B1A6B;text-transform:uppercase;">Hợp Đồng Dịch Vụ</div>
+      <div style="font-size:20px;font-weight:800;color:#8B1A6B;text-transform:uppercase;">Hóa Đơn Dịch Vụ</div>
       <div style="font-size:13px;color:#555;margin-top:8px;">Số HĐ: <strong style="color:#2c2c2c;">${contractCode}</strong></div>
       <div style="font-size:13px;color:#555;margin-top:3px;">Ngày lập: <strong style="color:#2c2c2c;">${todayStr}</strong></div>
     </div>
@@ -1478,7 +1478,7 @@ function generateContractHTML(booking: Booking, siblings: Booking[], allPackages
         <li style="margin-bottom:3px;">Các yêu cầu ngoài gói sẽ tính phí riêng.</li>
       </ul>
 
-      <p style="margin-top:6px;font-style:italic;color:#666;">Hai bên xác nhận và đồng ý toàn bộ nội dung hợp đồng này.</p>
+      <p style="margin-top:6px;font-style:italic;color:#666;">Hai bên xác nhận và đồng ý toàn bộ nội dung hóa đơn dịch vụ này.</p>
     </div>
   </div>
 
@@ -1504,7 +1504,7 @@ function generateContractHTML(booking: Booking, siblings: Booking[], allPackages
   </div>
 
   <div style="text-align:center;margin-top:36px;padding-top:16px;border-top:1px solid #f0e0f0;color:#ccc;font-size:11px;">
-    Hợp đồng được tạo bởi Amazing Studio · ${todayStr}
+    Hóa đơn được tạo bởi Amazing Studio · ${todayStr}
   </div>
 </div>
 </body>
@@ -1639,14 +1639,40 @@ function ShowDetailPanel({
 
       {/* ── Body ── */}
       <div className="flex-1 overflow-y-auto">
-        <div className="p-4 space-y-4 max-w-2xl mx-auto">
-
-          {/* 1. Khách hàng */}
-          <div className="flex items-start gap-3">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20 flex items-center justify-center flex-shrink-0 text-primary font-bold text-xl">
+        {/* Cover Banner */}
+        <div className="relative h-28 bg-gradient-to-br from-primary via-primary/80 to-violet-600 overflow-hidden flex-shrink-0">
+          {/* Decorative elements */}
+          <div className="absolute inset-0 opacity-10">
+            <div className="absolute top-2 right-4 w-24 h-24 rounded-full border-4 border-white/30" />
+            <div className="absolute -top-4 left-12 w-16 h-16 rounded-full border-2 border-white/20" />
+            <div className="absolute bottom-1 right-20 w-10 h-10 rounded-full border-2 border-white/20" />
+          </div>
+          {/* Service label */}
+          {(booking.packageType || booking.serviceLabel) && (
+            <div className="absolute top-3 left-4">
+              <span className="bg-white/20 backdrop-blur-sm text-white text-[10px] font-bold px-2.5 py-1 rounded-full border border-white/20 uppercase tracking-wider">
+                {booking.serviceLabel || booking.packageType}
+              </span>
+            </div>
+          )}
+          {/* Customer avatar overlay at bottom */}
+          <div className="absolute bottom-0 left-4 translate-y-1/2">
+            <div className="w-14 h-14 rounded-full bg-white border-4 border-background shadow-lg flex items-center justify-center text-primary font-bold text-xl">
               {booking.customerName?.trim().split(" ").pop()?.charAt(0).toUpperCase() ?? "?"}
             </div>
-            <div className="flex-1 min-w-0 pt-0.5">
+          </div>
+          {/* Order code top right */}
+          <div className="absolute top-3 right-4">
+            <span className="bg-black/20 backdrop-blur-sm text-white/90 text-[10px] font-mono px-2 py-0.5 rounded">
+              {booking.orderCode}
+            </span>
+          </div>
+        </div>
+
+        <div className="p-4 space-y-4 max-w-2xl mx-auto">
+          {/* 1. Khách hàng */}
+          <div className="pt-8 flex items-end gap-3">
+            <div className="flex-1 min-w-0">
               <h2 className="font-bold text-xl leading-tight truncate">{booking.customerName}</h2>
               <a href={`tel:${booking.customerPhone}`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary mt-0.5">
                 <Phone className="w-3.5 h-3.5" />{booking.customerPhone}
