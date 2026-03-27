@@ -1447,28 +1447,59 @@ function generateContractHTML(booking: Booking, siblings: Booking[], allPackages
   ` : ""}
 
   <!-- Điều khoản -->
-  <div style="margin-bottom:32px;">
+  <div style="margin-bottom:32px;page-break-inside:avoid;">
     <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9b59b6;margin-bottom:10px;">📋 Điều khoản &amp; cam kết</div>
-    <div style="background:#f9f9f9;border:1px solid #eee;border-radius:10px;padding:16px 20px;font-size:12.5px;color:#555;line-height:1.9;">
-      <p style="margin-bottom:4px;">1. Bên A cam kết thực hiện đúng và đầy đủ các dịch vụ đã thỏa thuận theo hợp đồng này.</p>
-      <p style="margin-bottom:4px;">2. Bên B thanh toán số tiền còn lại trước hoặc vào ngày chụp theo thỏa thuận.</p>
-      <p style="margin-bottom:4px;">3. Trường hợp Bên B hủy lịch trước 07 ngày, tiền cọc sẽ được hoàn lại 50%. Hủy dưới 07 ngày, tiền cọc sẽ không được hoàn lại.</p>
-      <p style="margin-bottom:4px;">4. Bên A có trách nhiệm bàn giao sản phẩm (ảnh, album) trong thời gian đã cam kết.</p>
-      <p>5. Hai bên cùng ký xác nhận và đồng ý với tất cả các điều khoản trên.</p>
+    <div style="background:#f9f9f9;border:1px solid #eee;border-radius:10px;padding:16px 20px;font-size:12.5px;color:#444;line-height:1.85;">
+      <p style="margin-bottom:6px;">✅ Bên A cam kết thực hiện đầy đủ dịch vụ theo nội dung đã thống nhất.</p>
+      <p style="margin-bottom:6px;">✅ Khách thanh toán 100% chi phí còn lại ngay sau buổi chụp để nhận file.</p>
+      <p style="margin-bottom:10px;">✅ Chưa thanh toán đủ, studio có quyền giữ sản phẩm.</p>
+
+      <p style="font-weight:700;color:#333;margin-bottom:4px;">📅 Dời / hủy lịch:</p>
+      <ul style="margin:0 0 10px 18px;padding:0;">
+        <li style="margin-bottom:3px;">Dời 1 lần miễn phí nếu báo trước ≥ 3 ngày.</li>
+        <li style="margin-bottom:3px;">Báo trễ / dời nhiều lần: có thể phát sinh phí.</li>
+        <li style="margin-bottom:3px;">Hủy lịch: <strong>không hoàn cọc.</strong></li>
+      </ul>
+
+      <p style="font-weight:700;color:#333;margin-bottom:4px;">👗 Trang phục:</p>
+      <ul style="margin:0 0 10px 18px;padding:0;">
+        <li style="margin-bottom:3px;">Khách giữ gìn váy, vest, phụ kiện trong suốt buổi chụp.</li>
+        <li style="margin-bottom:3px;">Hư hỏng / dơ nặng → đền bù theo thực tế.</li>
+      </ul>
+
+      <p style="font-weight:700;color:#333;margin-bottom:4px;">📦 Giao sản phẩm:</p>
+      <ul style="margin:0 0 10px 18px;padding:0;">
+        <li style="margin-bottom:3px;">Studio giao đúng thời gian cam kết.</li>
+        <li style="margin-bottom:3px;">Yêu cầu gấp → có thể tính phí.</li>
+      </ul>
+
+      <p style="font-weight:700;color:#333;margin-bottom:4px;">⚡ Phát sinh:</p>
+      <ul style="margin:0 0 10px 18px;padding:0;">
+        <li style="margin-bottom:3px;">Các yêu cầu ngoài gói sẽ tính phí riêng.</li>
+      </ul>
+
+      <p style="margin-top:6px;font-style:italic;color:#666;">Hai bên xác nhận và đồng ý toàn bộ nội dung hợp đồng này.</p>
     </div>
   </div>
 
   <!-- Chữ ký -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;margin-top:16px;">
-    <div style="text-align:center;">
-      <div style="font-weight:700;font-size:13px;margin-bottom:5px;color:#8B1A6B;">Đại diện Bên A</div>
-      <div style="font-size:12px;color:#888;margin-bottom:70px;">(Ký, ghi rõ họ tên)</div>
-      <div style="border-top:1.5px dashed #ccc;padding-top:8px;color:#666;font-size:12px;">Ngày ___/___/______</div>
-    </div>
-    <div style="text-align:center;">
-      <div style="font-weight:700;font-size:13px;margin-bottom:5px;color:#8B1A6B;">Đại diện Bên B (Khách hàng)</div>
-      <div style="font-size:12px;color:#888;margin-bottom:70px;">(Ký, ghi rõ họ tên)</div>
-      <div style="border-top:1.5px dashed #ccc;padding-top:8px;color:#666;font-size:12px;">Ngày ___/___/______</div>
+  <div style="page-break-inside:avoid;">
+    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9b59b6;margin-bottom:14px;">✍️ Xác nhận &amp; ký tên</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;">
+      <div style="text-align:center;border:1px dashed #d0b8d0;border-radius:10px;padding:20px 16px;">
+        <div style="font-weight:700;font-size:13px;color:#8B1A6B;margin-bottom:4px;">Bên A – Amazing Studio</div>
+        <div style="font-size:11.5px;color:#888;margin-bottom:3px;">Đại diện ký tên</div>
+        <div style="height:70px;border-bottom:1.5px solid #bbb;margin:12px 24px 8px;"></div>
+        <div style="font-size:11.5px;color:#888;font-style:italic;">(Ký, ghi rõ họ tên)</div>
+        <div style="margin-top:10px;font-size:12px;color:#666;">Ngày ___/___/______</div>
+      </div>
+      <div style="text-align:center;border:1px dashed #d0b8d0;border-radius:10px;padding:20px 16px;">
+        <div style="font-weight:700;font-size:13px;color:#8B1A6B;margin-bottom:4px;">Bên B – Khách hàng</div>
+        <div style="font-size:11.5px;color:#888;margin-bottom:3px;">${booking.customerName}</div>
+        <div style="height:70px;border-bottom:1.5px solid #bbb;margin:12px 24px 8px;"></div>
+        <div style="font-size:11.5px;color:#888;font-style:italic;">(Ký, ghi rõ họ tên)</div>
+        <div style="margin-top:10px;font-size:12px;color:#666;">Ngày ___/___/______</div>
+      </div>
     </div>
   </div>
 

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
@@ -6,7 +6,7 @@ import {
   Package, Tag, Layers, X, Check, AlertCircle,
   ShoppingCart, FileText, Eye, EyeOff, GripVertical,
   Camera, BookOpen, MapPin, Star, Sparkles, Palette,
-  Film, Heart, Printer, Zap
+  Film, Heart, Printer, Zap, Pencil, Save, ChevronUp, ArrowUp, ArrowDown
 } from "lucide-react";
 import { formatVND } from "@/lib/utils";
 import { Button, Input, Badge } from "@/components/ui";
@@ -71,6 +71,22 @@ export default function PricingPage() {
   const [editingGroup, setEditingGroup] = useState<ServiceGroup | null>(null);
   const [showAllFilterGroups, setShowAllFilterGroups] = useState(false);
 
+  // ── Inline edit state ──────────────────────────────────────────────────────
+  const [inlineEdit, setInlineEdit] = useState<"description" | "notes" | "items" | null>(null);
+  const [draftDesc, setDraftDesc] = useState("");
+  const [draftNotes, setDraftNotes] = useState("");
+  const [draftItems, setDraftItems] = useState<PackageItem[]>([]);
+
+  // Sync drafts when selectedPkg changes
+  useEffect(() => {
+    if (selectedPkg) {
+      setDraftDesc(selectedPkg.description ?? "");
+      setDraftNotes(selectedPkg.notes ?? "");
+      setDraftItems(selectedPkg.items?.map(i => ({ ...i })) ?? []);
+    }
+    setInlineEdit(null);
+  }, [selectedPkg?.id]);
+
   const { data: groups = [] } = useQuery<ServiceGroup[]>({
     queryKey: ["service-groups"],
     queryFn: () => fetch(`${BASE}/api/service-groups`).then(r => r.json()),
@@ -134,6 +150,20 @@ export default function PricingPage() {
       body: JSON.stringify({ isActive: !pkg.isActive }),
     }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["service-packages"] }),
+  });
+  const updatePkgInline = useMutation({
+    mutationFn: (payload: { id: number; [key: string]: unknown }) => {
+      const { id, ...data } = payload;
+      return fetch(`${BASE}/api/service-packages/${id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }).then(r => r.json());
+    },
+    onSuccess: (updated: ServicePackage) => {
+      qc.invalidateQueries({ queryKey: ["service-packages"] });
+      setSelectedPkg(updated);
+      setInlineEdit(null);
+    },
   });
   const deleteSurcharge = useMutation({
     mutationFn: (id: number) => fetch(`${BASE}/api/surcharges/${id}`, { method: "DELETE" }),
@@ -530,42 +560,171 @@ export default function PricingPage() {
               </div>
             </div>
 
-            {selectedPkg.description && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Mô tả</p>
-                <p className="text-sm">{selectedPkg.description}</p>
-              </div>
-            )}
-
-            {/* Items */}
+            {/* Mô tả — inline edit */}
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Chi tiết hạng mục</p>
-              {selectedPkg.items.length === 0 ? (
-                <p className="text-sm text-muted-foreground italic">Chưa có hạng mục chi tiết</p>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Mô tả</p>
+                {inlineEdit !== "description" ? (
+                  <button onClick={() => { setDraftDesc(selectedPkg.description ?? ""); setInlineEdit("description"); }}
+                    className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-primary" title="Sửa mô tả">
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                ) : (
+                  <div className="flex gap-1">
+                    <button onClick={() => updatePkgInline.mutate({ id: selectedPkg.id, description: draftDesc })}
+                      disabled={updatePkgInline.isPending}
+                      className="p-1 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-700 transition-colors" title="Lưu">
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => setInlineEdit(null)}
+                      className="p-1 rounded hover:bg-muted text-muted-foreground transition-colors" title="Hủy">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+              {inlineEdit === "description" ? (
+                <textarea
+                  value={draftDesc}
+                  onChange={e => setDraftDesc(e.target.value)}
+                  rows={3}
+                  className="w-full text-sm border border-primary/30 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none bg-background"
+                  placeholder="Nhập mô tả gói..."
+                  autoFocus
+                />
               ) : (
-                <div className="space-y-1.5">
-                  {selectedPkg.items.map((item, idx) => (
-                    <div key={item.id ?? idx} className="flex items-start gap-2 p-2.5 bg-muted/30 rounded-lg">
-                      <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm font-medium">{item.name}</span>
-                        {item.quantity && item.unit && (
-                          <span className="text-xs text-muted-foreground ml-1.5">× {item.quantity} {item.unit}</span>
-                        )}
-                        {item.notes && <p className="text-xs text-muted-foreground italic">{item.notes}</p>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                selectedPkg.description
+                  ? <p className="text-sm">{selectedPkg.description}</p>
+                  : <p className="text-sm text-muted-foreground italic">Chưa có mô tả</p>
               )}
             </div>
 
-            {selectedPkg.notes && (
-              <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200/50">
-                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1">Ghi chú</p>
-                <p className="text-sm text-amber-800 dark:text-amber-300">{selectedPkg.notes}</p>
+            {/* Items — inline edit */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Chi tiết hạng mục</p>
+                {inlineEdit !== "items" ? (
+                  <button onClick={() => { setDraftItems(selectedPkg.items?.map(i => ({ ...i })) ?? []); setInlineEdit("items"); }}
+                    className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-primary" title="Sửa hạng mục">
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                ) : (
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => updatePkgInline.mutate({ id: selectedPkg.id, items: draftItems.map((it, i) => ({ ...it, sortOrder: i + 1 })) })}
+                      disabled={updatePkgInline.isPending}
+                      className="px-2 py-1 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-700 text-xs font-medium transition-colors flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Lưu
+                    </button>
+                    <button onClick={() => setInlineEdit(null)}
+                      className="px-2 py-1 rounded hover:bg-muted text-muted-foreground text-xs transition-colors">Hủy</button>
+                  </div>
+                )}
               </div>
-            )}
+
+              {inlineEdit === "items" ? (
+                <div className="space-y-2">
+                  {draftItems.map((item, idx) => (
+                    <div key={idx} className="flex items-start gap-1.5 p-2 bg-muted/20 rounded-lg border border-border/50">
+                      <div className="flex flex-col gap-0.5 flex-shrink-0 mt-1">
+                        <button onClick={() => { if (idx === 0) return; const arr = [...draftItems]; [arr[idx-1], arr[idx]] = [arr[idx], arr[idx-1]]; setDraftItems(arr); }}
+                          disabled={idx === 0} className="p-0.5 rounded hover:bg-muted text-muted-foreground disabled:opacity-30">
+                          <ArrowUp className="w-3 h-3" />
+                        </button>
+                        <button onClick={() => { if (idx === draftItems.length-1) return; const arr = [...draftItems]; [arr[idx+1], arr[idx]] = [arr[idx], arr[idx+1]]; setDraftItems(arr); }}
+                          disabled={idx === draftItems.length-1} className="p-0.5 rounded hover:bg-muted text-muted-foreground disabled:opacity-30">
+                          <ArrowDown className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <input value={item.name} onChange={e => { const arr = [...draftItems]; arr[idx] = { ...arr[idx], name: e.target.value }; setDraftItems(arr); }}
+                          className="w-full text-sm border border-border rounded px-2 py-1 bg-background focus:outline-none focus:ring-1 focus:ring-primary/30"
+                          placeholder="Tên hạng mục" />
+                        <div className="flex gap-1.5">
+                          <input value={item.quantity} onChange={e => { const arr = [...draftItems]; arr[idx] = { ...arr[idx], quantity: e.target.value }; setDraftItems(arr); }}
+                            className="w-16 text-xs border border-border rounded px-2 py-1 bg-background focus:outline-none"
+                            placeholder="SL" />
+                          <input value={item.unit} onChange={e => { const arr = [...draftItems]; arr[idx] = { ...arr[idx], unit: e.target.value }; setDraftItems(arr); }}
+                            className="w-20 text-xs border border-border rounded px-2 py-1 bg-background focus:outline-none"
+                            placeholder="Đơn vị" />
+                          <input value={item.notes} onChange={e => { const arr = [...draftItems]; arr[idx] = { ...arr[idx], notes: e.target.value }; setDraftItems(arr); }}
+                            className="flex-1 text-xs border border-border rounded px-2 py-1 bg-background focus:outline-none"
+                            placeholder="Ghi chú" />
+                        </div>
+                      </div>
+                      <button onClick={() => setDraftItems(draftItems.filter((_, i) => i !== idx))}
+                        className="p-1 rounded hover:bg-destructive/10 text-destructive/60 hover:text-destructive flex-shrink-0 mt-1">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  <button onClick={() => setDraftItems([...draftItems, { name: "", quantity: "1", unit: "lần", notes: "", sortOrder: draftItems.length + 1 }])}
+                    className="w-full py-1.5 border border-dashed border-border rounded-lg text-xs text-muted-foreground hover:text-primary hover:border-primary/50 transition-colors flex items-center justify-center gap-1">
+                    <Plus className="w-3 h-3" /> Thêm hạng mục
+                  </button>
+                </div>
+              ) : (
+                selectedPkg.items.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic">Chưa có hạng mục chi tiết</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {selectedPkg.items.map((item, idx) => (
+                      <div key={item.id ?? idx} className="flex items-start gap-2 p-2.5 bg-muted/30 rounded-lg">
+                        <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium">{item.name}</span>
+                          {item.quantity && item.unit && (
+                            <span className="text-xs text-muted-foreground ml-1.5">× {item.quantity} {item.unit}</span>
+                          )}
+                          {item.notes && <p className="text-xs text-muted-foreground italic">{item.notes}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              )}
+            </div>
+
+            {/* Ghi chú — inline edit */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">Ghi chú</p>
+                {inlineEdit !== "notes" ? (
+                  <button onClick={() => { setDraftNotes(selectedPkg.notes ?? ""); setInlineEdit("notes"); }}
+                    className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-primary" title="Sửa ghi chú">
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                ) : (
+                  <div className="flex gap-1">
+                    <button onClick={() => updatePkgInline.mutate({ id: selectedPkg.id, notes: draftNotes })}
+                      disabled={updatePkgInline.isPending}
+                      className="p-1 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-700 transition-colors" title="Lưu">
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => setInlineEdit(null)}
+                      className="p-1 rounded hover:bg-muted text-muted-foreground transition-colors" title="Hủy">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+              {inlineEdit === "notes" ? (
+                <textarea
+                  value={draftNotes}
+                  onChange={e => setDraftNotes(e.target.value)}
+                  rows={3}
+                  className="w-full text-sm border border-amber-300/50 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-amber-200 resize-none bg-background"
+                  placeholder="Nhập ghi chú..."
+                  autoFocus
+                />
+              ) : (
+                selectedPkg.notes
+                  ? <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200/50">
+                      <p className="text-sm text-amber-800 dark:text-amber-300">{selectedPkg.notes}</p>
+                    </div>
+                  : <p className="text-sm text-muted-foreground italic">Chưa có ghi chú</p>
+              )}
+            </div>
           </div>
 
           <div className="p-4 border-t border-border space-y-2 flex-shrink-0">

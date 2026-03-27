@@ -5,7 +5,7 @@ import {
   FileText, Shirt, Calculator, Bot, Settings, 
   Moon, LogOut, Bell, Wallet, UserPlus, Menu,
   ClipboardList, ScrollText, TrendingUp, LayoutList, UserCog,
-  CreditCard, Banknote,
+  CreditCard, Banknote, Film,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,8 +17,9 @@ const mainNavItems = [
   { href: "/payments",   label: "Thu tiền",            icon: CreditCard },
   { href: "/pricing",    label: "Dịch vụ & Bảng giá", icon: LayoutList },
   { href: "/staff",      label: "Nhân sự",             icon: UserCog },
-  { href: "/tasks",      label: "Giao việc",           icon: CheckSquare },
-  { href: "/accounting", label: "Bảng lương",          icon: Banknote },
+  { href: "/tasks",           label: "Giao việc",           icon: CheckSquare },
+  { href: "/photoshop-jobs",  label: "Tiến độ hậu kỳ",      icon: Film },
+  { href: "/accounting",      label: "Bảng lương",          icon: Banknote },
   { href: "/contracts",  label: "Hợp đồng",            icon: ScrollText },
   { href: "/quotes",     label: "Báo giá",             icon: FileText },
 ];

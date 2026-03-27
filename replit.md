@@ -40,6 +40,16 @@ A wedding photography studio and wedding dress rental management system for "Ama
   - **Filter tabs**: Max 8 groups shown initially + "+N nhóm" button to expand; each tab shows the group's icon
   - **Duplicate prevention**: `service_groups.name` has UNIQUE constraint; API POST /service-groups returns 409 for duplicates; `seedBeautyIfMissing()` checks both old and new names; GET /service-groups deduplicates by name in-memory as safety net
   - **Bug fix (2026-03-26)**: `seedBeautyIfMissing` was creating a new "CHỤP BEAUTY" group on every restart (because `updateGroupSortOrders` renamed it to "BEAUTY / THỜI TRANG", so the old-name check always missed it). Resulted in 57 duplicate groups (700+ packages). Fixed by checking both names. DB cleaned up (56 duplicate groups + 112 packages deleted). UNIQUE constraint added to prevent future duplicates.
+  - **Inline edit (2026-03-27)**: Detail panel now has pencil icon buttons for Mô tả, Ghi chú, Chi tiết hạng mục. Click pencil → inline textarea/item editor appears; save → PUT /api/service-packages/:id; items editor supports add/remove/reorder (ArrowUp/ArrowDown)
+- **Tiến độ hậu kỳ (Photoshop Jobs)** `/photoshop-jobs`: Job tracking module for post-production work
+  - DB table: `photoshop_jobs` (job_code, customer info, assigned staff, shoot_date, received_file_date, internal_deadline, customer_deadline, status, progress_percent, total_photos, done_photos, notes)
+  - Status: `chua_nhan` (Chưa nhận), `dang_xu_ly` (Đang xử lý), `cho_duyet` (Chờ duyệt), `hoan_thanh` (Hoàn thành)
+  - Color-coded deadline warnings: red (trễ), orange (hôm nay), amber (≤2 ngày), yellow (≤5 ngày)
+  - Progress bar with quick-set buttons (0/25/50/75/100%) per job
+  - Quick status change via dropdown on each job card
+  - Filter tabs by status with counts; search by job code/customer/staff
+  - Sort by: deadline, progress, status, newest
+  - API: GET/POST/PUT/DELETE `/api/photoshop-jobs`
 - **ServiceSearchBox** (`src/components/service-search-box.tsx`): Shared searchable package picker — live filtering, smart suggestions from localStorage recent, shows tags (serviceType, makeup, addon, album). Used in booking forms and calendar.
 - **SurchargeEditor** (`src/components/surcharge-editor.tsx`): Shared multi-line phát sinh/phụ thu editor. Each row: name + amount, auto-sum. Stores as JSONB `surcharges` column on bookings table.
 - **Booking surcharges**: `surcharges` JSONB column on `bookingsTable` (`[{name, amount}]`). POST/PUT /bookings accept `surcharges`. Total = sum(line items) + sum(surcharges). Auto-computed in form when package selected.
