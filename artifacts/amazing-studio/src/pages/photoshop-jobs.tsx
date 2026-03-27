@@ -83,13 +83,12 @@ export default function PhotoshopJobsPage() {
     refetchInterval: 30000,
   });
 
-  // Booking search for modal
+  // Booking search for modal — enabled as soon as dropdown is shown
   const { data: bookingResults = [] } = useQuery<any[]>({
     queryKey: ["bookings-search", bookingSearch],
-    queryFn: () => bookingSearch.length >= 2
-      ? fetch(`${BASE}/api/bookings?q=${encodeURIComponent(bookingSearch)}`).then(r => r.json())
-      : Promise.resolve([]),
-    enabled: bookingSearch.length >= 2,
+    queryFn: () => fetch(`${BASE}/api/bookings?q=${encodeURIComponent(bookingSearch.trim())}`).then(r => r.json()),
+    enabled: showBookingDrop,
+    staleTime: 10_000,
   });
 
   // Close booking dropdown on outside click
@@ -425,8 +424,8 @@ export default function PhotoshopJobsPage() {
                     <input
                       value={bookingSearch}
                       onChange={e => { setBookingSearch(e.target.value); setShowBookingDrop(true); if (!e.target.value) setLinkedBookingId(null); }}
-                      onFocus={() => bookingSearch.length >= 2 && setShowBookingDrop(true)}
-                      placeholder="Nhập tên khách hoặc mã đơn (ít nhất 2 ký tự)..."
+                      onFocus={() => setShowBookingDrop(true)}
+                      placeholder="Tìm tên khách, SĐT, mã đơn, dịch vụ..."
                       className="w-full pl-9 pr-8 py-2 text-sm border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
                     />
                     {bookingSearch && (
@@ -441,20 +440,24 @@ export default function PhotoshopJobsPage() {
                       <Check className="w-3 h-3" /> Đã liên kết đơn #{linkedBookingId} · thông tin tự động điền bên dưới
                     </p>
                   )}
-                  {showBookingDrop && bookingSearch.length >= 2 && (
-                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-popover border border-border rounded-xl shadow-lg max-h-48 overflow-auto">
+                  {showBookingDrop && (
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-popover border border-border rounded-xl shadow-lg max-h-52 overflow-auto">
+                      <p className="text-xs font-medium text-muted-foreground px-3 py-1.5 border-b border-border sticky top-0 bg-popover">
+                        {bookingSearch.trim() ? "Kết quả tìm kiếm" : "Đơn gần nhất"}
+                      </p>
                       {bookingResults.length === 0 ? (
                         <p className="text-sm text-muted-foreground p-3 text-center">Không tìm thấy đơn hàng nào</p>
                       ) : (
-                        bookingResults.slice(0, 8).map((b: any) => (
+                        bookingResults.slice(0, 10).map((b: any) => (
                           <button key={b.id} type="button"
-                            onClick={() => selectBooking(b)}
+                            onMouseDown={() => selectBooking(b)}
                             className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted transition-colors flex items-start gap-2">
                             <div className="min-w-0 flex-1">
                               <p className="font-medium truncate">{b.customerName}</p>
                               <p className="text-xs text-muted-foreground">
                                 {b.orderCode ?? `#${b.id}`}
                                 {b.serviceLabel && ` · ${b.serviceLabel}`}
+                                {b.packageType && !b.serviceLabel && ` · ${b.packageType}`}
                                 {b.shootDate && ` · ${new Date(b.shootDate).toLocaleDateString("vi-VN")}`}
                               </p>
                             </div>

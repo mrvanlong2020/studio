@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { bookingsTable, customersTable, paymentsTable, expensesTable, tasksTable, staffTable } from "@workspace/db/schema";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, or, ilike } from "drizzle-orm";
 import { computeBookingEarnings } from "./job-earnings";
 
 const router: IRouter = Router();
@@ -39,8 +39,19 @@ router.get("/bookings", async (req, res) => {
   const status = req.query.status as string | undefined;
   const customerId = req.query.customerId ? parseInt(req.query.customerId as string) : undefined;
   const parentId = req.query.parentId ? parseInt(req.query.parentId as string) : undefined;
+  const q = (req.query.q as string | undefined)?.trim();
 
-  const rows = await db
+  const searchCondition = q
+    ? or(
+        ilike(bookingsTable.orderCode, `%${q}%`),
+        ilike(bookingsTable.serviceLabel, `%${q}%`),
+        ilike(bookingsTable.packageType, `%${q}%`),
+        ilike(customersTable.name, `%${q}%`),
+        ilike(customersTable.phone, `%${q}%`),
+      )
+    : undefined;
+
+  const baseQuery = db
     .select(bookingFields)
     .from(bookingsTable)
     .innerJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
@@ -49,9 +60,15 @@ router.get("/bookings", async (req, res) => {
         status ? eq(bookingsTable.status, status) : undefined,
         customerId ? eq(bookingsTable.customerId, customerId) : undefined,
         parentId ? eq(bookingsTable.parentId, parentId) : undefined,
+        searchCondition,
       )
     )
-    .orderBy(desc(bookingsTable.shootDate));
+    .orderBy(desc(bookingsTable.createdAt));
+
+  const hasOtherFilters = !!(status || customerId || parentId);
+  const rows = (!q && !hasOtherFilters)
+    ? await baseQuery.limit(10)
+    : await baseQuery;
 
   const allPayments = await db.select().from(paymentsTable);
 
