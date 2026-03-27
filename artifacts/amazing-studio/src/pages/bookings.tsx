@@ -307,13 +307,23 @@ export default function BookingsPage() {
                             {detail.items.map((item, i) => {
                               const displayName = item.serviceName || item.name || `Dịch vụ ${i + 1}`;
                               const displayPrice = item.price ?? item.total ?? 0;
+                              const qty = item.qty;
+                              const unitPrice = item.unitPrice;
                               return (
                                 <div key={i} className="rounded-xl border border-border/50 overflow-hidden">
-                                  <div className="flex items-center justify-between px-3 py-2.5 bg-muted/30">
-                                    <span className="font-semibold text-sm">{displayName}</span>
-                                    {displayPrice > 0 && (
-                                      <span className="text-sm font-bold text-primary">{formatVND(displayPrice)}</span>
-                                    )}
+                                  <div className="flex items-center justify-between px-3 py-2.5 bg-muted/30 gap-2">
+                                    <span className="font-semibold text-sm flex-1 min-w-0">{displayName}</span>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      {qty != null && qty > 1 && (
+                                        <span className="text-xs text-muted-foreground">x{qty}</span>
+                                      )}
+                                      {unitPrice != null && qty != null && qty > 1 && (
+                                        <span className="text-xs text-muted-foreground">{formatVND(unitPrice)}</span>
+                                      )}
+                                      {displayPrice > 0 && (
+                                        <span className="text-sm font-bold text-primary">{formatVND(displayPrice)}</span>
+                                      )}
+                                    </div>
                                   </div>
                                   {item.notes && (
                                     <div className="px-3 py-2 bg-amber-50/40 border-t border-border/30">
