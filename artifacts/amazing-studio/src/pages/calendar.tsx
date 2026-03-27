@@ -2264,6 +2264,7 @@ export default function CalendarPage() {
   const [viewingBooking, setViewingBooking] = useState<Booking | null>(null);
   const [showLunar, setShowLunar] = useState(true);
   const { isAdmin, toggle: toggleAdminMode } = useViewMode();
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const { data: bookings = [], isLoading } = useQuery<Booking[]>({
     queryKey: ["bookings"],
@@ -2448,7 +2449,24 @@ export default function CalendarPage() {
       </div>
 
       {/* Calendar card */}
-      <div className="bg-card rounded-2xl border shadow-sm overflow-hidden">
+      <div
+        className="bg-card rounded-2xl border shadow-sm overflow-hidden"
+        onTouchStart={e => {
+          const t = e.touches[0];
+          touchStartRef.current = { x: t.clientX, y: t.clientY };
+        }}
+        onTouchEnd={e => {
+          if (!touchStartRef.current) return;
+          const t = e.changedTouches[0];
+          const dx = t.clientX - touchStartRef.current.x;
+          const dy = t.clientY - touchStartRef.current.y;
+          touchStartRef.current = null;
+          if (Math.abs(dx) >= 50 && Math.abs(dx) > Math.abs(dy)) {
+            if (dx < 0) nextMonth();
+            else prevMonth();
+          }
+        }}
+      >
         {/* Month nav */}
         <div className="flex items-center justify-between px-4 py-3 border-b bg-gradient-to-r from-card to-muted/10">
           <div>
