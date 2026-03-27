@@ -272,14 +272,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <span className="hidden sm:inline">Khách hàng mới</span>
             </Link>
             {effectiveIsAdmin && (
-              <Link href="/payments" className="p-2 text-muted-foreground hover:bg-muted rounded-full transition-colors">
+              <Link href="/payments" className="p-2 text-muted-foreground hover:bg-muted rounded-full transition-colors hidden sm:flex">
                 <Wallet className="w-5 h-5" />
               </Link>
             )}
-            <Link href="/internal-comms" className="p-2 text-muted-foreground hover:bg-muted rounded-full transition-colors relative">
+            <Link href="/internal-comms" className="p-2 text-muted-foreground hover:bg-muted rounded-full transition-colors relative hidden sm:flex">
               <Bell className="w-5 h-5" />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full border border-background"></span>
             </Link>
+            {/* Logout — always visible in header */}
+            <button
+              onClick={logout}
+              title="Đăng xuất"
+              className="p-2 text-destructive hover:bg-destructive/10 rounded-full transition-colors">
+              <LogOut className="w-5 h-5" />
+            </button>
           </div>
         </header>
 

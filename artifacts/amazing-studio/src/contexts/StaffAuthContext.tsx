@@ -46,7 +46,8 @@ const StaffAuthContext = createContext<StaffAuthContextValue>({
   effectiveIsAdmin: false,
 });
 
-const TOKEN_KEY = "amazingStudioToken_v1";
+const TOKEN_KEY = "amazingStudioToken_v2";
+const OLD_TOKEN_KEYS = ["amazingStudioToken_v1"];
 const VIEW_MODE_KEY = "amazingStudioViewMode_v1";
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -72,6 +73,7 @@ export function StaffAuthProvider({ children }: { children: React.ReactNode }) {
   const [simulateRole, setSimulateRoleState] = useState<SimulateRole>(null);
 
   useEffect(() => {
+    OLD_TOKEN_KEYS.forEach(k => localStorage.removeItem(k));
     const storedToken = localStorage.getItem(TOKEN_KEY);
     if (!storedToken) {
       setAuthChecked(true);

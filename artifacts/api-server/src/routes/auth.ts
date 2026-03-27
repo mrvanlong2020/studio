@@ -19,10 +19,19 @@ async function ensureAuthColumns() {
 }
 ensureAuthColumns().catch(console.error);
 
+const JWT_SECRET = process.env.SESSION_SECRET ?? "amazing-studio-secret-2025";
+
 function verifyToken(header: string | undefined): number | null {
   if (!header?.startsWith("Bearer ")) return null;
   try {
-    const payload = JSON.parse(Buffer.from(header.slice(7).split(".")[1], "base64url").toString());
+    const token = header.slice(7);
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const [jwtHeader, jwtBody, sig] = parts;
+    const { createHmac } = require("crypto") as typeof import("crypto");
+    const expectedSig = createHmac("sha256", JWT_SECRET).update(`${jwtHeader}.${jwtBody}`).digest("base64url");
+    if (sig !== expectedSig) return null;
+    const payload = JSON.parse(Buffer.from(jwtBody, "base64url").toString());
     if (payload.exp && Date.now() / 1000 > payload.exp) return null;
     return payload.id as number;
   } catch { return null; }
@@ -75,11 +84,10 @@ router.post("/auth/login", async (req, res) => {
   const ok = await bcrypt.compare(password, u.password_hash as string);
   if (!ok) return res.status(401).json({ error: "Tên đăng nhập hoặc mật khẩu không đúng" });
 
-  const secret = process.env.SESSION_SECRET ?? "amazing-studio-secret-2025";
   const { createHmac } = await import("crypto");
   const jwtHeader = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
   const jwtBody = Buffer.from(JSON.stringify({ id: u.id, exp: Math.floor(Date.now() / 1000) + 365 * 24 * 3600 })).toString("base64url");
-  const sig = createHmac("sha256", secret).update(`${jwtHeader}.${jwtBody}`).digest("base64url");
+  const sig = createHmac("sha256", JWT_SECRET).update(`${jwtHeader}.${jwtBody}`).digest("base64url");
 
   res.json({
     token: `${jwtHeader}.${jwtBody}.${sig}`,
