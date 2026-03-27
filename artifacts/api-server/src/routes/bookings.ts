@@ -39,7 +39,11 @@ router.get("/bookings", async (req, res) => {
   const status = req.query.status as string | undefined;
   const customerId = req.query.customerId ? parseInt(req.query.customerId as string) : undefined;
   const parentId = req.query.parentId ? parseInt(req.query.parentId as string) : undefined;
-  const q = (req.query.q as string | undefined)?.trim();
+  // q === undefined  → not passed at all (main bookings list, no limit)
+  // q === ""         → explicitly passed empty (?q=), return 10 most recent
+  // q === "..."      → search term, return matching results
+  const hasQParam = req.query.q !== undefined;
+  const q = hasQParam ? (req.query.q as string).trim() : undefined;
 
   const searchCondition = q
     ? or(
@@ -65,8 +69,9 @@ router.get("/bookings", async (req, res) => {
     )
     .orderBy(desc(bookingsTable.createdAt));
 
-  const hasOtherFilters = !!(status || customerId || parentId);
-  const rows = (!q && !hasOtherFilters)
+  // Only limit when ?q param was explicitly included in the URL but has no text
+  // (= "show recent 10" mode for the booking-link dropdown)
+  const rows = (hasQParam && !q)
     ? await baseQuery.limit(10)
     : await baseQuery;
 
