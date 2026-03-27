@@ -584,7 +584,7 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
                   body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
                 });
                 const { uploadURL, objectPath } = await res.json();
-                if (!uploadURL) throw new Error("No upload URL");
+                if (!uploadURL || !objectPath) throw new Error("Invalid response from storage service");
                 const putRes = await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
                 if (!putRes.ok) throw new Error(`Upload failed: ${putRes.status}`);
                 onChange({ ...line, conceptImages: [...(line.conceptImages ?? []), objectPath] });
