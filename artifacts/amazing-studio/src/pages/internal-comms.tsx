@@ -97,6 +97,7 @@ export default function InternalCommsPage() {
   const [chatOpen, setChatOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const autoCreatedRef = useRef(false);
 
   const { data: notifications = [], isLoading: notifLoading } = useQuery<Notification[]>({
     queryKey: ["notifications"],
@@ -110,7 +111,7 @@ export default function InternalCommsPage() {
     refetchInterval: 60000,
   });
 
-  const { data: rooms = [] } = useQuery<Room[]>({
+  const { data: rooms = [], isSuccess: roomsLoaded } = useQuery<Room[]>({
     queryKey: ["message-rooms"],
     queryFn: () => fetch(`${BASE}/api/message-rooms`).then(r => r.json()),
     refetchInterval: 30000,
@@ -170,6 +171,20 @@ export default function InternalCommsPage() {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
+
+  // Auto-open default room when entering chat tab
+  useEffect(() => {
+    if (activeTab !== "chat" || !roomsLoaded) return;
+    if (rooms.length > 0) {
+      const def = rooms.find(r => r.name === "Amazing Studio nội bộ") ?? rooms[0];
+      setSelectedRoom(def);
+      setChatOpen(true);
+    } else if (!autoCreatedRef.current && !createRoom.isPending) {
+      autoCreatedRef.current = true;
+      createRoom.mutate("Amazing Studio nội bộ");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, roomsLoaded]);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
   const overdueCount = alerts.filter(a => a.urgency === "overdue").length;
@@ -274,7 +289,7 @@ export default function InternalCommsPage() {
           ref={inputRef}
           value={newMessage}
           onChange={e => setNewMessage(e.target.value)}
-          placeholder="Nhập tin nhắn..."
+          placeholder="Nhập tin nhắn nội bộ..."
           className="flex-1 text-sm border border-border rounded-2xl px-4 py-3 bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[44px]"
         />
         <button type="submit"

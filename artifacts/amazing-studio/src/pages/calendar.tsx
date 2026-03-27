@@ -10,12 +10,11 @@ import {
 } from "date-fns";
 import { vi } from "date-fns/locale";
 import { formatVND } from "@/lib/utils";
-import { getImageSrc } from "@/lib/imageUtils";
 import {
   ChevronLeft, ChevronRight, Calendar, Clock, Phone, Package2, Sun, Moon,
   AlertCircle, Plus, X, Check, Camera, User, Sparkles,
   ChevronDown, Trash2, Save, MapPin, CreditCard, ArrowLeft,
-  Pencil, ShieldCheck, Eye, FileText, ImagePlus,
+  Pencil, ShieldCheck, Eye, FileText,
 } from "lucide-react";
 import { Button, Input } from "@/components/ui";
 import { ServiceSearchBox } from "@/components/service-search-box";
@@ -37,7 +36,6 @@ type Booking = {
   serviceLabel: string | null;
   isParentContract: boolean;
   photoCount?: number | null;
-  bannerUrl?: string | null;
   // Loaded on detail fetch
   siblings?: Booking[];
   parentContract?: Booking & { remainingAmount: number };
@@ -1546,36 +1544,6 @@ function ShowDetailPanel({
   const parentContract: (Booking & { remainingAmount: number }) | null = (fullDetail?.parentContract as (Booking & { remainingAmount: number })) ?? null;
 
   const [deleting, setDeleting] = useState(false);
-  const [bannerUploading, setBannerUploading] = useState(false);
-  const bannerInputRef = useRef<HTMLInputElement>(null);
-
-  const updateBanner = useMutation({
-    mutationFn: (bannerUrl: string) =>
-      fetch(`${BASE}/api/bookings/${booking.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bannerUrl }),
-      }).then(r => r.json()),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["bookings"] }),
-  });
-
-  async function handleBannerUpload(file: File) {
-    setBannerUploading(true);
-    try {
-      const res = await fetch(`${BASE}/api/storage/uploads/request-url`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: file.name, contentType: file.type, folder: "banners" }),
-      });
-      const { uploadURL, objectPath } = await res.json();
-      await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
-      updateBanner.mutate(objectPath);
-    } catch (err) {
-      console.error("Banner upload failed", err);
-    } finally {
-      setBannerUploading(false);
-    }
-  }
 
   const st = STATUS[booking.status as keyof typeof STATUS] ?? STATUS.pending;
 
@@ -1671,78 +1639,9 @@ function ShowDetailPanel({
 
       {/* ── Body ── */}
       <div className="flex-1 overflow-y-auto">
-        {/* Cover Banner */}
-        <input type="file" ref={bannerInputRef} accept="image/*" className="hidden"
-          onChange={e => { const f = e.target.files?.[0]; if (f) handleBannerUpload(f); }} />
-        <div className="relative h-48 sm:h-56 overflow-hidden flex-shrink-0 rounded-b-2xl">
-          {/* Background: real image or gradient */}
-          {booking.bannerUrl ? (
-            <img
-              src={getImageSrc(booking.bannerUrl) ?? ""}
-              alt="cover"
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-          ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-primary via-primary/80 to-violet-600">
-              {/* Decorative circles */}
-              <div className="absolute top-2 right-4 w-32 h-32 rounded-full border-4 border-white/20" />
-              <div className="absolute -top-6 left-12 w-20 h-20 rounded-full border-2 border-white/15" />
-              <div className="absolute bottom-4 right-24 w-12 h-12 rounded-full border-2 border-white/15" />
-              <div className="absolute top-8 left-1/3 w-8 h-8 rounded-full bg-white/5" />
-            </div>
-          )}
-          {/* Dark overlay for readability */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-black/10" />
-
-          {/* Admin upload button */}
-          {isAdmin && (
-            <button
-              onClick={() => bannerInputRef.current?.click()}
-              disabled={bannerUploading}
-              className="absolute top-3 right-12 flex items-center gap-1.5 bg-black/40 hover:bg-black/60 backdrop-blur-sm text-white text-[10px] font-semibold px-2.5 py-1.5 rounded-lg border border-white/20 transition-colors"
-              title="Đổi ảnh banner">
-              {bannerUploading
-                ? <div className="w-3 h-3 border border-white/60 border-t-white rounded-full animate-spin" />
-                : <ImagePlus className="w-3 h-3" />}
-              {bannerUploading ? "Đang tải..." : "Đổi banner"}
-            </button>
-          )}
-
-          {/* Service label */}
-          {(booking.packageType || booking.serviceLabel) && (
-            <div className="absolute top-3 left-4">
-              <span className="bg-white/20 backdrop-blur-sm text-white text-[10px] font-bold px-2.5 py-1 rounded-full border border-white/20 uppercase tracking-wider">
-                {booking.serviceLabel || booking.packageType}
-              </span>
-            </div>
-          )}
-
-          {/* Order code top right */}
-          <div className="absolute top-3 right-4">
-            <span className="bg-black/30 backdrop-blur-sm text-white/90 text-[10px] font-mono px-2 py-0.5 rounded">
-              {booking.orderCode}
-            </span>
-          </div>
-
-          {/* Customer avatar overlay at bottom-left */}
-          <div className="absolute bottom-0 left-4 translate-y-1/2 z-10">
-            <div className="w-16 h-16 rounded-full bg-white border-4 border-background shadow-xl flex items-center justify-center text-primary font-black text-2xl">
-              {booking.customerName?.trim().split(" ").pop()?.charAt(0).toUpperCase() ?? "?"}
-            </div>
-          </div>
-
-          {/* Status badge bottom-right */}
-          <div className="absolute bottom-3 right-4">
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border backdrop-blur-sm ${st.color} bg-white/90 dark:bg-black/60`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
-              {st.label}
-            </span>
-          </div>
-        </div>
-
         <div className="p-4 space-y-4 max-w-2xl mx-auto">
           {/* 1. Khách hàng */}
-          <div className="pt-8 flex items-end gap-3">
+          <div className="flex items-center gap-3">
             <div className="flex-1 min-w-0">
               <h2 className="font-bold text-xl leading-tight truncate">{booking.customerName}</h2>
               <a href={`tel:${booking.customerPhone}`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary mt-0.5">

@@ -235,35 +235,33 @@ export default function PhotoshopJobsPage() {
   return (
     <div className="h-full flex flex-col bg-background">
       {/* Header */}
-      <div className="flex-shrink-0 px-6 py-4 border-b border-border bg-background">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
-              <Film className="w-5 h-5 text-violet-600" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold">Tiến độ hậu kỳ</h1>
-              <p className="text-xs text-muted-foreground">{filtered.length} job {urgentCount > 0 && <span className="text-red-500 font-medium">· {urgentCount} cần gấp</span>}</p>
-            </div>
+      <div className="flex-shrink-0 px-4 sm:px-6 py-4 border-b border-border bg-background">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center flex-shrink-0">
+            <Film className="w-5 h-5 text-violet-600" />
           </div>
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Tìm job, khách hàng..."
-                className="pl-9 pr-4 py-2 text-sm rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 w-52" />
-            </div>
-            <select value={sortBy} onChange={e => setSortBy(e.target.value as never)}
-              className="text-sm border border-border rounded-xl px-3 py-2 bg-background">
-              <option value="deadline">Theo deadline</option>
-              <option value="progress">Theo tiến độ</option>
-              <option value="status">Theo trạng thái</option>
-              <option value="created">Mới nhất</option>
-            </select>
-            <Button onClick={openCreate} size="sm" className="gap-1.5">
-              <Plus className="w-4 h-4" /> Thêm job
-            </Button>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl font-bold">Tiến độ hậu kỳ</h1>
+            <p className="text-xs text-muted-foreground">{filtered.length} job {urgentCount > 0 && <span className="text-red-500 font-medium">· {urgentCount} cần gấp</span>}</p>
           </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-0 sm:flex-none">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Tìm job, khách hàng..."
+              className="pl-9 pr-4 py-2 text-sm rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 w-full sm:w-52" />
+          </div>
+          <select value={sortBy} onChange={e => setSortBy(e.target.value as never)}
+            className="text-sm border border-border rounded-xl px-3 py-2 bg-background">
+            <option value="deadline">Theo deadline</option>
+            <option value="progress">Theo tiến độ</option>
+            <option value="status">Theo trạng thái</option>
+            <option value="created">Mới nhất</option>
+          </select>
+          <Button onClick={openCreate} size="sm" className="gap-1.5">
+            <Plus className="w-4 h-4" /> Thêm job
+          </Button>
         </div>
 
         {/* Status filter tabs */}
