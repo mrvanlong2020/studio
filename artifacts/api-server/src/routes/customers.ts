@@ -19,6 +19,10 @@ function isPgConstraintError(err: unknown): err is PgConstraintError {
   );
 }
 
+function normalizePhone(phone: string): string {
+  return phone.replace(/[\s\-\(\)\+\.]/g, "");
+}
+
 async function ensureCustomerPhoneUnique() {
   await pool.query(`
     ALTER TABLE customers
@@ -35,13 +39,14 @@ router.get("/customers", async (req, res) => {
   let customers;
   if (search) {
     const pct = `%${search}%`;
+    const normPct = `%${normalizePhone(search)}%`;
     const r = await pool.query(
       `SELECT * FROM customers
        WHERE unaccent(name) ILIKE unaccent($1)
-          OR phone ILIKE $2
+          OR REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', '') ILIKE $2
           OR facebook ILIKE $3
        ORDER BY created_at DESC`,
-      [pct, pct, pct]
+      [pct, normPct, pct]
     );
     customers = r.rows.map((row: Record<string, unknown>) => ({
       id: row.id, name: row.name, phone: row.phone, email: row.email,
@@ -72,27 +77,40 @@ router.get("/customers", async (req, res) => {
 });
 
 router.get("/customers/by-phone", async (req, res) => {
-  const phone = (req.query.phone as string | undefined)?.trim();
+  const rawPhone = (req.query.phone as string | undefined) ?? "";
+  const phone = normalizePhone(rawPhone.trim());
   if (!phone) return res.status(400).json({ error: "Thiếu số điện thoại" });
-  const [customer] = await db.select().from(customersTable).where(eq(customersTable.phone, phone));
-  if (!customer) return res.status(404).json({ error: "Không tìm thấy" });
-  res.json(customer);
+  const r = await pool.query(
+    `SELECT * FROM customers
+     WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', '') = $1
+     LIMIT 1`,
+    [phone]
+  );
+  if (r.rows.length === 0) return res.status(404).json({ error: "Không tìm thấy" });
+  const row = r.rows[0] as Record<string, unknown>;
+  res.json({
+    id: row.id, name: row.name, phone: row.phone, email: row.email,
+    address: row.address, notes: row.notes, facebook: row.facebook,
+    zalo: row.zalo, source: row.source, tags: row.tags, gender: row.gender,
+    avatar: row.avatar, customCode: row.custom_code, createdAt: row.created_at,
+  });
 });
 
 router.post("/customers", async (req, res) => {
   const { name, phone, email, address, notes, facebook, zalo, source, tags, gender, avatar } = req.body;
-  if (!phone?.trim()) return res.status(400).json({ error: "Số điện thoại là bắt buộc" });
+  const normalizedPhone = phone ? normalizePhone(String(phone).trim()) : "";
+  if (!normalizedPhone) return res.status(400).json({ error: "Số điện thoại là bắt buộc" });
   try {
     const count = await db.select().from(customersTable);
     const customCode = `KH${String(count.length + 1).padStart(3, "0")}`;
     const [customer] = await db
       .insert(customersTable)
-      .values({ name, phone: phone.trim(), email, address, notes, facebook, zalo, source: source || "other", tags: tags || [], gender, avatar, customCode })
+      .values({ name, phone: normalizedPhone, email, address, notes, facebook, zalo, source: source || "other", tags: tags || [], gender, avatar, customCode })
       .returning();
     res.status(201).json({ ...customer, totalBookings: 0, totalPaid: 0, totalDebt: 0 });
   } catch (err: unknown) {
     if (isPgConstraintError(err) && err.code === "23505" && err.constraint?.includes("phone")) {
-      const [existing] = await db.select().from(customersTable).where(eq(customersTable.phone, phone.trim()));
+      const [existing] = await db.select().from(customersTable).where(eq(customersTable.phone, normalizedPhone));
       return res.status(409).json({
         conflict: true,
         existingCustomer: existing ?? null,
@@ -119,15 +137,16 @@ router.get("/customers/:id", async (req, res) => {
 router.put("/customers/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   const { name, phone, email, address, notes, facebook, zalo, source, tags, gender, avatar } = req.body;
-  if (phone !== undefined && !String(phone).trim()) {
+  const rawPhone = phone !== undefined ? String(phone) : undefined;
+  if (rawPhone !== undefined && !normalizePhone(rawPhone.trim())) {
     return res.status(400).json({ error: "Số điện thoại không được để trống" });
   }
   try {
     const setFields: Record<string, unknown> = {
       name, email, address, notes, facebook, zalo, source, tags: tags || [], gender, avatar,
     };
-    if (phone !== undefined) {
-      setFields.phone = String(phone).trim();
+    if (rawPhone !== undefined) {
+      setFields.phone = normalizePhone(rawPhone.trim());
     }
     const [customer] = await db
       .update(customersTable)
