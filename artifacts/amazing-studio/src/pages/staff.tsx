@@ -752,105 +752,141 @@ function StaffCard({ staff, earnings, onEdit, onEditPrice, onSetPassword, isAdmi
       </div>
       {isAdmin && (
         <Button size="sm" variant="ghost" className="w-full gap-1.5 text-muted-foreground hover:text-foreground border border-dashed" onClick={() => onSetPassword(staff)}>
-          <KeyRound className="w-3.5 h-3.5" /> Đặt mật khẩu đăng nhập
+          <KeyRound className="w-3.5 h-3.5" /> Quản lý tài khoản đăng nhập
         </Button>
       )}
     </div>
   );
 }
 
-// ─── Set Password Dialog ──────────────────────────────────────────────────────
+// ─── Account Management Dialog ────────────────────────────────────────────────
 function SetPasswordDialog({ staff, onClose }: { staff: Record<string, unknown> | null; onClose: () => void }) {
   const { token } = useStaffAuth();
+  const [username, setUsername] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [showNew, setShowNew] = useState(false);
+  const [showPw, setShowPw] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState(false);
 
-  const loginName = (staff?.phone as string | null) || "admin";
   const staffName = String(staff?.name || "");
+  const staffPhone = String(staff?.phone || "");
+
+  useEffect(() => {
+    if (!staff) return;
+    setUsername((staff.username as string) || "");
+    setNewPw(""); setConfirm(""); setErr(""); setDone(false);
+  }, [staff?.id]);
 
   async function handleSave() {
     if (!staff) return;
-    if (newPw.length < 4) { setErr("Mật khẩu phải có ít nhất 4 ký tự"); return; }
-    if (newPw !== confirm) { setErr("Mật khẩu xác nhận không khớp"); return; }
+    if (newPw && newPw.length < 4) { setErr("Mật khẩu phải có ít nhất 4 ký tự"); return; }
+    if (newPw && newPw !== confirm) { setErr("Mật khẩu xác nhận không khớp"); return; }
+    if (!username.trim() && !staffPhone) { setErr("Cần có tên đăng nhập hoặc số điện thoại"); return; }
     setSaving(true); setErr("");
     try {
-      const res = await fetch(`${BASE}/api/auth/change-password`, {
+      const body: Record<string, unknown> = { targetId: staff.id, username: username.trim() };
+      if (newPw) body.newPassword = newPw;
+      const res = await fetch(`${BASE}/api/auth/update-account`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
-        body: JSON.stringify({ targetId: staff.id, newPassword: newPw }),
+        body: JSON.stringify(body),
       });
       const data = await res.json() as { success?: boolean; error?: string };
-      if (!res.ok) { setErr(data.error ?? "Lỗi cập nhật mật khẩu"); return; }
+      if (!res.ok) { setErr(data.error ?? "Lỗi cập nhật tài khoản"); return; }
       setDone(true);
     } catch { setErr("Lỗi kết nối máy chủ"); }
     finally { setSaving(false); }
   }
 
+  const effectiveLogin = username.trim() || staffPhone || "—";
+
   return (
-    <Dialog open={!!staff} onOpenChange={v => { if (!v) { onClose(); setNewPw(""); setConfirm(""); setErr(""); setDone(false); } }}>
+    <Dialog open={!!staff} onOpenChange={v => { if (!v) onClose(); }}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <KeyRound className="w-5 h-5 text-primary" /> Đặt mật khẩu
+            <KeyRound className="w-5 h-5 text-primary" /> Quản lý tài khoản
           </DialogTitle>
         </DialogHeader>
+
         {done ? (
           <div className="py-6 text-center space-y-3">
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-emerald-100 mx-auto">
               <ShieldCheck className="w-7 h-7 text-emerald-600" />
             </div>
-            <p className="font-semibold text-emerald-700">Đặt mật khẩu thành công!</p>
+            <p className="font-semibold text-emerald-700">Cập nhật thành công!</p>
             <p className="text-sm text-muted-foreground">
-              <strong>{staffName}</strong> sẽ dùng mật khẩu mới lần đăng nhập tiếp theo.
+              Tài khoản <strong>{staffName}</strong> đã được cập nhật.
             </p>
-            <Button className="w-full mt-2" onClick={() => { onClose(); setNewPw(""); setConfirm(""); setDone(false); }}>Đóng</Button>
+            <div className="bg-muted/50 rounded-lg px-4 py-2 text-sm text-left space-y-1">
+              <p><span className="text-muted-foreground">Đăng nhập bằng:</span> <span className="font-mono font-semibold">{effectiveLogin}</span></p>
+              {newPw && <p className="text-muted-foreground">Mật khẩu đã được đổi</p>}
+            </div>
+            <Button className="w-full mt-1" onClick={onClose}>Đóng</Button>
           </div>
         ) : (
           <div className="space-y-4 py-1">
-            <div className="bg-muted/50 rounded-xl px-4 py-3 space-y-1 text-sm">
-              <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Thông tin đăng nhập</p>
-              <p><span className="text-muted-foreground">Nhân viên:</span> <strong>{staffName}</strong></p>
-              <p><span className="text-muted-foreground">Tên đăng nhập:</span> <strong className="font-mono">{loginName || "—"}</strong></p>
-              {!loginName && (
-                <p className="text-xs text-amber-600 mt-1">⚠️ Nhân viên này chưa có số điện thoại — cần thêm SĐT trước khi đặt mật khẩu</p>
-              )}
+            <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm space-y-0.5">
+              <p className="font-medium text-blue-800">{staffName}</p>
+              {staffPhone && <p className="text-blue-600 text-xs">SĐT: {staffPhone}</p>}
+              <p className="text-blue-600 text-xs">Đăng nhập hiện tại: <span className="font-mono font-semibold">{effectiveLogin}</span></p>
             </div>
+
             <div className="space-y-1.5">
-              <Label className="text-sm">Mật khẩu mới</Label>
+              <Label className="text-sm font-medium">Tên đăng nhập</Label>
+              <Input
+                placeholder={staffPhone || "Nhập tên đăng nhập tùy chọn"}
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                {username.trim()
+                  ? <>Đăng nhập bằng: <span className="font-mono font-medium">{username.trim()}</span></>
+                  : staffPhone
+                    ? <>Để trống → dùng SĐT <span className="font-mono font-medium">{staffPhone}</span></>
+                    : "Cần nhập tên đăng nhập hoặc thêm SĐT"}
+              </p>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Mật khẩu mới <span className="text-muted-foreground font-normal">(để trống = không đổi)</span></Label>
               <div className="relative">
                 <Input
-                  type={showNew ? "text" : "password"}
+                  type={showPw ? "text" : "password"}
                   placeholder="Ít nhất 4 ký tự"
                   value={newPw}
                   onChange={e => setNewPw(e.target.value)}
                   className="pr-10"
-                  disabled={!loginName}
                 />
-                <button type="button" onClick={() => setShowNew(v => !v)}
+                <button type="button" onClick={() => setShowPw(v => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                  {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-sm">Xác nhận mật khẩu</Label>
-              <Input
-                type="password"
-                placeholder="Nhập lại mật khẩu"
-                value={confirm}
-                onChange={e => setConfirm(e.target.value)}
-                disabled={!loginName}
-              />
-            </div>
-            {err && <p className="text-sm text-destructive">{err}</p>}
+
+            {newPw && (
+              <div className="space-y-1.5">
+                <Label className="text-sm">Xác nhận mật khẩu</Label>
+                <Input
+                  type="password"
+                  placeholder="Nhập lại mật khẩu"
+                  value={confirm}
+                  onChange={e => setConfirm(e.target.value)}
+                />
+              </div>
+            )}
+
+            {err && <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg">{err}</p>}
+
             <div className="flex gap-2 pt-1">
-              <Button variant="outline" className="flex-1" onClick={() => { onClose(); setNewPw(""); setConfirm(""); setErr(""); }}>Hủy</Button>
-              <Button className="flex-1 gap-1.5" onClick={handleSave} disabled={saving || !newPw || !loginName}>
-                {saving ? "Đang lưu..." : <><KeyRound className="w-4 h-4" /> Lưu mật khẩu</>}
+              <Button variant="outline" className="flex-1" onClick={onClose}>Hủy</Button>
+              <Button className="flex-1 gap-1.5" onClick={handleSave} disabled={saving}>
+                {saving ? "Đang lưu..." : <><ShieldCheck className="w-4 h-4" /> Lưu tài khoản</>}
               </Button>
             </div>
           </div>

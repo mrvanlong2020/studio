@@ -7,15 +7,19 @@ const router: IRouter = Router();
 
 const fmt = (s: {
   salary?: string | null; baseSalaryAmount?: string | null; commissionRate?: string;
-  isActive?: number; roles?: unknown; [key: string]: unknown;
-}) => ({
-  ...s,
-  salary: s.salary ? parseFloat(s.salary) : null,
-  baseSalaryAmount: s.baseSalaryAmount ? parseFloat(s.baseSalaryAmount) : 0,
-  commissionRate: s.commissionRate ? parseFloat(s.commissionRate) : 0,
-  isActive: Boolean(s.isActive),
-  roles: Array.isArray(s.roles) ? s.roles : (s.roles ? [s.roles] : []),
-});
+  isActive?: number; roles?: unknown; passwordHash?: unknown; [key: string]: unknown;
+}) => {
+  const { passwordHash: _ph, ...rest } = s;
+  void _ph;
+  return {
+    ...rest,
+    salary: s.salary ? parseFloat(s.salary) : null,
+    baseSalaryAmount: s.baseSalaryAmount ? parseFloat(s.baseSalaryAmount) : 0,
+    commissionRate: s.commissionRate ? parseFloat(s.commissionRate) : 0,
+    isActive: Boolean(s.isActive),
+    roles: Array.isArray(s.roles) ? s.roles : (s.roles ? [s.roles] : []),
+  };
+};
 
 router.get("/staff", async (_req, res) => {
   const staff = await db.select().from(staffTable).orderBy(staffTable.createdAt);

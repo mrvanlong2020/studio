@@ -22,6 +22,8 @@ export const staffTable = pgTable("staff", {
   status: text("status").notNull().default("active"), // active | inactive | probation
   staffType: text("staff_type").notNull().default("official"),
   notes: text("notes"),
+  username: text("username"),
+  passwordHash: text("password_hash"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
