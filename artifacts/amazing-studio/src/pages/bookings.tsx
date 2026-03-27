@@ -73,6 +73,7 @@ export default function BookingsPage() {
   const [showPayForm, setShowPayForm] = useState(false);
   const [activeTab, setActiveTab] = useState<"info" | "payment" | "expense" | "task">("info");
   const [payForm, setPayForm] = useState({ amount: "", paymentMethod: "transfer", paymentType: "payment", notes: "" });
+  const [previewImg, setPreviewImg] = useState<string | null>(null);
 
   const { data: bookings = [], isLoading } = useQuery<SimpleBooking[]>({
     queryKey: ["bookings"],
@@ -327,10 +328,13 @@ export default function BookingsPage() {
                                         {item.conceptImages.map((imgUrl, ci) => {
                                           const src = getImageSrc(imgUrl);
                                           return src ? (
-                                            <a key={ci} href={src} target="_blank" rel="noopener noreferrer"
-                                              className="aspect-square rounded-lg overflow-hidden bg-muted hover:ring-2 hover:ring-primary transition-all block">
+                                            <button
+                                              key={ci}
+                                              onClick={() => setPreviewImg(src)}
+                                              className="aspect-square rounded-lg overflow-hidden bg-muted hover:ring-2 hover:ring-primary transition-all"
+                                            >
                                               <img src={src} alt={`concept ${ci + 1}`} className="w-full h-full object-cover" />
-                                            </a>
+                                            </button>
                                           ) : null;
                                         })}
                                       </div>
@@ -525,6 +529,27 @@ export default function BookingsPage() {
           />
         </DialogContent>
       </Dialog>
+
+      {/* Lightbox — ảnh concept */}
+      {previewImg && (
+        <div
+          className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setPreviewImg(null)}
+        >
+          <img
+            src={previewImg}
+            alt="Xem ảnh concept"
+            className="max-w-full max-h-full object-contain rounded-xl"
+            onClick={e => e.stopPropagation()}
+          />
+          <button
+            onClick={() => setPreviewImg(null)}
+            className="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full bg-black/40 hover:bg-black/60 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

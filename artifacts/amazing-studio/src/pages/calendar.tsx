@@ -580,7 +580,8 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
                 });
                 const { uploadURL, objectPath } = await res.json();
                 if (!uploadURL) throw new Error("No upload URL");
-                await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
+                const putRes = await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
+                if (!putRes.ok) throw new Error(`Upload failed: ${putRes.status}`);
                 onChange({ ...line, conceptImages: [...(line.conceptImages ?? []), objectPath] });
               } catch (err) {
                 console.error("Concept image upload failed:", err);
