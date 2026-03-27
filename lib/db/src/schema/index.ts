@@ -14,3 +14,4 @@ export * from "./pricing";
 export * from "./staff_payroll";
 export * from "./staff_hr";
 export * from "./photoshop_jobs";
+export * from "./internal_comms";

@@ -1,117 +1,417 @@
-import { useState } from "react";
-import { useListDresses, useListRentals } from "@workspace/api-client-react";
-import { formatVND, formatDate } from "@/lib/utils";
-import { Card, CardContent, Badge, Button, Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui";
-import { Plus, Search, Shirt, Filter } from "lucide-react";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  Plus, Search, Shirt, Edit2, Trash2, X, Check,
+  RefreshCw, Tag, Palette, Ruler, Package
+} from "lucide-react";
+import { formatVND } from "@/lib/utils";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+type Dress = {
+  id: number;
+  code: string;
+  name: string;
+  category: string;
+  color: string;
+  size: string;
+  style: string | null;
+  rentalPrice: number;
+  depositRequired: number;
+  isAvailable: boolean;
+  rentalStatus: string;
+  condition: string;
+  notes: string | null;
+  imageUrl: string | null;
+  createdAt: string;
+};
+
+const RENTAL_STATUS = {
+  san_sang:      { label: "Sẵn sàng cho thuê", color: "text-emerald-700", bg: "bg-emerald-100 dark:bg-emerald-900/30", dot: "bg-emerald-500" },
+  dang_cho_thue: { label: "Đang cho thuê",     color: "text-orange-700",  bg: "bg-orange-100 dark:bg-orange-900/30",  dot: "bg-orange-500" },
+  ngung_cho_thue: { label: "Ngưng cho thuê",   color: "text-slate-600",   bg: "bg-slate-100 dark:bg-slate-800",       dot: "bg-slate-400" },
+};
+
+const CONDITION: Record<string, string> = {
+  moi:       "Mới",
+  tot:       "Tốt",
+  can_giat:  "Cần giặt",
+  can_sua:   "Cần sửa",
+  hu:        "Hư",
+  // Legacy English values
+  new:       "Mới",
+  excellent: "Xuất sắc",
+  good:      "Tốt",
+  fair:      "Khá",
+  poor:      "Kém",
+};
+
+const DRESS_CATEGORIES = ["Váy cưới", "Vest cô dâu", "Vest chú rể", "Áo dài", "Trang phục chụp cổng", "Phụ kiện", "Khác"];
+
+const EMPTY_FORM = {
+  code: "", name: "", category: "", color: "", size: "", style: "",
+  rentalPrice: 0, depositRequired: 0, rentalStatus: "san_sang",
+  condition: "tot", notes: "", imageUrl: ""
+};
 
 export default function WardrobePage() {
-  const { data: dresses = [], isLoading: loadingDresses } = useListDresses({});
-  const { data: rentals = [], isLoading: loadingRentals } = useListRentals({});
+  const qc = useQueryClient();
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [search, setSearch] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [editingDress, setEditingDress] = useState<Dress | null>(null);
+  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [savingStatus, setSavingStatus] = useState<Record<number, boolean>>({});
+
+  const { data: dresses = [], isLoading } = useQuery<Dress[]>({
+    queryKey: ["dresses"],
+    queryFn: () => fetch(`${BASE}/api/dresses`).then(r => r.json()),
+  });
+
+  const createDress = useMutation({
+    mutationFn: (data: typeof EMPTY_FORM) => fetch(`${BASE}/api/dresses`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
+    }).then(r => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["dresses"] }); closeModal(); },
+  });
+
+  const updateDress = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<typeof EMPTY_FORM> }) =>
+      fetch(`${BASE}/api/dresses/${id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
+      }).then(r => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["dresses"] }); closeModal(); },
+  });
+
+  const deleteDress = useMutation({
+    mutationFn: (id: number) => fetch(`${BASE}/api/dresses/${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["dresses"] }),
+  });
+
+  const quickStatus = useMutation({
+    mutationFn: ({ id, rentalStatus }: { id: number; rentalStatus: string }) =>
+      fetch(`${BASE}/api/dresses/${id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rentalStatus })
+      }).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["dresses"] }),
+  });
+
+  function openCreate() {
+    setEditingDress(null);
+    const num = (dresses.length + 1).toString().padStart(3, "0");
+    setForm({ ...EMPTY_FORM, code: `VP-${num}` });
+    setShowModal(true);
+  }
+
+  function openEdit(d: Dress) {
+    setEditingDress(d);
+    setForm({
+      code: d.code, name: d.name, category: d.category ?? "",
+      color: d.color, size: d.size, style: d.style ?? "",
+      rentalPrice: d.rentalPrice, depositRequired: d.depositRequired,
+      rentalStatus: d.rentalStatus, condition: d.condition,
+      notes: d.notes ?? "", imageUrl: d.imageUrl ?? ""
+    });
+    setShowModal(true);
+  }
+
+  function closeModal() { setShowModal(false); setEditingDress(null); }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (editingDress) updateDress.mutate({ id: editingDress.id, data: form });
+    else createDress.mutate(form);
+  }
+
+  const filtered = useMemo(() => {
+    let list = [...dresses];
+    if (filterStatus !== "all") list = list.filter(d => d.rentalStatus === filterStatus);
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter(d =>
+        d.name.toLowerCase().includes(q) ||
+        d.code.toLowerCase().includes(q) ||
+        (d.category ?? "").toLowerCase().includes(q) ||
+        (d.color ?? "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [dresses, filterStatus, search]);
+
+  const counts = useMemo(() => ({
+    all: dresses.length,
+    san_sang: dresses.filter(d => d.rentalStatus === "san_sang").length,
+    dang_cho_thue: dresses.filter(d => d.rentalStatus === "dang_cho_thue").length,
+    ngung_cho_thue: dresses.filter(d => d.rentalStatus === "ngung_cho_thue").length,
+  }), [dresses]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Kho trang phục</h1>
-          <p className="text-muted-foreground mt-1">Quản lý váy cưới và theo dõi thuê/trả</p>
+    <div className="h-full flex flex-col bg-background">
+      {/* Header */}
+      <div className="flex-shrink-0 px-6 py-4 border-b border-border bg-background">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-pink-100 dark:bg-pink-900/30 flex items-center justify-center">
+              <Shirt className="w-5 h-5 text-pink-600" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold">Kho trang phục</h1>
+              <p className="text-xs text-muted-foreground">{counts.all} trang phục · {counts.san_sang} sẵn sàng</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Tìm trang phục..."
+                className="pl-9 pr-4 py-2 text-sm rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 w-52" />
+            </div>
+            <button onClick={openCreate}
+              className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors">
+              <Plus className="w-4 h-4" /> Thêm váy mới
+            </button>
+          </div>
         </div>
-        <Button className="gap-2"><Plus className="w-4 h-4"/> Thêm váy mới</Button>
+
+        {/* Filter tabs */}
+        <div className="flex gap-2 mt-3 flex-wrap">
+          {[
+            { key: "all", label: `Tất cả (${counts.all})` },
+            { key: "san_sang", label: `Sẵn sàng (${counts.san_sang})` },
+            { key: "dang_cho_thue", label: `Đang cho thuê (${counts.dang_cho_thue})` },
+            { key: "ngung_cho_thue", label: `Ngưng cho thuê (${counts.ngung_cho_thue})` },
+          ].map(f => (
+            <button key={f.key}
+              onClick={() => setFilterStatus(f.key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterStatus === f.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"}`}>
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <Tabs defaultValue="inventory" className="w-full">
-        <TabsList className="grid w-[300px] grid-cols-2 mb-6">
-          <TabsTrigger value="inventory">Kho váy</TabsTrigger>
-          <TabsTrigger value="rentals">Đang cho thuê</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="inventory" className="space-y-4">
-          {loadingDresses ? <div className="text-center p-8">Đang tải...</div> : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
-              {dresses.map(dress => (
-                <Card key={dress.id} className="overflow-hidden hover:shadow-lg transition-all group cursor-pointer border-transparent hover:border-primary/30">
+      {/* Body */}
+      <div className="flex-1 overflow-auto p-6">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-32 text-muted-foreground">
+            <RefreshCw className="w-5 h-5 animate-spin mr-2" /> Đang tải...
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
+            <Shirt className="w-12 h-12 mb-3 opacity-20" />
+            <p className="font-medium">Chưa có trang phục nào</p>
+            <p className="text-sm mt-1">Bấm "+ Thêm váy mới" để bắt đầu</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filtered.map(dress => {
+              const st = RENTAL_STATUS[dress.rentalStatus as keyof typeof RENTAL_STATUS] ?? RENTAL_STATUS.san_sang;
+              return (
+                <div key={dress.id}
+                  className="bg-card rounded-2xl border border-border overflow-hidden hover:shadow-md transition-all group">
+                  {/* Image */}
                   <div className="aspect-[3/4] bg-muted relative">
                     {dress.imageUrl ? (
-                      <img src={dress.imageUrl} alt={dress.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                      <img src={dress.imageUrl} alt={dress.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-muted-foreground/30 group-hover:scale-105 transition-transform duration-500">
+                      <div className="w-full h-full flex items-center justify-center text-muted-foreground/20">
                         <Shirt className="w-16 h-16" />
                       </div>
                     )}
-                    <div className="absolute top-3 left-3 flex gap-2">
-                      <Badge variant="secondary" className="bg-white/90 text-foreground backdrop-blur-sm shadow-sm">{dress.code}</Badge>
+                    {/* Code badge */}
+                    <div className="absolute top-2 left-2">
+                      <span className="px-2 py-0.5 bg-white/90 dark:bg-black/70 rounded-lg text-xs font-mono font-medium">
+                        {dress.code}
+                      </span>
                     </div>
-                    <div className="absolute top-3 right-3">
-                      {dress.isAvailable ? (
-                        <Badge variant="success" className="shadow-sm">Sẵn sàng</Badge>
-                      ) : (
-                        <Badge variant="destructive" className="shadow-sm">Đang thuê</Badge>
-                      )}
+                    {/* Status badge */}
+                    <div className="absolute top-2 right-2">
+                      <span className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium ${st.bg} ${st.color}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
+                        {st.label}
+                      </span>
+                    </div>
+                    {/* Action buttons overlay */}
+                    <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => openEdit(dress)}
+                        className="p-1.5 bg-white/90 dark:bg-black/70 rounded-lg hover:bg-primary hover:text-white transition-colors" title="Sửa">
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => { if (confirm(`Xoá "${dress.name}"?`)) deleteDress.mutate(dress.id); }}
+                        className="p-1.5 bg-white/90 dark:bg-black/70 rounded-lg hover:bg-red-500 hover:text-white transition-colors" title="Xoá">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
-                  <CardContent className="p-4">
-                    <h3 className="font-bold text-lg leading-tight mb-1 group-hover:text-primary transition-colors">{dress.name}</h3>
-                    <p className="text-sm text-muted-foreground mb-3">{dress.color} • Size {dress.size} • {dress.style}</p>
-                    <div className="flex justify-between items-end">
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-0.5">Giá thuê</p>
-                        <p className="font-bold text-primary">{formatVND(dress.rentalPrice)}</p>
-                      </div>
-                      <Badge variant="outline" className="text-[10px] uppercase tracking-wider">{dress.condition}</Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
 
-        <TabsContent value="rentals">
-          <Card>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-muted/50 text-muted-foreground uppercase text-xs font-semibold">
-                  <tr>
-                    <th className="px-6 py-4">Mã Váy</th>
-                    <th className="px-6 py-4">Khách thuê</th>
-                    <th className="px-6 py-4">Ngày thuê</th>
-                    <th className="px-6 py-4">Hạn trả</th>
-                    <th className="px-6 py-4 text-right">Giá thuê</th>
-                    <th className="px-6 py-4 text-center">Trạng thái</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {loadingRentals ? (
-                    <tr><td colSpan={6} className="text-center p-8">Đang tải...</td></tr>
-                  ) : rentals.length === 0 ? (
-                    <tr><td colSpan={6} className="text-center p-8">Chưa có giao dịch thuê váy</td></tr>
-                  ) : (
-                    rentals.map(rental => (
-                      <tr key={rental.id} className="hover:bg-muted/30">
-                        <td className="px-6 py-4 font-medium text-primary">{rental.dressCode}</td>
-                        <td className="px-6 py-4">
-                          <p className="font-medium">{rental.customerName}</p>
-                          <p className="text-xs text-muted-foreground">{rental.customerPhone}</p>
-                        </td>
-                        <td className="px-6 py-4">{formatDate(rental.rentalDate)}</td>
-                        <td className="px-6 py-4 font-medium">{formatDate(rental.returnDate)}</td>
-                        <td className="px-6 py-4 text-right font-bold">{formatVND(rental.rentalPrice)}</td>
-                        <td className="px-6 py-4 text-center">
-                          <Badge variant={
-                            rental.status === 'returned' ? 'success' : 
-                            rental.status === 'overdue' ? 'destructive' : 'warning'
-                          }>
-                            {rental.status === 'returned' ? 'Đã trả' : rental.status === 'overdue' ? 'Quá hạn' : 'Đang thuê'}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                  {/* Info */}
+                  <div className="p-3">
+                    <h3 className="font-semibold text-sm leading-tight mb-0.5 truncate">{dress.name}</h3>
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {dress.category && <span className="text-xs text-muted-foreground">{dress.category}</span>}
+                      <span className="text-xs text-muted-foreground">· {dress.color} · Size {dress.size}</span>
+                    </div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Giá thuê</p>
+                        <p className="font-bold text-primary text-sm">{formatVND(dress.rentalPrice)}</p>
+                      </div>
+                      {dress.depositRequired > 0 && (
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">Cọc</p>
+                          <p className="text-sm font-medium text-muted-foreground">{formatVND(dress.depositRequired)}</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${["moi","new","excellent"].includes(dress.condition) ? "bg-emerald-100 text-emerald-700" : ["tot","good"].includes(dress.condition) ? "bg-blue-100 text-blue-700" : ["can_giat","fair"].includes(dress.condition) ? "bg-yellow-100 text-yellow-700" : dress.condition === "can_sua" ? "bg-orange-100 text-orange-700" : "bg-red-100 text-red-700"}`}>
+                        {CONDITION[dress.condition] ?? dress.condition}
+                      </span>
+                      {/* Quick status change */}
+                      <select
+                        value={dress.rentalStatus}
+                        onChange={e => quickStatus.mutate({ id: dress.id, rentalStatus: e.target.value })}
+                        className="text-xs border border-border rounded-lg px-1.5 py-1 bg-background cursor-pointer focus:outline-none">
+                        <option value="san_sang">Sẵn sàng</option>
+                        <option value="dang_cho_thue">Đang thuê</option>
+                        <option value="ngung_cho_thue">Ngưng thuê</option>
+                      </select>
+                    </div>
+                    {dress.notes && <p className="text-xs text-muted-foreground mt-1.5 italic truncate">{dress.notes}</p>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={e => { if (e.target === e.currentTarget) closeModal(); }}>
+          <div className="bg-background rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-border">
+              <h2 className="font-bold text-lg">{editingDress ? "Sửa trang phục" : "Thêm trang phục mới"}</h2>
+              <button onClick={closeModal} className="p-2 rounded-lg hover:bg-muted"><X className="w-4 h-4" /></button>
             </div>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            <form onSubmit={handleSubmit} className="flex-1 overflow-auto p-5 space-y-4">
+              {/* Row 1: Code + Category */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Mã váy *</label>
+                  <input value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} required
+                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="VD: VP-001" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Nhóm trang phục</label>
+                  <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none">
+                    <option value="">-- Chọn nhóm --</option>
+                    {DRESS_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Name */}
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Tên váy *</label>
+                <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required
+                  className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  placeholder="Tên trang phục" />
+              </div>
+
+              {/* Color + Size + Style */}
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Màu sắc *</label>
+                  <input value={form.color} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} required
+                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none"
+                    placeholder="Trắng, Đỏ..." />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Size *</label>
+                  <input value={form.size} onChange={e => setForm(f => ({ ...f, size: e.target.value }))} required
+                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none"
+                    placeholder="S, M, L, XL..." />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Loại váy</label>
+                  <input value={form.style} onChange={e => setForm(f => ({ ...f, style: e.target.value }))}
+                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none"
+                    placeholder="A-line, Mermaid..." />
+                </div>
+              </div>
+
+              {/* Prices */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Giá thuê (VNĐ) *</label>
+                  <input type="number" min={0} value={form.rentalPrice}
+                    onChange={e => setForm(f => ({ ...f, rentalPrice: +e.target.value }))}
+                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none" required />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Giá cọc (VNĐ)</label>
+                  <input type="number" min={0} value={form.depositRequired}
+                    onChange={e => setForm(f => ({ ...f, depositRequired: +e.target.value }))}
+                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none" />
+                </div>
+              </div>
+
+              {/* Status + Condition */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Trạng thái cho thuê</label>
+                  <select value={form.rentalStatus} onChange={e => setForm(f => ({ ...f, rentalStatus: e.target.value }))}
+                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none">
+                    <option value="san_sang">Sẵn sàng cho thuê</option>
+                    <option value="dang_cho_thue">Đang cho thuê</option>
+                    <option value="ngung_cho_thue">Ngưng cho thuê</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Tình trạng</label>
+                  <select value={form.condition} onChange={e => setForm(f => ({ ...f, condition: e.target.value }))}
+                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none">
+                    {Object.entries(CONDITION).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Image URL */}
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Link ảnh</label>
+                <input value={form.imageUrl} onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))}
+                  className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none"
+                  placeholder="https://..." />
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Ghi chú</label>
+                <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                  rows={2} className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none resize-none"
+                  placeholder="Ghi chú thêm..." />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={closeModal}
+                  className="flex-1 py-2.5 border border-border rounded-xl text-sm font-medium hover:bg-muted transition-colors">
+                  Hủy
+                </button>
+                <button type="submit" disabled={createDress.isPending || updateDress.isPending}
+                  className="flex-1 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50">
+                  {editingDress ? "Lưu thay đổi" : "Thêm váy"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

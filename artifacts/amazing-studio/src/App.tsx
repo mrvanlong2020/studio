@@ -20,6 +20,7 @@ import ContractsPage from "@/pages/contracts";
 import ReportsPage from "@/pages/reports";
 import PaymentsPage from "@/pages/payments";
 import PhotoshopJobsPage from "@/pages/photoshop-jobs";
+import InternalCommsPage from "@/pages/internal-comms";
 import NotFound from "@/pages/not-found";
 import { StaffAuthProvider } from "@/contexts/StaffAuthContext";
 
@@ -56,6 +57,7 @@ function Router() {
         <Route path="/contracts" component={ContractsPage} />
         <Route path="/reports" component={ReportsPage} />
         <Route path="/photoshop-jobs" component={PhotoshopJobsPage} />
+        <Route path="/internal-comms" component={InternalCommsPage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Search, X, Check, AlertTriangle, Clock, ChevronDown,
@@ -72,12 +72,36 @@ export default function PhotoshopJobsPage() {
   const [editingJob, setEditingJob] = useState<PhotoshopJob | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [sortBy, setSortBy] = useState<"deadline" | "created" | "status" | "progress">("deadline");
+  const [bookingSearch, setBookingSearch] = useState("");
+  const [showBookingDrop, setShowBookingDrop] = useState(false);
+  const [linkedBookingId, setLinkedBookingId] = useState<number | null>(null);
+  const bookingSearchRef = useRef<HTMLDivElement>(null);
 
   const { data: jobs = [], isLoading } = useQuery<PhotoshopJob[]>({
     queryKey: ["photoshop-jobs"],
     queryFn: () => fetch(`${BASE}/api/photoshop-jobs`).then(r => r.json()),
     refetchInterval: 30000,
   });
+
+  // Booking search for modal
+  const { data: bookingResults = [] } = useQuery<any[]>({
+    queryKey: ["bookings-search", bookingSearch],
+    queryFn: () => bookingSearch.length >= 2
+      ? fetch(`${BASE}/api/bookings?q=${encodeURIComponent(bookingSearch)}`).then(r => r.json())
+      : Promise.resolve([]),
+    enabled: bookingSearch.length >= 2,
+  });
+
+  // Close booking dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (bookingSearchRef.current && !bookingSearchRef.current.contains(e.target as Node)) {
+        setShowBookingDrop(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const createJob = useMutation({
     mutationFn: (data: typeof EMPTY_FORM) => fetch(`${BASE}/api/photoshop-jobs`, {
@@ -119,6 +143,8 @@ export default function PhotoshopJobsPage() {
     setEditingJob(null);
     const today = new Date().toISOString().split("T")[0];
     setForm({ ...EMPTY_FORM, jobCode: `JOB-${Date.now().toString().slice(-6)}`, receivedFileDate: today });
+    setLinkedBookingId(null);
+    setBookingSearch("");
     setShowModal(true);
   }
 
@@ -132,15 +158,41 @@ export default function PhotoshopJobsPage() {
       status: j.status, progressPercent: j.progressPercent,
       totalPhotos: j.totalPhotos ?? 0, donePhotos: j.donePhotos ?? 0, notes: j.notes ?? ""
     });
+    setLinkedBookingId(j.bookingId ?? null);
+    setBookingSearch(j.bookingId ? `Đơn #${j.bookingId}` : "");
     setShowModal(true);
   }
 
-  function closeModal() { setShowModal(false); setEditingJob(null); }
+  function closeModal() {
+    setShowModal(false);
+    setEditingJob(null);
+    setLinkedBookingId(null);
+    setBookingSearch("");
+    setShowBookingDrop(false);
+  }
+
+  function selectBooking(b: any) {
+    setLinkedBookingId(b.id);
+    setBookingSearch(`${b.orderCode ?? `#${b.id}`} — ${b.customerName}`);
+    setShowBookingDrop(false);
+    // Auto-fill form fields
+    setForm(f => ({
+      ...f,
+      customerName: b.customerName ?? f.customerName,
+      customerPhone: b.customerPhone ?? f.customerPhone,
+      serviceName: b.serviceLabel ?? b.packageType ?? f.serviceName,
+      shootDate: b.shootDate ? b.shootDate.split("T")[0] : f.shootDate,
+      assignedStaffName: Array.isArray(b.assignedStaff) && b.assignedStaff.length > 0
+        ? b.assignedStaff.map((s: any) => s.name ?? s).join(", ")
+        : f.assignedStaffName,
+    }));
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (editingJob) updateJob.mutate({ id: editingJob.id, data: form });
-    else createJob.mutate(form);
+    const data = { ...form, ...(linkedBookingId ? { bookingId: linkedBookingId } : {}) };
+    if (editingJob) updateJob.mutate({ id: editingJob.id, data: data as any });
+    else createJob.mutate(data as any);
   }
 
   const filtered = useMemo(() => {
@@ -363,6 +415,59 @@ export default function PhotoshopJobsPage() {
               <button onClick={closeModal} className="p-2 rounded-lg hover:bg-muted"><X className="w-4 h-4" /></button>
             </div>
             <form onSubmit={handleSubmit} className="flex-1 overflow-auto p-5 space-y-4">
+
+              {/* Booking search */}
+              {!editingJob && (
+                <div ref={bookingSearchRef} className="relative">
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                    Liên kết đơn hàng (tuỳ chọn)
+                  </label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                    <input
+                      value={bookingSearch}
+                      onChange={e => { setBookingSearch(e.target.value); setShowBookingDrop(true); if (!e.target.value) setLinkedBookingId(null); }}
+                      onFocus={() => bookingSearch.length >= 2 && setShowBookingDrop(true)}
+                      placeholder="Nhập tên khách hoặc mã đơn (ít nhất 2 ký tự)..."
+                      className="w-full pl-9 pr-8 py-2 text-sm border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                    {bookingSearch && (
+                      <button type="button" onClick={() => { setBookingSearch(""); setLinkedBookingId(null); setShowBookingDrop(false); }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  {linkedBookingId && (
+                    <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Đã liên kết đơn #{linkedBookingId} · thông tin tự động điền bên dưới
+                    </p>
+                  )}
+                  {showBookingDrop && bookingSearch.length >= 2 && (
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-popover border border-border rounded-xl shadow-lg max-h-48 overflow-auto">
+                      {bookingResults.length === 0 ? (
+                        <p className="text-sm text-muted-foreground p-3 text-center">Không tìm thấy đơn hàng nào</p>
+                      ) : (
+                        bookingResults.slice(0, 8).map((b: any) => (
+                          <button key={b.id} type="button"
+                            onClick={() => selectBooking(b)}
+                            className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted transition-colors flex items-start gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium truncate">{b.customerName}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {b.orderCode ?? `#${b.id}`}
+                                {b.serviceLabel && ` · ${b.serviceLabel}`}
+                                {b.shootDate && ` · ${new Date(b.shootDate).toLocaleDateString("vi-VN")}`}
+                              </p>
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Mã job *</label>

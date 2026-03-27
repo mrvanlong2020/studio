@@ -22,6 +22,7 @@ import staffCastRouter from "./staff-cast";
 import jobEarningsRouter from "./job-earnings";
 import staffProfileRouter from "./staff-profile";
 import photoshopJobsRouter from "./photoshop-jobs";
+import internalCommsRouter from "./internal-comms";
 
 const router: IRouter = Router();
 
@@ -48,5 +49,6 @@ router.use(staffCastRouter);
 router.use(jobEarningsRouter);
 router.use(staffProfileRouter);
 router.use(photoshopJobsRouter);
+router.use(internalCommsRouter);
 
 export default router;

@@ -1,96 +1,98 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { dressesTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, ilike, or } from "drizzle-orm";
 
 const router: IRouter = Router();
 
+function fmt(d: typeof dressesTable.$inferSelect) {
+  return {
+    ...d,
+    rentalPrice: parseFloat(d.rentalPrice as string),
+    depositRequired: parseFloat(d.depositRequired as string),
+  };
+}
+
 router.get("/dresses", async (req, res) => {
-  const available = req.query.available;
-  let dresses;
-  if (available === "true") {
-    dresses = await db.select().from(dressesTable).where(eq(dressesTable.isAvailable, true));
-  } else if (available === "false") {
-    dresses = await db.select().from(dressesTable).where(eq(dressesTable.isAvailable, false));
-  } else {
-    dresses = await db.select().from(dressesTable).orderBy(dressesTable.code);
-  }
-  res.json(
-    dresses.map((d) => ({
-      ...d,
-      rentalPrice: parseFloat(d.rentalPrice),
-      depositRequired: parseFloat(d.depositRequired),
-    }))
-  );
+  try {
+    const { rentalStatus, search } = req.query as Record<string, string>;
+    let rows = await db.select().from(dressesTable).orderBy(dressesTable.code);
+    if (rentalStatus && rentalStatus !== "all") rows = rows.filter(d => d.rentalStatus === rentalStatus);
+    if (search) {
+      const q = search.toLowerCase();
+      rows = rows.filter(d =>
+        d.name.toLowerCase().includes(q) ||
+        d.code.toLowerCase().includes(q) ||
+        (d.category ?? "").toLowerCase().includes(q) ||
+        (d.color ?? "").toLowerCase().includes(q)
+      );
+    }
+    res.json(rows.map(fmt));
+  } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
 router.post("/dresses", async (req, res) => {
-  const { code, name, color, size, style, rentalPrice, depositRequired, condition, notes, imageUrl } = req.body;
-  const [dress] = await db
-    .insert(dressesTable)
-    .values({
-      code,
-      name,
-      color,
-      size,
-      style,
-      rentalPrice: String(rentalPrice),
-      depositRequired: String(depositRequired),
-      condition,
-      notes,
-      imageUrl,
-    })
-    .returning();
-  res.status(201).json({
-    ...dress,
-    rentalPrice: parseFloat(dress.rentalPrice),
-    depositRequired: parseFloat(dress.depositRequired),
-  });
+  try {
+    const { code, name, category, color, size, style, rentalPrice, depositRequired, rentalStatus, condition, notes, imageUrl } = req.body;
+    const [dress] = await db.insert(dressesTable).values({
+      code, name,
+      category: category || "",
+      color, size,
+      style: style || null,
+      rentalPrice: String(rentalPrice || 0),
+      depositRequired: String(depositRequired || 0),
+      rentalStatus: rentalStatus || "san_sang",
+      isAvailable: (rentalStatus || "san_sang") === "san_sang",
+      condition: condition || "tot",
+      notes: notes || null,
+      imageUrl: imageUrl || null,
+    }).returning();
+    res.status(201).json(fmt(dress));
+  } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
 router.get("/dresses/:id", async (req, res) => {
-  const id = parseInt(req.params.id);
-  const [dress] = await db.select().from(dressesTable).where(eq(dressesTable.id, id));
-  if (!dress) return res.status(404).json({ error: "Dress not found" });
-  res.json({
-    ...dress,
-    rentalPrice: parseFloat(dress.rentalPrice),
-    depositRequired: parseFloat(dress.depositRequired),
-  });
+  try {
+    const [dress] = await db.select().from(dressesTable).where(eq(dressesTable.id, +req.params.id));
+    if (!dress) return res.status(404).json({ error: "Dress not found" });
+    res.json(fmt(dress));
+  } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
 router.put("/dresses/:id", async (req, res) => {
-  const id = parseInt(req.params.id);
-  const { code, name, color, size, style, rentalPrice, depositRequired, condition, notes, imageUrl, isAvailable } = req.body;
-  const [dress] = await db
-    .update(dressesTable)
-    .set({
-      code,
-      name,
-      color,
-      size,
-      style,
-      rentalPrice: rentalPrice !== undefined ? String(rentalPrice) : undefined,
-      depositRequired: depositRequired !== undefined ? String(depositRequired) : undefined,
-      condition,
-      notes,
-      imageUrl,
-      isAvailable,
-    })
-    .where(eq(dressesTable.id, id))
-    .returning();
-  if (!dress) return res.status(404).json({ error: "Dress not found" });
-  res.json({
-    ...dress,
-    rentalPrice: parseFloat(dress.rentalPrice),
-    depositRequired: parseFloat(dress.depositRequired),
-  });
+  try {
+    const { code, name, category, color, size, style, rentalPrice, depositRequired, rentalStatus, condition, notes, imageUrl, isAvailable } = req.body;
+    const updates: Record<string, unknown> = {};
+    if (code !== undefined) updates.code = code;
+    if (name !== undefined) updates.name = name;
+    if (category !== undefined) updates.category = category;
+    if (color !== undefined) updates.color = color;
+    if (size !== undefined) updates.size = size;
+    if (style !== undefined) updates.style = style;
+    if (rentalPrice !== undefined) updates.rentalPrice = String(rentalPrice);
+    if (depositRequired !== undefined) updates.depositRequired = String(depositRequired);
+    if (condition !== undefined) updates.condition = condition;
+    if (notes !== undefined) updates.notes = notes;
+    if (imageUrl !== undefined) updates.imageUrl = imageUrl;
+    if (rentalStatus !== undefined) {
+      updates.rentalStatus = rentalStatus;
+      updates.isAvailable = rentalStatus === "san_sang";
+    }
+    if (isAvailable !== undefined) {
+      updates.isAvailable = isAvailable;
+      if (!updates.rentalStatus) updates.rentalStatus = isAvailable ? "san_sang" : "dang_cho_thue";
+    }
+    const [dress] = await db.update(dressesTable).set(updates as never).where(eq(dressesTable.id, +req.params.id)).returning();
+    if (!dress) return res.status(404).json({ error: "Dress not found" });
+    res.json(fmt(dress));
+  } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
 router.delete("/dresses/:id", async (req, res) => {
-  const id = parseInt(req.params.id);
-  await db.delete(dressesTable).where(eq(dressesTable.id, id));
-  res.status(204).send();
+  try {
+    await db.delete(dressesTable).where(eq(dressesTable.id, +req.params.id));
+    res.status(204).send();
+  } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
 export default router;
