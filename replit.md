@@ -10,12 +10,12 @@ A wedding photography studio and wedding dress rental management system for "Ama
 
 ### Features
 - **Tổng quan (Dashboard)**: Real-time stats, revenue chart, upcoming bookings
-- **Khách hàng (Customers)**: CRUD customer management with search
+- **Khách hàng (Customers)**: CRUD customer management with search; phone number has UNIQUE constraint at DB level (`customers_phone_unique`); client-side check on create AND edit (handles spaces); API returns 409 with Vietnamese error on duplicate phone; Drizzle schema updated to `.unique()`
 - **Lịch chụp (Calendar)**: Google Calendar-style 3-view system:
   - **Month view**: 30-day grid with booking chips (color-coded by status), solar+lunar calendar
   - **Day view**: 24h timeline, click hour slot → create show form; role toggle "Admin/NV" button in header
-  - **Detail view** (`ShowDetailPanel`): Read-only panel. Admin sees finances + edit/delete; staff sees only work info. If booking has `parentId` → shows "Tất cả dịch vụ trong hợp đồng" sibling list + contract totals.
-  - **Form view** (`ShowFormPanel`): Edit/create. Toggle "＋ Nhiều dịch vụ / ngày khác" for multi-service contract mode (see below).
+  - **Detail view** (`ShowDetailPanel`): Read-only panel. Admin sees finances + edit/delete; staff sees only work info. If booking has `parentId` → shows "Tất cả dịch vụ trong hợp đồng" sibling list + contract totals. Each item shows `notes` (📝 amber block) and `conceptImages` (🖼️ 3-col grid, click for lightbox).
+  - **Form view** (`ShowFormPanel`): Edit/create. Toggle "＋ Nhiều dịch vụ / ngày khác" for multi-service contract mode (see below). Each `OrderLineRow` has `notes` textarea + concept image upload section (presigned URL → objectPath stored in `OrderLine.conceptImages[]`).
   - **Role toggle**: "Admin" ↔ "Nhân viên" in both month + day view headers; persisted to `localStorage.cal_view_mode`
 - **Multi-service contract (Hợp đồng đa dịch vụ)**:
   - **Data model**: 1 parent booking (`isParentContract=true`) + N child bookings (`parentId=parentId`). Each child has its own `shootDate`, `serviceLabel`, `items`, `assignedStaff`.

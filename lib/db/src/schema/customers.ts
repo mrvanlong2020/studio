@@ -7,7 +7,7 @@ export const customersTable = pgTable("customers", {
   customCode: text("custom_code"),
   name: text("name").notNull(),
   gender: text("gender"),
-  phone: text("phone").notNull(),
+  phone: text("phone").notNull().unique(),
   email: text("email"),
   facebook: text("facebook"),
   zalo: text("zalo"),

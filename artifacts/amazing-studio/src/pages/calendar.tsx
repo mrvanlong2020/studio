@@ -10,6 +10,7 @@ import {
 } from "date-fns";
 import { vi } from "date-fns/locale";
 import { formatVND } from "@/lib/utils";
+import { getImageSrc } from "@/lib/imageUtils";
 import {
   ChevronLeft, ChevronRight, Calendar, Clock, Phone, Package2, Sun, Moon,
   AlertCircle, Plus, X, Check, Camera, User, Sparkles,
@@ -69,6 +70,8 @@ type OrderLine = {
   selectedAddons: string[];
   photoId: number | null; photoName: string; photoTask: string;
   makeupId: number | null; makeupName: string; makeupTask: string;
+  notes?: string;
+  conceptImages?: string[];
 };
 type SubServiceDraft = {
   id: string;
@@ -187,6 +190,8 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
   onRemove?: () => void;
 }) {
   const [useCustom, setUseCustom] = useState(!line.serviceId && !line.serviceKey && !!line.serviceName);
+  const [uploadingConcept, setUploadingConcept] = useState(false);
+  const conceptImgRef = useRef<HTMLInputElement>(null);
 
   const selectedSvc = line.serviceKey ? services.find(s => s.key === line.serviceKey) : null;
   const isPkg = !!selectedSvc?.key?.startsWith("pkg-");
@@ -517,6 +522,77 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
         )}
       </div>
 
+      {/* Ghi chú & Ảnh concept per dịch vụ */}
+      <div className="space-y-2 border-t border-border/30 pt-2">
+        <div>
+          <p className="text-[10px] text-muted-foreground mb-1">📝 Ghi chú / Yêu cầu dịch vụ này</p>
+          <textarea
+            value={line.notes ?? ""}
+            onChange={e => onChange({ ...line, notes: e.target.value })}
+            rows={2}
+            placeholder="Ghi chú yêu cầu của khách cho dịch vụ này…"
+            className="w-full text-xs border border-input rounded-lg px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-primary/20 resize-none"
+          />
+        </div>
+        <div>
+          <p className="text-[10px] text-muted-foreground mb-1.5">🖼️ Ảnh concept ({(line.conceptImages ?? []).length})</p>
+          {(line.conceptImages ?? []).length > 0 && (
+            <div className="grid grid-cols-4 gap-1.5 mb-2">
+              {(line.conceptImages ?? []).map((imgUrl, i) => {
+                const src = getImageSrc(imgUrl);
+                return src ? (
+                  <div key={i} className="relative aspect-square">
+                    <img src={src} alt={`concept ${i + 1}`} className="w-full h-full object-cover rounded-lg" />
+                    <button
+                      type="button"
+                      onClick={() => onChange({ ...line, conceptImages: (line.conceptImages ?? []).filter((_, j) => j !== i) })}
+                      className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/60 rounded-full flex items-center justify-center text-white hover:bg-destructive transition-colors"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                ) : null;
+              })}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => conceptImgRef.current?.click()}
+            disabled={uploadingConcept}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground border border-dashed border-border rounded-lg px-2.5 py-1.5 hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
+          >
+            {uploadingConcept ? <span>Đang tải ảnh...</span> : <><Plus className="w-3 h-3" /> Thêm ảnh concept</>}
+          </button>
+          <input
+            ref={conceptImgRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setUploadingConcept(true);
+              try {
+                const res = await fetch(`${BASE}/api/storage/uploads/request-url`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+                });
+                const { uploadURL, objectPath } = await res.json();
+                if (!uploadURL) throw new Error("No upload URL");
+                await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
+                onChange({ ...line, conceptImages: [...(line.conceptImages ?? []), objectPath] });
+              } catch (err) {
+                console.error("Concept image upload failed:", err);
+              } finally {
+                setUploadingConcept(false);
+                e.target.value = "";
+              }
+            }}
+          />
+        </div>
+      </div>
+
       {/* Panel lợi nhuận (chỉ hiện khi gói được chọn) */}
       {isPkg && line.price > 0 && (
         <div className="text-[11px] rounded-lg border overflow-hidden">
@@ -627,6 +703,7 @@ function ShowFormPanel({
     price: 0, basePrice: 0, selectedAddons: [],
     photoId: null, photoName: "", photoTask: "",
     makeupId: null, makeupName: "", makeupTask: "",
+    notes: "", conceptImages: [],
   });
   const makeSubDraft = (defaultDate: string, defaultTime: string): SubServiceDraft => ({
     id: genId(), serviceLabel: "", shootDate: defaultDate, shootTime: defaultTime,
@@ -1544,6 +1621,7 @@ function ShowDetailPanel({
   const parentContract: (Booking & { remainingAmount: number }) | null = (fullDetail?.parentContract as (Booking & { remainingAmount: number })) ?? null;
 
   const [deleting, setDeleting] = useState(false);
+  const [previewImg, setPreviewImg] = useState<string | null>(null);
 
   const st = STATUS[booking.status as keyof typeof STATUS] ?? STATUS.pending;
 
@@ -1831,6 +1909,35 @@ function ShowDetailPanel({
                         )}
                       </div>
                     )}
+
+                    {/* Per-item notes */}
+                    {item.notes && (
+                      <div className="px-3 py-2 bg-amber-50/40 dark:bg-amber-950/10 border-t border-border/30">
+                        <p className="text-[10px] font-bold text-amber-700 dark:text-amber-300 mb-1">📝 Ghi chú dịch vụ</p>
+                        <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed whitespace-pre-line">{item.notes}</p>
+                      </div>
+                    )}
+
+                    {/* Concept images */}
+                    {item.conceptImages && item.conceptImages.length > 0 && (
+                      <div className="px-3 py-2 border-t border-border/30">
+                        <p className="text-[10px] font-bold text-muted-foreground mb-2">🖼️ Ảnh concept ({item.conceptImages.length})</p>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {item.conceptImages.map((imgUrl: string, ci: number) => {
+                            const src = getImageSrc(imgUrl);
+                            return src ? (
+                              <button
+                                key={ci}
+                                onClick={() => setPreviewImg(src)}
+                                className="aspect-square rounded-lg overflow-hidden bg-muted hover:ring-2 hover:ring-primary transition-all"
+                              >
+                                <img src={src} alt={`concept ${ci + 1}`} className="w-full h-full object-cover" />
+                              </button>
+                            ) : null;
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1956,6 +2063,27 @@ function ShowDetailPanel({
           <p className="text-center text-xs text-muted-foreground/60 pb-2">#{booking.orderCode}</p>
         </div>
       </div>
+
+      {/* Lightbox — ảnh concept toàn màn hình */}
+      {previewImg && (
+        <div
+          className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setPreviewImg(null)}
+        >
+          <img
+            src={previewImg}
+            alt="Xem ảnh concept"
+            className="max-w-full max-h-full object-contain rounded-xl"
+            onClick={e => e.stopPropagation()}
+          />
+          <button
+            onClick={() => setPreviewImg(null)}
+            className="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full bg-black/40 hover:bg-black/60 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

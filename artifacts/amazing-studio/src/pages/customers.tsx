@@ -198,13 +198,12 @@ export default function CustomersPage() {
     if (!form.name.trim()) { setFormError("Vui lòng nhập họ và tên khách hàng"); return; }
     if (!form.phone.trim()) { setFormError("Vui lòng nhập số điện thoại"); return; }
 
-    // Kiểm tra trùng số điện thoại (chỉ khi tạo mới)
-    if (!editingId) {
-      const existing = customers.find(c => c.phone.replace(/\s/g, "") === form.phone.replace(/\s/g, ""));
-      if (existing) {
-        setFormError(`Số điện thoại này đã có trong hệ thống (${existing.name} – ${existing.customCode}). Vui lòng tìm và chỉnh sửa hồ sơ khách cũ.`);
-        return;
-      }
+    // Kiểm tra trùng số điện thoại (khi tạo mới hoặc đổi SĐT khi sửa)
+    const normalizedPhone = form.phone.replace(/\s/g, "");
+    const existing = customers.find(c => c.phone.replace(/\s/g, "") === normalizedPhone && c.id !== editingId);
+    if (existing) {
+      setFormError(`Số điện thoại này đã có trong hệ thống (${existing.name}${existing.customCode ? ` – ${existing.customCode}` : ""}). Vui lòng kiểm tra lại.`);
+      return;
     }
 
     const payload = {

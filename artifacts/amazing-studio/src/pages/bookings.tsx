@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatVND, formatDate } from "@/lib/utils";
+import { getImageSrc } from "@/lib/imageUtils";
 import { Button, Input, Select, Textarea, Badge, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui";
 import {
   Plus, Search, Phone, MapPin, Clock, Package2, ChevronRight, X, CheckCircle2,
@@ -39,7 +40,7 @@ const PAYMENT_TYPE: Record<string, string> = {
 type Booking = {
   id: number; orderCode: string; customerId: number; customerName: string; customerPhone: string;
   shootDate: string; shootTime?: string; serviceCategory: string; packageType: string; location?: string;
-  status: string; items: { name: string; qty: number; unitPrice: number; total: number }[];
+  status: string; items: { name?: string; qty?: number; unitPrice?: number; total?: number; serviceName?: string; price?: number; notes?: string; conceptImages?: string[]; [key: string]: unknown }[];
   totalAmount: number; depositAmount: number; paidAmount: number; discountAmount: number; remainingAmount: number;
   totalExpenses: number; grossProfit: number; internalNotes?: string; notes?: string;
   payments: Payment[]; expenses: Expense[]; tasks: Task[];
@@ -300,34 +301,44 @@ export default function BookingsPage() {
                         </div>
 
                         {detail.items.length > 0 && (
-                          <div>
-                            <h4 className="font-semibold text-sm mb-2">Danh sách dịch vụ</h4>
-                            <div className="rounded-xl border overflow-hidden">
-                              <table className="w-full text-sm">
-                                <thead className="bg-muted/50 text-xs text-muted-foreground">
-                                  <tr>
-                                    <th className="px-3 py-2 text-left">Dịch vụ</th>
-                                    <th className="px-3 py-2 text-center">SL</th>
-                                    <th className="px-3 py-2 text-right">Đơn giá</th>
-                                    <th className="px-3 py-2 text-right">Thành tiền</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-border">
-                                  {detail.items.map((item, i) => (
-                                    <tr key={i}>
-                                      <td className="px-3 py-2 font-medium">{item.name}</td>
-                                      <td className="px-3 py-2 text-center text-muted-foreground">{item.qty}</td>
-                                      <td className="px-3 py-2 text-right text-muted-foreground">{formatVND(item.unitPrice)}</td>
-                                      <td className="px-3 py-2 text-right font-semibold text-primary">{formatVND(item.total)}</td>
-                                    </tr>
-                                  ))}
-                                  <tr className="bg-muted/30 font-bold">
-                                    <td colSpan={3} className="px-3 py-2 text-right">Tổng cộng</td>
-                                    <td className="px-3 py-2 text-right text-primary">{formatVND(detail.totalAmount)}</td>
-                                  </tr>
-                                </tbody>
-                              </table>
-                            </div>
+                          <div className="space-y-3">
+                            <h4 className="font-semibold text-sm">Danh sách dịch vụ</h4>
+                            {detail.items.map((item, i) => {
+                              const displayName = item.serviceName || item.name || `Dịch vụ ${i + 1}`;
+                              const displayPrice = item.price ?? item.total ?? 0;
+                              return (
+                                <div key={i} className="rounded-xl border border-border/50 overflow-hidden">
+                                  <div className="flex items-center justify-between px-3 py-2.5 bg-muted/30">
+                                    <span className="font-semibold text-sm">{displayName}</span>
+                                    {displayPrice > 0 && (
+                                      <span className="text-sm font-bold text-primary">{formatVND(displayPrice)}</span>
+                                    )}
+                                  </div>
+                                  {item.notes && (
+                                    <div className="px-3 py-2 bg-amber-50/40 border-t border-border/30">
+                                      <p className="text-[10px] font-bold text-amber-700 mb-1">📝 Ghi chú dịch vụ</p>
+                                      <p className="text-xs text-amber-800 leading-relaxed whitespace-pre-line">{item.notes}</p>
+                                    </div>
+                                  )}
+                                  {item.conceptImages && item.conceptImages.length > 0 && (
+                                    <div className="px-3 py-2 border-t border-border/30">
+                                      <p className="text-[10px] font-bold text-muted-foreground mb-2">🖼️ Ảnh concept ({item.conceptImages.length})</p>
+                                      <div className="grid grid-cols-4 gap-1.5">
+                                        {item.conceptImages.map((imgUrl, ci) => {
+                                          const src = getImageSrc(imgUrl);
+                                          return src ? (
+                                            <a key={ci} href={src} target="_blank" rel="noopener noreferrer"
+                                              className="aspect-square rounded-lg overflow-hidden bg-muted hover:ring-2 hover:ring-primary transition-all block">
+                                              <img src={src} alt={`concept ${ci + 1}`} className="w-full h-full object-cover" />
+                                            </a>
+                                          ) : null;
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
 

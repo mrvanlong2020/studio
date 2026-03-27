@@ -48,13 +48,21 @@ router.get("/customers", async (req, res) => {
 
 router.post("/customers", async (req, res) => {
   const { name, phone, email, address, notes, facebook, zalo, source, tags, gender, avatar } = req.body;
-  const count = await db.select().from(customersTable);
-  const customCode = `KH${String(count.length + 1).padStart(3, "0")}`;
-  const [customer] = await db
-    .insert(customersTable)
-    .values({ name, phone, email, address, notes, facebook, zalo, source: source || "other", tags: tags || [], gender, avatar, customCode })
-    .returning();
-  res.status(201).json({ ...customer, totalBookings: 0, totalPaid: 0, totalDebt: 0 });
+  if (!phone?.trim()) return res.status(400).json({ error: "Số điện thoại là bắt buộc" });
+  try {
+    const count = await db.select().from(customersTable);
+    const customCode = `KH${String(count.length + 1).padStart(3, "0")}`;
+    const [customer] = await db
+      .insert(customersTable)
+      .values({ name, phone: phone.trim(), email, address, notes, facebook, zalo, source: source || "other", tags: tags || [], gender, avatar, customCode })
+      .returning();
+    res.status(201).json({ ...customer, totalBookings: 0, totalPaid: 0, totalDebt: 0 });
+  } catch (err: any) {
+    if (err?.code === "23505" && err?.constraint?.includes("phone")) {
+      return res.status(409).json({ error: `Số điện thoại "${phone}" đã tồn tại trong hệ thống. Vui lòng kiểm tra lại.` });
+    }
+    throw err;
+  }
 });
 
 router.get("/customers/:id", async (req, res) => {
@@ -73,13 +81,21 @@ router.get("/customers/:id", async (req, res) => {
 router.put("/customers/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   const { name, phone, email, address, notes, facebook, zalo, source, tags, gender, avatar } = req.body;
-  const [customer] = await db
-    .update(customersTable)
-    .set({ name, phone, email, address, notes, facebook, zalo, source, tags: tags || [], gender, avatar })
-    .where(eq(customersTable.id, id))
-    .returning();
-  if (!customer) return res.status(404).json({ error: "Không tìm thấy khách hàng" });
-  res.json({ ...customer, totalBookings: 0, totalPaid: 0, totalDebt: 0 });
+  if (!phone?.trim()) return res.status(400).json({ error: "Số điện thoại là bắt buộc" });
+  try {
+    const [customer] = await db
+      .update(customersTable)
+      .set({ name, phone: phone.trim(), email, address, notes, facebook, zalo, source, tags: tags || [], gender, avatar })
+      .where(eq(customersTable.id, id))
+      .returning();
+    if (!customer) return res.status(404).json({ error: "Không tìm thấy khách hàng" });
+    res.json({ ...customer, totalBookings: 0, totalPaid: 0, totalDebt: 0 });
+  } catch (err: any) {
+    if (err?.code === "23505" && err?.constraint?.includes("phone")) {
+      return res.status(409).json({ error: `Số điện thoại "${phone}" đã được dùng bởi khách hàng khác. Vui lòng kiểm tra lại.` });
+    }
+    throw err;
+  }
 });
 
 router.delete("/customers/:id", async (req, res) => {
