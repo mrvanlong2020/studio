@@ -6,6 +6,15 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 ## App: Amazing Studio
 
+### Authentication
+- **Login gate**: `LoginPage` (`src/pages/login.tsx`) shown when no valid session; token stored in `localStorage` key `amazingStudioToken_v1`
+- **JWT flow**: `POST /api/auth/login` validates phone+password → returns `{ token, user }`; `GET /api/auth/me` verifies token
+- **Default passwords**: each staff's password = their phone number; admin (no phone) = "admin123"; use username "admin" for the admin account
+- **Roles**: `admin` role → full access (`effectiveIsAdmin`); staff roles → limited nav (no Payments, Expenses, Revenue, etc.)
+- **Password hashing**: bcryptjs, 10 rounds; `password_hash` column on `staff` table (idempotent ALTER TABLE migration on startup)
+- **Change password**: `POST /api/auth/change-password` (admin can change for others; staff can change own with current password check)
+- **StaffAuthContext**: `login(user, token)`, `logout()`, `authChecked` (loading state on first render), `token` — all exported from context
+
 A wedding photography studio and wedding dress rental management system for "Amazing Studio".
 
 ### Features

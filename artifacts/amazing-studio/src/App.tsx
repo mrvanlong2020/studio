@@ -24,7 +24,9 @@ import RevenuePage from "@/pages/revenue";
 import PhotoshopJobsPage from "@/pages/photoshop-jobs";
 import InternalCommsPage from "@/pages/internal-comms";
 import NotFound from "@/pages/not-found";
-import { StaffAuthProvider } from "@/contexts/StaffAuthContext";
+import LoginPage from "@/pages/login";
+import { StaffAuthProvider, useStaffAuth } from "@/contexts/StaffAuthContext";
+import { Camera } from "lucide-react";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -68,13 +70,36 @@ function Router() {
   );
 }
 
+function AppContent() {
+  const { viewer, authChecked, login } = useStaffAuth();
+
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-rose-50 via-pink-50 to-purple-50 dark:from-slate-950 dark:via-slate-900 dark:to-purple-950">
+        <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-rose-400 to-purple-600 rounded-3xl shadow-2xl shadow-rose-200/50 mb-5 animate-pulse">
+          <Camera className="w-10 h-10 text-white" />
+        </div>
+        <p className="text-muted-foreground text-sm mt-2">Đang tải...</p>
+      </div>
+    );
+  }
+
+  if (!viewer) {
+    return <LoginPage onLogin={login} />;
+  }
+
+  return (
+    <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+      <Router />
+    </WouterRouter>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <StaffAuthProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
+        <AppContent />
       </StaffAuthProvider>
     </QueryClientProvider>
   );

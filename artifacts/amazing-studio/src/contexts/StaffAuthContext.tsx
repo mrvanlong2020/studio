@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
 
 export interface ViewerUser {
   id: number;
@@ -6,6 +6,9 @@ export interface ViewerUser {
   role: string;
   roles: string[];
   isAdmin: boolean;
+  phone?: string;
+  email?: string;
+  avatar?: string;
 }
 
 export type ViewMode = "admin" | "staff";
@@ -13,6 +16,10 @@ export type SimulateRole = "photographer" | "makeup" | "photoshop" | "sale" | "a
 
 interface StaffAuthContextValue {
   viewer: ViewerUser | null;
+  token: string | null;
+  authChecked: boolean;
+  login: (user: Omit<ViewerUser, "isAdmin">, token: string) => void;
+  logout: () => void;
   setViewer: (v: ViewerUser | null) => void;
   canViewProfile: (staffId: number) => boolean;
   isAdmin: boolean;
@@ -25,6 +32,10 @@ interface StaffAuthContextValue {
 
 const StaffAuthContext = createContext<StaffAuthContextValue>({
   viewer: null,
+  token: null,
+  authChecked: false,
+  login: () => {},
+  logout: () => {},
   setViewer: () => {},
   canViewProfile: () => false,
   isAdmin: false,
@@ -35,14 +46,15 @@ const StaffAuthContext = createContext<StaffAuthContextValue>({
   effectiveIsAdmin: false,
 });
 
-const STORAGE_KEY = "amazingStudioViewer_v2";
+const TOKEN_KEY = "amazingStudioToken_v1";
 const VIEW_MODE_KEY = "amazingStudioViewMode_v1";
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-function loadViewer(): ViewerUser | null {
-  try {
-    const s = localStorage.getItem(STORAGE_KEY);
-    return s ? (JSON.parse(s) as ViewerUser) : null;
-  } catch { return null; }
+function makeViewer(u: Omit<ViewerUser, "isAdmin">): ViewerUser {
+  return {
+    ...u,
+    isAdmin: u.role === "admin" || (Array.isArray(u.roles) && u.roles.includes("admin")),
+  };
 }
 
 function loadViewMode(): ViewMode {
@@ -53,15 +65,58 @@ function loadViewMode(): ViewMode {
 }
 
 export function StaffAuthProvider({ children }: { children: React.ReactNode }) {
-  const [viewer, setViewerState] = useState<ViewerUser | null>(loadViewer);
+  const [viewer, setViewerState] = useState<ViewerUser | null>(null);
+  const [token, setTokenState] = useState<string | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [viewMode, setViewModeState] = useState<ViewMode>(loadViewMode);
   const [simulateRole, setSimulateRoleState] = useState<SimulateRole>(null);
 
-  const setViewer = (v: ViewerUser | null) => {
+  useEffect(() => {
+    const storedToken = localStorage.getItem(TOKEN_KEY);
+    if (!storedToken) {
+      setAuthChecked(true);
+      return;
+    }
+    fetch(`${BASE}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${storedToken}` },
+    })
+      .then(r => (r.ok ? r.json() : null))
+      .then((u: Omit<ViewerUser, "isAdmin"> | null) => {
+        if (u) {
+          setViewerState(makeViewer(u));
+          setTokenState(storedToken);
+        } else {
+          localStorage.removeItem(TOKEN_KEY);
+          setTokenState(null);
+        }
+      })
+      .catch(() => {
+        localStorage.removeItem(TOKEN_KEY);
+      })
+      .finally(() => setAuthChecked(true));
+  }, []);
+
+  const login = (u: Omit<ViewerUser, "isAdmin">, tok: string) => {
+    const v = makeViewer(u);
+    localStorage.setItem(TOKEN_KEY, tok);
+    setTokenState(tok);
     setViewerState(v);
-    if (v) localStorage.setItem(STORAGE_KEY, JSON.stringify(v));
-    else localStorage.removeItem(STORAGE_KEY);
+    if (v.isAdmin) {
+      setViewModeState("admin");
+    } else {
+      setViewModeState("staff");
+    }
   };
+
+  const logout = () => {
+    localStorage.removeItem(TOKEN_KEY);
+    setTokenState(null);
+    setViewerState(null);
+    setViewModeState("admin");
+    setSimulateRoleState(null);
+  };
+
+  const setViewer = (v: ViewerUser | null) => setViewerState(v);
 
   const setViewMode = (m: ViewMode) => {
     setViewModeState(m);
@@ -85,8 +140,10 @@ export function StaffAuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <StaffAuthContext.Provider value={{
-      viewer, setViewer, canViewProfile, isAdmin,
-      viewMode, setViewMode, simulateRole, setSimulateRole, effectiveIsAdmin
+      viewer, token, authChecked,
+      login, logout, setViewer, canViewProfile,
+      isAdmin, viewMode, setViewMode,
+      simulateRole, setSimulateRole, effectiveIsAdmin,
     }}>
       {children}
     </StaffAuthContext.Provider>

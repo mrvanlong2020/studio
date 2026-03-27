@@ -875,7 +875,7 @@ export default function StaffPage() {
   const [typeFilter, setTypeFilter] = useState<"all" | "official" | "freelancer">("all");
   const [roleFilter, setRoleFilter] = useState("all");
   const [viewerSheet, setViewerSheet] = useState(false);
-  const { viewer, setViewer } = useStaffAuth();
+  const { viewer, setViewer, logout } = useStaffAuth();
 
   const { data: staffList = [] } = useQuery<Array<Record<string, unknown>>>({
     queryKey: ["staff"],
@@ -953,7 +953,7 @@ export default function StaffPage() {
             {viewer ? "Đổi" : "Chọn tài khoản"}
           </button>
           {viewer && (
-            <button onClick={() => setViewer(null)} className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors" title="Đăng xuất">
+            <button onClick={logout} className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors" title="Đăng xuất">
               <LogOut className="w-4 h-4" />
             </button>
           )}

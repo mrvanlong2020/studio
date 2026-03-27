@@ -51,7 +51,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [isMobileOpen, setIsMobileOpen] = React.useState(false);
   const [showRoleMenu, setShowRoleMenu] = React.useState(false);
   const roleMenuRef = React.useRef<HTMLDivElement>(null);
-  const { isAdmin, viewMode, setViewMode, simulateRole, setSimulateRole, effectiveIsAdmin } = useStaffAuth();
+  const { isAdmin, viewMode, setViewMode, simulateRole, setSimulateRole, effectiveIsAdmin, logout, viewer } = useStaffAuth();
 
   React.useEffect(() => {
     setIsMobileOpen(false);
@@ -128,8 +128,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
               }
             </div>
             <div className="flex-1 min-w-0 text-left">
-              <p className="text-xs font-semibold text-sidebar-foreground truncate">{modeLabel}</p>
-              <p className="text-[10px] text-muted-foreground">Bấm để đổi chế độ xem</p>
+              <p className="text-xs font-semibold text-sidebar-foreground truncate">{viewer?.name ?? modeLabel}</p>
+              <p className="text-[10px] text-muted-foreground truncate">{modeLabel}</p>
             </div>
             <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform flex-shrink-0", showRoleMenu && "rotate-180")} />
           </button>
@@ -235,7 +235,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <Moon className="w-5 h-5 text-muted-foreground" />
             Chế độ Tối
           </button>
-          <button className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-destructive hover:bg-destructive/10 w-full transition-colors">
+          <button
+            onClick={logout}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-destructive hover:bg-destructive/10 w-full transition-colors">
             <LogOut className="w-5 h-5" />
             Đăng xuất
           </button>
