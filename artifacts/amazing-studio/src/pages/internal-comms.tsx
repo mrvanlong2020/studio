@@ -282,9 +282,9 @@ export default function InternalCommsPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Message input — fixed at bottom */}
+      {/* Message input — sticky at bottom */}
       <form onSubmit={handleSendMessage}
-        className="px-3 py-3 border-t border-border flex gap-2 bg-background flex-shrink-0">
+        className="px-3 py-3 border-t border-border flex gap-2 bg-background flex-shrink-0 sticky bottom-0">
         <input
           ref={inputRef}
           value={newMessage}
