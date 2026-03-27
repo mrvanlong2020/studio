@@ -128,7 +128,7 @@ export default function WardrobePage() {
 
   const deleteDress = useMutation({
     mutationFn: (id: number) => fetch(`${BASE}/api/dresses/${id}`, { method: "DELETE" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["dresses"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["dresses"] }); qc.invalidateQueries({ queryKey: ["dress-categories"] }); },
   });
 
   const quickStatus = useMutation({
