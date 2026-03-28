@@ -253,6 +253,30 @@ router.get("/staff/me/kpi", async (req, res) => {
   res.json({ month, year, metrics, overallScore, overallStatus });
 });
 
+// ── PATCH /staff/me: Cập nhật hồ sơ bản thân (avatar, email, phone, name) ────
+router.patch("/staff/me", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
+
+  const { avatar, email, phone, name } = req.body as {
+    avatar?: string; email?: string; phone?: string; name?: string;
+  };
+  const update: Record<string, unknown> = {};
+  if (avatar !== undefined) update.avatar = avatar || null;
+  if (email !== undefined) update.email = email || null;
+  if (phone !== undefined) update.phone = phone || null;
+  if (name !== undefined) update.name = name || null;
+
+  if (Object.keys(update).length === 0) return res.status(400).json({ error: "Không có dữ liệu để cập nhật" });
+
+  const [member] = await db.update(staffTable).set(update).where(eq(staffTable.id, callerId)).returning();
+  if (!member) return res.status(404).json({ error: "Không tìm thấy nhân viên" });
+
+  const { passwordHash: _ph, ...safe } = member as typeof member & { passwordHash?: unknown };
+  void _ph;
+  res.json(safe);
+});
+
 // ── /me: Đổi mật khẩu ────────────────────────────────────────────────────────
 router.patch("/staff/me/password", async (req, res) => {
   const callerId = verifyToken(req.headers.authorization);

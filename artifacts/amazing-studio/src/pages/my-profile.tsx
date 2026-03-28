@@ -126,8 +126,8 @@ export default function MyProfilePage() {
     setAvatarUploading(true);
     try {
       const b64 = await compressStaffAvatar(file);
-      await fetchJson(`/api/staff/${viewer.id}`, {
-        method: "PUT",
+      await fetchJson(`/api/staff/me`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({ avatar: b64 }),
       });
@@ -193,8 +193,8 @@ export default function MyProfilePage() {
                       if (!viewer) return;
                       setAvatarUploading(true);
                       try {
-                        await fetchJson(`/api/staff/${viewer.id}`, {
-                          method: "PUT",
+                        await fetchJson(`/api/staff/me`, {
+                          method: "PATCH",
                           headers: { "Content-Type": "application/json", ...authHeader },
                           body: JSON.stringify({ avatar: b64 }),
                         });
