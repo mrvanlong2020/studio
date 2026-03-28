@@ -76,7 +76,7 @@ type AttRules = {
   lateRules: LateRule[];
 };
 
-type AdminLog = LogEntry & { staff_name: string; staff_id: number };
+type AdminLog = LogEntry & { staffName: string };
 
 type StaffInfo = { id: number; name: string; role: string };
 
@@ -378,8 +378,8 @@ export default function AttendancePage() {
   const staffSummary = (() => {
     const map = new Map<number, { name: string; checkIns: AdminLog[]; checkOuts: AdminLog[] }>();
     for (const l of adminLogs) {
-      const sid = l.staff_id ?? l.staffId;
-      const name = l.staff_name ?? l.staffName ?? `#${sid}`;
+      const sid = l.staffId;
+      const name = l.staffName ?? `#${sid}`;
       if (!map.has(sid)) map.set(sid, { name, checkIns: [], checkOuts: [] });
       if (l.type === "check_in") map.get(sid)!.checkIns.push(l);
       else map.get(sid)!.checkOuts.push(l);
@@ -480,7 +480,7 @@ export default function AttendancePage() {
                         ? "border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-700 active:scale-95"
                         : "border-muted bg-muted/30 text-muted-foreground opacity-50 cursor-default"
                   }`}>
-                  {(checkout.isPending || (geoLoading && qrAction === "checkout")) ? <Loader2 className="w-6 h-6 animate-spin" /> : (hasCheckedOut ? <CheckCircle2 className="w-6 h-6" /> : <QrCode className="w-6 h-6" />)}
+                  {(checkout.isPending || (geoLoading && qrAction === "checkout")) ? <Loader2 className="w-6 h-6 animate-spin" /> : (hasCheckedOut ? <CheckCircle2 className="w-6 h-6" /> : <LogOut className="w-6 h-6" />)}
                   {hasCheckedOut ? "✓ Đã chấm ra" : "Chấm ra"}
                 </button>
               </div>
@@ -836,7 +836,7 @@ export default function AttendancePage() {
                   <tbody className="divide-y divide-border">
                     {adminLogs.map(l => (
                       <tr key={l.id} className="hover:bg-muted/20 transition-colors">
-                        <td className="px-4 py-2.5 font-medium">{l.staff_name ?? l.staffName ?? `#${l.staff_id ?? l.staffId}`}</td>
+                        <td className="px-4 py-2.5 font-medium">{l.staffName ?? `#${l.staffId}`}</td>
                         <td className="px-4 py-2.5">
                           {l.type === "check_in"
                             ? <span className="flex items-center gap-1 text-blue-600 font-medium"><LogIn className="w-3.5 h-3.5" />Vào</span>
