@@ -223,6 +223,9 @@ function StaffFormSheet({ open, onClose, editStaff }: StaffFormSheetProps) {
   const [rolePrices, setRolePrices] = useState<RolePriceMap>({});
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
+  const [customRoles, setCustomRoles] = useState<Array<{ key: string; label: string; icon: string }>>([]);
+  const [newRoleName, setNewRoleName] = useState("");
+  const [showAddRoleDialog, setShowAddRoleDialog] = useState(false);
 
   // Init form values when sheet opens
   useEffect(() => {
@@ -280,6 +283,16 @@ function StaffFormSheet({ open, onClose, editStaff }: StaffFormSheetProps) {
     setSelectedRoles(prev =>
       prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]
     );
+  }
+
+  function handleAddRole() {
+    if (!newRoleName.trim()) return;
+    const newKey = newRoleName.toLowerCase().replace(/\s+/g, "_");
+    const newRole = { key: newKey, label: newRoleName, icon: "👤" };
+    setCustomRoles(prev => [...prev, newRole]);
+    setSelectedRoles(prev => [...prev, newKey]);
+    setNewRoleName("");
+    setShowAddRoleDialog(false);
   }
 
   function handlePriceChange(role: string, taskKey: string, rate: string, rateType: "fixed" | "percent") {
@@ -499,7 +512,7 @@ function StaffFormSheet({ open, onClose, editStaff }: StaffFormSheetProps) {
                 Chọn một hoặc nhiều chức vụ. Hệ thống sẽ tạo bảng nhập giá riêng cho từng chức vụ bên dưới.
               </p>
               <div className="flex flex-wrap gap-2">
-                {ROLES.map(r => (
+                {[...ROLES, ...customRoles].map(r => (
                   <button
                     key={r.key}
                     type="button"
@@ -513,7 +526,44 @@ function StaffFormSheet({ open, onClose, editStaff }: StaffFormSheetProps) {
                     <span>{r.icon}</span> {r.label}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => setShowAddRoleDialog(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border-2 border-dashed border-border text-sm font-medium text-muted-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors"
+                >
+                  <Plus className="w-4 h-4" /> Thêm chức vụ
+                </button>
               </div>
+
+              {/* Dialog: Add new role */}
+              <Dialog open={showAddRoleDialog} onOpenChange={setShowAddRoleDialog}>
+                <DialogContent className="max-w-sm">
+                  <DialogHeader>
+                    <DialogTitle>Thêm chức vụ mới</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-3">
+                    <div>
+                      <Label className="text-sm">Tên chức vụ (vd: Quay phim, Trang phục, ...)</Label>
+                      <Input
+                        className="mt-1"
+                        placeholder="Nhập tên chức vụ"
+                        value={newRoleName}
+                        onChange={e => setNewRoleName(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter") handleAddRole(); }}
+                        autoFocus
+                      />
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <Button type="button" variant="outline" onClick={() => setShowAddRoleDialog(false)}>
+                        Hủy
+                      </Button>
+                      <Button type="button" onClick={handleAddRole} disabled={!newRoleName.trim()}>
+                        Thêm
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </section>
 
             {/* D. Bảng giá theo từng chức vụ */}
