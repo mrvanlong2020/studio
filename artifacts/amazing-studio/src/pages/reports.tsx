@@ -11,7 +11,8 @@ const getAuthHeaders = (): Record<string, string> => {
   const token = localStorage.getItem("amazingStudioToken_v2");
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
-const fetchJson = (url: string) => fetch(`${BASE}${url}`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : []);
+const fetchArray = (url: string) => fetch(`${BASE}${url}`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : []).catch(() => []).then((d: unknown) => Array.isArray(d) ? d : []);
+const fetchObject = (url: string) => fetch(`${BASE}${url}`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : null).catch(() => null);
 
 const COLORS = ["#e11d48", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6"];
 
@@ -28,22 +29,22 @@ const STATUS_LABELS: Record<string, string> = {
 export default function ReportsPage() {
   const { data: stats } = useQuery({
     queryKey: ["dashboard"],
-    queryFn: () => fetchJson("/api/dashboard"),
+    queryFn: () => fetchObject("/api/dashboard"),
   });
 
   const { data: bookings = [] } = useQuery<any[]>({
     queryKey: ["bookings-report"],
-    queryFn: () => fetchJson("/api/bookings"),
+    queryFn: () => fetchArray("/api/bookings"),
   });
 
   const { data: customers = [] } = useQuery<any[]>({
     queryKey: ["customers-report"],
-    queryFn: () => fetchJson("/api/customers"),
+    queryFn: () => fetchArray("/api/customers"),
   });
 
   const { data: expenses = [] } = useQuery<any[]>({
     queryKey: ["expenses-report"],
-    queryFn: () => fetchJson("/api/expenses"),
+    queryFn: () => fetchArray("/api/expenses"),
   });
 
   // Compute monthly revenue from bookings (last 6 months)
