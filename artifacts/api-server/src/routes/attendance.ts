@@ -229,17 +229,16 @@ router.get("/attendance/me", async (req, res) => {
         .where(eq(attendanceLateRulesTable.ruleId, rule.id))
         .orderBy(attendanceLateRulesTable.minutesLateMin)
     : [];
-  const checkInFrom = rule?.checkInFrom ?? "07:30";
   const checkInTo = rule?.checkInTo ?? "09:00";
 
-  // Helper: compute minutes late relative to checkInFrom (start of window)
+  // Helper: compute minutes late relative to checkInTo (end of on-time window)
+  // e.g. window 07:30–09:00 → check-in at 09:05 = 5 min late; at 08:00 = 0
   function minutesLate(createdAtStr: string): number {
     const timeStr = createdAtStr.slice(11, 16); // "HH:MM"
     if (timeStr <= checkInTo) return 0; // on time or early
-    // compute diff from checkInFrom
-    const [fh, fm] = checkInFrom.split(":").map(Number);
     const [th, tm] = timeStr.split(":").map(Number);
-    return Math.max(0, (th * 60 + tm) - (fh * 60 + fm));
+    const [eh, em] = checkInTo.split(":").map(Number);
+    return Math.max(0, (th * 60 + tm) - (eh * 60 + em));
   }
 
   // Helper: find penalty tier for given minutes late
