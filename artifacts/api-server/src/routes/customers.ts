@@ -127,7 +127,8 @@ router.post("/customers", async (req, res) => {
         error: `Số điện thoại "${phone}" đã tồn tại trong hệ thống.`,
       });
     }
-    throw err;
+    console.error("POST /customers error:", err);
+    return res.status(500).json({ error: "Lỗi hệ thống khi tạo khách hàng" });
   }
 });
 
@@ -174,7 +175,8 @@ router.put("/customers/:id", async (req, res) => {
     if (isPgConstraintError(err) && err.code === "23505" && err.constraint?.includes("phone")) {
       return res.status(409).json({ error: `Số điện thoại "${phone}" đã được dùng bởi khách hàng khác. Vui lòng kiểm tra lại.` });
     }
-    throw err;
+    console.error("PUT /customers/:id error:", err);
+    return res.status(500).json({ error: "Lỗi hệ thống khi cập nhật khách hàng" });
   }
 });
 
