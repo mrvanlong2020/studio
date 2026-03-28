@@ -221,12 +221,8 @@ export default function AttendancePage() {
     enabled: effectiveIsAdmin,
   });
 
-  const { data: qrTokenData } = useQuery<{ url: string; date: string }>({
-    queryKey: ["attendance-qr-token"],
-    queryFn: () => fetchAuth(`/api/attendance/qr-token`),
-    enabled: tab === "admin" && effectiveIsAdmin,
-    staleTime: 60 * 60 * 1000,
-  });
+  // Static QR URL - không phụ thuộc API
+  const staticQrUrl = `${window.location.origin}${BASE}/attendance/check-in`;
 
   const { data: adminAdjustments = [] } = useQuery<{ id: number; type: string; amount: number; reason: string | null; date: string }[]>({
     queryKey: ["attendance-adjustments-admin", adjViewStaffId, month],
@@ -235,12 +231,38 @@ export default function AttendancePage() {
   });
 
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [qrDownloading, setQrDownloading] = useState(false);
+
+  // Render QR từ static URL
   useEffect(() => {
-    if (!qrTokenData?.url || !qrCanvasRef.current) return;
-    QRCode.toCanvas(qrCanvasRef.current, qrTokenData.url, {
+    if (!qrCanvasRef.current) return;
+    QRCode.toCanvas(qrCanvasRef.current, staticQrUrl, {
       width: 200, margin: 2, color: { dark: "#1e1b4b", light: "#ffffff" },
     }).catch(() => {});
-  }, [qrTokenData]);
+  }, [staticQrUrl]);
+
+  const handleDownloadQr = async () => {
+    if (!qrCanvasRef.current) return;
+    setQrDownloading(true);
+    try {
+      const canvas = qrCanvasRef.current;
+      const link = document.createElement("a");
+      link.href = canvas.toDataURL("image/png");
+      link.download = `amazing-studio-qr-${new Date().toISOString().slice(0, 10)}.png`;
+      link.click();
+    } finally {
+      setQrDownloading(false);
+    }
+  };
+
+  const handleCopyQrLink = async () => {
+    try {
+      await navigator.clipboard.writeText(staticQrUrl);
+      alert("Đã copy link QR!");
+    } catch (err) {
+      console.error("Copy error:", err);
+    }
+  };
 
   const { data: rules, isLoading: rulesLoading } = useQuery<AttRules>({
     queryKey: ["attendance-rules"],
@@ -754,22 +776,29 @@ export default function AttendancePage() {
         {/* ── ADMIN TAB ──────────────────────────────────────────────────── */}
         {tab === "admin" && effectiveIsAdmin && (
           <div className="space-y-4">
-            {/* Daily QR Code card */}
-            {qrTokenData && (
-              <div className="rounded-2xl border border-border bg-card overflow-hidden">
-                <div className="px-4 py-2.5 border-b flex items-center gap-2">
-                  <QrCode className="w-4 h-4 text-violet-600" />
-                  <span className="font-semibold text-sm">Mã QR chấm công hôm nay</span>
-                  <span className="ml-auto text-xs text-muted-foreground">{qrTokenData.date}</span>
-                </div>
-                <div className="p-4 flex flex-col items-center gap-3">
-                  <canvas ref={qrCanvasRef} className="rounded-xl shadow-md" />
-                  <p className="text-xs text-muted-foreground text-center max-w-xs">
-                    Nhân viên quét mã này để chấm công. Mã hết hạn lúc 00:00 ngày hôm sau.
-                  </p>
+            {/* Static QR Code card */}
+            <div className="rounded-2xl border border-border bg-card overflow-hidden">
+              <div className="px-4 py-2.5 border-b flex items-center gap-2">
+                <QrCode className="w-4 h-4 text-violet-600" />
+                <span className="font-semibold text-sm">Mã QR chấm công</span>
+              </div>
+              <div className="p-4 flex flex-col items-center gap-3">
+                <canvas ref={qrCanvasRef} className="rounded-xl shadow-md" />
+                <p className="text-xs text-muted-foreground text-center max-w-xs">
+                  Nhân viên quét mã này để chấm công.
+                </p>
+                <div className="flex gap-2 w-full">
+                  <button onClick={handleDownloadQr} disabled={qrDownloading}
+                    className="flex-1 px-3 py-2 text-sm rounded-lg border border-border hover:bg-muted disabled:opacity-50 font-medium">
+                    ⬇️ Tải QR
+                  </button>
+                  <button onClick={handleCopyQrLink}
+                    className="flex-1 px-3 py-2 text-sm rounded-lg border border-border hover:bg-muted font-medium">
+                    📋 Copy link
+                  </button>
                 </div>
               </div>
-            )}
+            </div>
             {/* Per-staff summary table */}
             <div className="rounded-2xl border border-border bg-card overflow-hidden">
               <div className="flex items-center justify-between px-4 py-2.5 border-b">
