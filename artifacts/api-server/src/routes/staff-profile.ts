@@ -239,7 +239,7 @@ router.get("/staff/me/kpi", async (req, res) => {
       const target = parseFloat(k.targetValue);
       const actual = k.metric === "jobs_count" ? completedJobs.length
         : k.metric === "earnings" ? totalEarnings : 0;
-      const ratio = target > 0 ? Math.min(actual / target, 1.5) : 0;
+      const ratio = target > 0 ? Math.min(actual / target, 1) : 0;
       const score = Math.round(ratio * 100);
       const status = score >= 80 ? "green" : score >= 50 ? "yellow" : "red";
       return { metric: k.metric, target, actual, score, status, bonusAmount: parseFloat(k.bonusAmount) };

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { useStaffAuth } from "@/contexts/StaffAuthContext";
 import { cn } from "@/lib/utils";
-import StaffAvatar, { compressStaffAvatar } from "@/components/StaffAvatar";
+import StaffAvatar from "@/components/StaffAvatar";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -80,7 +80,6 @@ export default function MyProfilePage() {
   const [pwError, setPwError] = useState("");
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [imgError, setImgError] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const authHeader = { Authorization: `Bearer ${token ?? ""}` };
 
@@ -121,22 +120,6 @@ export default function MyProfilePage() {
     changePw.mutate({ currentPassword: pwForm.current, newPassword: pwForm.next });
   };
 
-  const handleAvatarUpload = async (file: File) => {
-    if (!viewer) return;
-    setAvatarUploading(true);
-    try {
-      const b64 = await compressStaffAvatar(file);
-      await fetchJson(`/api/staff/me`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", ...authHeader },
-        body: JSON.stringify({ avatar: b64 }),
-      });
-      qc.invalidateQueries({ queryKey: ["my-profile"] });
-      qc.invalidateQueries({ queryKey: ["staff"] });
-      setImgError(false);
-    } finally { setAvatarUploading(false); }
-  };
-
   if (!viewer) return null;
   if (isLoading) return (
     <div className="flex items-center justify-center min-h-[50vh]">
@@ -171,45 +154,38 @@ export default function MyProfilePage() {
           <div className="flex items-start gap-4">
             {/* Avatar */}
             <div className="relative flex-shrink-0 -mt-16 sm:-mt-20">
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                className="block relative focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-full group"
-                aria-label="Đổi ảnh đại diện"
-              >
-                <div className={cn(
-                  "w-36 h-36 sm:w-44 sm:h-44 rounded-full overflow-hidden",
-                  "ring-4 ring-white shadow-[0_8px_32px_rgba(0,0,0,0.18)]",
-                  "border-2 border-primary/20",
-                )}>
-                  <StaffAvatar
-                    name={viewer.name}
-                    avatar={avatarUrl}
-                    role={mainRole}
-                    status={staff?.status ?? (staff?.isActive !== false ? "active" : "inactive")}
-                    size="2xl"
-                    editable={true}
-                    onUpload={async (b64) => {
-                      if (!viewer) return;
-                      setAvatarUploading(true);
-                      try {
-                        await fetchJson(`/api/staff/me`, {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json", ...authHeader },
-                          body: JSON.stringify({ avatar: b64 }),
-                        });
-                        qc.invalidateQueries({ queryKey: ["my-profile"] });
-                        qc.invalidateQueries({ queryKey: ["staff"] });
-                      } finally { setAvatarUploading(false); }
-                    }}
-                    uploading={avatarUploading}
-                  />
-                </div>
-                {/* Camera hint */}
-                <div className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/20 flex items-center justify-center transition-colors">
+              <div className={cn(
+                "w-36 h-36 sm:w-44 sm:h-44 rounded-full overflow-hidden group relative",
+                "ring-4 ring-white shadow-[0_8px_32px_rgba(0,0,0,0.18)]",
+                "border-2 border-primary/20",
+              )}>
+                <StaffAvatar
+                  name={viewer.name}
+                  avatar={avatarUrl}
+                  role={mainRole}
+                  status={staff?.status ?? (staff?.isActive !== false ? "active" : "inactive")}
+                  size="2xl"
+                  editable={true}
+                  onUpload={async (b64) => {
+                    setAvatarUploading(true);
+                    try {
+                      await fetchJson(`/api/staff/me`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json", ...authHeader },
+                        body: JSON.stringify({ avatar: b64 }),
+                      });
+                      qc.invalidateQueries({ queryKey: ["my-profile"] });
+                      qc.invalidateQueries({ queryKey: ["staff"] });
+                      setImgError(false);
+                    } finally { setAvatarUploading(false); }
+                  }}
+                  uploading={avatarUploading}
+                />
+                {/* Camera hover hint */}
+                <div className="pointer-events-none absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/20 flex items-center justify-center transition-colors">
                   <Camera size={26} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
-              </button>
+              </div>
             </div>
 
             {/* Info */}
