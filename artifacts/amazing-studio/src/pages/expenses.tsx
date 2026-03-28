@@ -135,7 +135,7 @@ export default function ExpensesPage() {
     mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) =>
       fetch(`${BASE}/api/expenses/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders,
         body: JSON.stringify(data),
       }).then(r => r.json()),
     onSuccess: () => {
