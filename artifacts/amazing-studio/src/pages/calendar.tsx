@@ -1337,38 +1337,43 @@ async function buildContractImages(htmlContent: string): Promise<string[]> {
   container.innerHTML = htmlContent;
   document.body.appendChild(container);
 
-  await new Promise(resolve => setTimeout(resolve, 600));
+  const pageDivs: HTMLElement[] = [];
 
-  const pageHeight = 1200;
-  const totalHeight = container.scrollHeight;
-  const pageCount = Math.max(1, Math.ceil(totalHeight / pageHeight));
-  const dataUrls: string[] = [];
+  try {
+    await new Promise(resolve => setTimeout(resolve, 600));
 
-  for (let i = 0; i < pageCount; i++) {
-    const pageDiv = document.createElement("div");
-    pageDiv.style.position = "fixed";
-    pageDiv.style.left = "-10000px";
-    pageDiv.style.top = "0";
-    pageDiv.style.width = "820px";
-    pageDiv.style.height = pageHeight + "px";
-    pageDiv.style.overflow = "hidden";
-    pageDiv.style.background = "#fff";
-    pageDiv.style.zIndex = "-9999";
+    const pageHeight = 1200;
+    const totalHeight = container.scrollHeight;
+    const pageCount = Math.max(1, Math.ceil(totalHeight / pageHeight));
+    const dataUrls: string[] = [];
 
-    const cloned = container.cloneNode(true) as HTMLElement;
-    cloned.style.marginTop = `-${i * pageHeight}px`;
-    cloned.style.width = "820px";
-    pageDiv.appendChild(cloned);
-    document.body.appendChild(pageDiv);
+    for (let i = 0; i < pageCount; i++) {
+      const pageDiv = document.createElement("div");
+      pageDiv.style.position = "fixed";
+      pageDiv.style.left = "-10000px";
+      pageDiv.style.top = "0";
+      pageDiv.style.width = "820px";
+      pageDiv.style.height = pageHeight + "px";
+      pageDiv.style.overflow = "hidden";
+      pageDiv.style.background = "#fff";
+      pageDiv.style.zIndex = "-9999";
 
-    const canvas = await html2canvas(pageDiv, { scale: 2, useCORS: true, logging: false, backgroundColor: "#ffffff" });
-    dataUrls.push(canvas.toDataURL("image/jpeg", 0.95));
+      const cloned = container.cloneNode(true) as HTMLElement;
+      cloned.style.marginTop = `-${i * pageHeight}px`;
+      cloned.style.width = "820px";
+      pageDiv.appendChild(cloned);
+      document.body.appendChild(pageDiv);
+      pageDivs.push(pageDiv);
 
-    document.body.removeChild(pageDiv);
+      const canvas = await html2canvas(pageDiv, { scale: 2, useCORS: true, logging: false, backgroundColor: "#ffffff" });
+      dataUrls.push(canvas.toDataURL("image/jpeg", 0.95));
+    }
+
+    return dataUrls;
+  } finally {
+    pageDivs.forEach(div => { if (div.parentNode) div.parentNode.removeChild(div); });
+    if (container.parentNode) container.parentNode.removeChild(container);
   }
-
-  document.body.removeChild(container);
-  return dataUrls;
 }
 
 function generateContractHTML(booking: Booking, siblings: Booking[], allPackages: DetailPackage[]): string {
@@ -1815,6 +1820,7 @@ function ShowDetailPanel({
         </button>
         <button
           onClick={async () => {
+            setContractImageUrls([]);
             setContractImagesLoading(true);
             setShowContractImages(true);
             try {
