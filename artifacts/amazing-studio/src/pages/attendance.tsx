@@ -8,6 +8,7 @@ import {
 import { useStaffAuth } from "@/contexts/StaffAuthContext";
 import { Button } from "@/components/ui";
 import jsQR from "jsqr";
+import QRCode from "qrcode";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -216,6 +217,21 @@ export default function AttendancePage() {
     enabled: effectiveIsAdmin,
   });
 
+  const { data: qrTokenData } = useQuery<{ token: string; date: string }>({
+    queryKey: ["attendance-qr-token"],
+    queryFn: () => fetchAuth(`/api/attendance/qr-token`),
+    enabled: tab === "admin" && effectiveIsAdmin,
+    staleTime: 60 * 60 * 1000,
+  });
+
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (!qrTokenData?.token || !qrCanvasRef.current) return;
+    QRCode.toCanvas(qrCanvasRef.current, qrTokenData.token, {
+      width: 200, margin: 2, color: { dark: "#1e1b4b", light: "#ffffff" },
+    }).catch(() => {});
+  }, [qrTokenData]);
+
   const { data: rules, isLoading: rulesLoading } = useQuery<AttRules>({
     queryKey: ["attendance-rules"],
     queryFn: () => fetchAuth(`/api/attendance/rules`),
@@ -303,7 +319,7 @@ export default function AttendancePage() {
         navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 12000, enableHighAccuracy: true })
       );
       const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-      if (action === "checkin") await checkin.mutateAsync({ lat, lng, qrPayload: "gps-auto" });
+      if (action === "checkin") await checkin.mutateAsync({ lat, lng });
       else await checkout.mutateAsync({ lat, lng });
       void accuracy;
     } catch (e: unknown) {
@@ -663,6 +679,22 @@ export default function AttendancePage() {
         {/* ── ADMIN TAB ──────────────────────────────────────────────────── */}
         {tab === "admin" && effectiveIsAdmin && (
           <div className="space-y-4">
+            {/* Daily QR Code card */}
+            {qrTokenData && (
+              <div className="rounded-2xl border border-border bg-card overflow-hidden">
+                <div className="px-4 py-2.5 border-b flex items-center gap-2">
+                  <QrCode className="w-4 h-4 text-violet-600" />
+                  <span className="font-semibold text-sm">Mã QR chấm công hôm nay</span>
+                  <span className="ml-auto text-xs text-muted-foreground">{qrTokenData.date}</span>
+                </div>
+                <div className="p-4 flex flex-col items-center gap-3">
+                  <canvas ref={qrCanvasRef} className="rounded-xl shadow-md" />
+                  <p className="text-xs text-muted-foreground text-center max-w-xs">
+                    Nhân viên quét mã này để chấm công. Mã hết hạn lúc 00:00 ngày hôm sau.
+                  </p>
+                </div>
+              </div>
+            )}
             {/* Per-staff summary table */}
             <div className="rounded-2xl border border-border bg-card overflow-hidden">
               <div className="flex items-center justify-between px-4 py-2.5 border-b">

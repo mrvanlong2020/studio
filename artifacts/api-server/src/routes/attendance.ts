@@ -28,7 +28,18 @@ router.post("/attendance/check-in", async (req, res) => {
 
   const { lat, lng, accuracyM, qrPayload, bookingId } = req.body;
 
-  const settingsR = await pool.query(`SELECT value FROM settings WHERE key = 'studio_lat' OR key = 'studio_lng' OR key = 'attendance_radius_m'`);
+  // QR payload validation: accept "AMAZING-QR-{YYYY-MM-DD}" for today's date
+  let qrVerified = false;
+  if (qrPayload && qrPayload !== "gps-auto") {
+    const todayDateStr = new Date().toISOString().slice(0, 10);
+    const expectedToken = `AMAZING-QR-${todayDateStr}`;
+    qrVerified = qrPayload === expectedToken;
+    if (!qrVerified) {
+      return res.status(400).json({ error: "Mã QR không hợp lệ hoặc đã hết hạn. Vui lòng quét lại mã QR hôm nay." });
+    }
+  }
+
+  const settingsR = await pool.query(`SELECT key, value FROM settings WHERE key IN ('studio_lat', 'studio_lng', 'attendance_radius_m')`);
   const settingsMap: Record<string, string> = {};
   for (const row of settingsR.rows as { key: string; value: string }[]) {
     settingsMap[row.key] = row.value;
@@ -97,6 +108,20 @@ router.post("/attendance/check-in", async (req, res) => {
   }).returning();
 
   res.status(201).json(log);
+});
+
+// ── QR Token: generate daily QR payload (admin only) ──────────────────────────
+router.get("/attendance/qr-token", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
+  const callerR = await pool.query(`SELECT role, roles FROM staff WHERE id = $1`, [callerId]);
+  const caller = callerR.rows[0] as Record<string, unknown> | undefined;
+  const isAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
+  if (!isAdmin) return res.status(403).json({ error: "Không có quyền" });
+
+  const todayDateStr = new Date().toISOString().slice(0, 10);
+  const token = `AMAZING-QR-${todayDateStr}`;
+  res.json({ token, date: todayDateStr });
 });
 
 // ── Check Out ─────────────────────────────────────────────────────────────────
@@ -225,16 +250,33 @@ router.get("/attendance/admin", async (req, res) => {
 
   const month = String(req.query.month || new Date().toISOString().slice(0, 7));
   const logsR = await pool.query(
-    `SELECT al.*, s.name as staff_name FROM attendance_logs al
+    `SELECT al.id, al.staff_id, al.type, al.method, al.lat, al.lng, al.accuracy_m, al.distance_m, al.booking_id, al.notes, al.created_at, s.name as staff_name FROM attendance_logs al
      JOIN staff s ON s.id = al.staff_id
      WHERE to_char(al.created_at, 'YYYY-MM') = $1 ORDER BY al.created_at`,
     [month]
   );
-  res.json(logsR.rows);
+  const mappedRows = (logsR.rows as Record<string, unknown>[]).map(l => ({
+    id: l.id,
+    staffId: l.staff_id,
+    staffName: l.staff_name,
+    type: l.type,
+    method: l.method,
+    lat: l.lat,
+    lng: l.lng,
+    accuracyM: l.accuracy_m,
+    distanceM: l.distance_m,
+    bookingId: l.booking_id,
+    isOffsite: l.method === "offsite",
+    notes: l.notes,
+    createdAt: String(l.created_at ?? ""),
+  }));
+  res.json(mappedRows);
 });
 
 // ── Quy tắc chấm công ────────────────────────────────────────────────────────
 router.get("/attendance/rules", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
   const [activeRule] = await db.select().from(attendanceRulesTable).where(eq(attendanceRulesTable.isActive, 1));
   const late = await db.select().from(attendanceLateRulesTable).orderBy(attendanceLateRulesTable.minutesLateMin);
   const fmtLate = late.map(l => ({
