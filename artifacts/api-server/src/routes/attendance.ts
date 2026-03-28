@@ -203,8 +203,10 @@ router.get("/attendance/me", async (req, res) => {
   const month = String(req.query.month || new Date().toISOString().slice(0, 7));
 
   const logsR = await pool.query(
-    `SELECT id, staff_id, type, method, lat, lng, notes, created_at
-     FROM attendance_logs WHERE staff_id = $1 AND to_char(created_at, 'YYYY-MM') = $2 ORDER BY created_at`,
+    `SELECT id, staff_id, type, method, lat, lng, distance_m, notes, created_at,
+            to_char(created_at + interval '7 hours', 'HH24:MI') as local_time,
+            to_char(created_at + interval '7 hours', 'YYYY-MM-DD') as local_date
+     FROM attendance_logs WHERE staff_id = $1 AND to_char(created_at + interval '7 hours', 'YYYY-MM') = $2 ORDER BY created_at`,
     [callerId, month]
   );
   // Return camelCase for frontend; isOffsite derived from method="offsite"
@@ -215,8 +217,11 @@ router.get("/attendance/me", async (req, res) => {
     method: l.method,
     lat: l.lat,
     lng: l.lng,
+    distanceM: l.distance_m != null ? parseFloat(String(l.distance_m)) : null,
     isOffsite: l.method === "offsite",
     notes: l.notes,
+    localTime: l.local_time as string,
+    localDate: l.local_date as string,
     createdAt: l.created_at instanceof Date ? l.created_at.toISOString() : String(l.created_at ?? ""),
   }));
 
@@ -232,11 +237,10 @@ router.get("/attendance/me", async (req, res) => {
   const checkInTo = rule?.checkInTo ?? "09:00";
 
   // Helper: compute minutes late relative to checkInTo (end of on-time window)
-  // e.g. window 07:30–09:00 → check-in at 09:05 = 5 min late; at 08:00 = 0
-  function minutesLate(createdAtStr: string): number {
-    const timeStr = createdAtStr.slice(11, 16); // "HH:MM"
-    if (timeStr <= checkInTo) return 0; // on time or early
-    const [th, tm] = timeStr.split(":").map(Number);
+  // Uses VN local time (HH:MM) pre-extracted by PostgreSQL AT TIME ZONE
+  function minutesLate(localTime: string): number {
+    if (!localTime || localTime <= checkInTo) return 0;
+    const [th, tm] = localTime.split(":").map(Number);
     const [eh, em] = checkInTo.split(":").map(Number);
     return Math.max(0, (th * 60 + tm) - (eh * 60 + em));
   }
@@ -260,19 +264,19 @@ router.get("/attendance/me", async (req, res) => {
   const bonusPenalty: { type: string; amount: number; description: string; date: string }[] = [];
 
   checkIns.forEach(ci => {
-    const timeStr = ci.createdAt.slice(11, 16);
-    if (timeStr <= checkInTo) {
+    const localTime = ci.localTime; // "HH:MM" in VN timezone
+    if (localTime <= checkInTo) {
       onTimeCount++;
     } else {
-      // Late check-in: compute penalty
-      const mins = minutesLate(ci.createdAt);
+      // Late check-in: compute penalty using VN local time
+      const mins = minutesLate(localTime);
       const penaltyAmt = findPenalty(mins);
+      const dateStr = ci.localDate ?? ci.createdAt.slice(0, 10);
       if (penaltyAmt > 0) {
-        const dateStr = ci.createdAt.slice(0, 10);
         bonusPenalty.push({
           type: "penalty",
           amount: penaltyAmt,
-          description: `Đi trễ ${mins} phút (${timeStr})`,
+          description: `Đi trễ ${mins} phút (${localTime})`,
           date: dateStr,
         });
       }

@@ -35,9 +35,11 @@ type LogEntry = {
   method?: string;
   lat: number | null;
   lng: number | null;
-  distanceM?: number | null;
-  isOffsite: number | boolean;
+  distanceM: number | null;
+  isOffsite: boolean;
   notes: string | null;
+  localTime?: string;
+  localDate?: string;
   createdAt: string;
 };
 

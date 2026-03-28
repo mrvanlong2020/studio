@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { settingsTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { verifyToken } from "./auth";
+import { pool } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -43,11 +44,24 @@ async function loadSettings() {
   };
 }
 
-router.get("/settings", async (_req, res) => {
+async function isAdminCaller(authorization: string | undefined): Promise<boolean> {
+  const callerId = verifyToken(authorization);
+  if (!callerId) return false;
+  const r = await pool.query(`SELECT role, roles FROM staff WHERE id = $1`, [callerId]);
+  const caller = r.rows[0] as Record<string, unknown> | undefined;
+  return !!(caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin"))));
+}
+
+router.get("/settings", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
   res.json(await loadSettings());
 });
 
 router.put("/settings", async (req, res) => {
+  if (!await isAdminCaller(req.headers.authorization)) {
+    return res.status(403).json({ error: "Không có quyền" });
+  }
   const settings = req.body as Record<string, unknown>;
   for (const [key, value] of Object.entries(settings)) {
     if (value === null || value === undefined) continue;
