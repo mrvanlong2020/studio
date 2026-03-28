@@ -122,10 +122,10 @@ router.post("/attendance/check-in", async (req, res) => {
     return res.status(400).json({ error: "Vui lòng cấp quyền GPS để chấm công. QR + GPS đều cần thiết." });
   }
 
-  // Kiểm tra đã check-in hôm nay chưa
-  const today = new Date().toISOString().slice(0, 10);
+  // Kiểm tra đã check-in hôm nay chưa (so sánh theo giờ VN UTC+7)
+  const today = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
   const existing = await pool.query(
-    `SELECT id FROM attendance_logs WHERE staff_id = $1 AND type = 'check_in' AND created_at::date = $2::date LIMIT 1`,
+    `SELECT id FROM attendance_logs WHERE staff_id = $1 AND type = 'check_in' AND (created_at + interval '7 hours')::date = $2::date LIMIT 1`,
     [callerId, today]
   );
   if (existing.rows.length > 0) {
@@ -167,9 +167,9 @@ router.post("/attendance/check-out", async (req, res) => {
 
   const { lat, lng, accuracyM } = req.body;
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
   const alreadyOut = await pool.query(
-    `SELECT id FROM attendance_logs WHERE staff_id = $1 AND type = 'check_out' AND created_at::date = $2::date LIMIT 1`,
+    `SELECT id FROM attendance_logs WHERE staff_id = $1 AND type = 'check_out' AND (created_at + interval '7 hours')::date = $2::date LIMIT 1`,
     [callerId, today]
   );
   if (alreadyOut.rows.length > 0) {
@@ -178,7 +178,7 @@ router.post("/attendance/check-out", async (req, res) => {
 
   // Require same-day check-in before allowing check-out
   const checkInR = await pool.query(
-    `SELECT method FROM attendance_logs WHERE staff_id = $1 AND type = 'check_in' AND created_at::date = $2::date LIMIT 1`,
+    `SELECT method FROM attendance_logs WHERE staff_id = $1 AND type = 'check_in' AND (created_at + interval '7 hours')::date = $2::date LIMIT 1`,
     [callerId, today]
   );
   if (checkInR.rows.length === 0) {
@@ -383,7 +383,11 @@ router.get("/attendance/rules", async (req, res) => {
   const isAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
   if (!isAdmin) return res.status(403).json({ error: "Không có quyền" });
   const [activeRule] = await db.select().from(attendanceRulesTable).where(eq(attendanceRulesTable.isActive, 1));
-  const late = await db.select().from(attendanceLateRulesTable).orderBy(attendanceLateRulesTable.minutesLateMin);
+  const late = activeRule
+    ? await db.select().from(attendanceLateRulesTable)
+        .where(eq(attendanceLateRulesTable.ruleId, activeRule.id))
+        .orderBy(attendanceLateRulesTable.minutesLateMin)
+    : [];
   const fmtLate = late.map(l => ({
     ...l, penaltyAmount: l.penaltyAmount ? parseFloat(String(l.penaltyAmount)) : null,
   }));

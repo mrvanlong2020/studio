@@ -474,7 +474,7 @@ export default function AttendancePage() {
                         : "border-muted bg-muted/30 text-muted-foreground opacity-50 cursor-default"
                   }`}>
                   {(checkout.isPending || (geoLoading && qrAction === "checkout")) ? <Loader2 className="w-6 h-6 animate-spin" /> : (hasCheckedOut ? <CheckCircle2 className="w-6 h-6" /> : <QrCode className="w-6 h-6" />)}
-                  {hasCheckedOut ? "✓ Đã chấm ra" : "Chấm ra (QR)"}
+                  {hasCheckedOut ? "✓ Đã chấm ra" : "Chấm ra"}
                 </button>
               </div>
 
