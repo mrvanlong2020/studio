@@ -412,12 +412,7 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
         value={line.assignedStaff}
         onChange={newStaff => onChange({ ...line, assignedStaff: newStaff })}
         staffOptions={allStaff.map(s => ({ id: s.id, name: s.name, roles: s.roles || [] }))}
-        roleOptions={[
-          { value: "photographer", label: "📷 Nhiếp ảnh" },
-          { value: "makeup", label: "💄 Makeup" },
-          { value: "assistant", label: "🤝 Trợ lý" },
-          { value: "other", label: "👤 Khác" },
-        ]}
+        allStaffRates={allStaffRates.map(r => ({ staffId: r.staffId, role: r.role, amount: r.amount }))}
       />
 
       {/* Addon */}

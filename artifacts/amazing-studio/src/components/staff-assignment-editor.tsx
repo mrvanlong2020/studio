@@ -6,22 +6,32 @@ export type StaffAssignment = {
   staffId: number | null;
   staffName: string;
   role: string;
-  task: string;
+  castAmount: number;
 };
+
+type StaffRate = { staffId: number; role: string; amount: number };
 
 function genId() {
   return Math.random().toString(36).slice(2, 9);
 }
 
 export function newStaffAssignment(): StaffAssignment {
-  return { id: genId(), staffId: null, staffName: "", role: "", task: "" };
+  return { id: genId(), staffId: null, staffName: "", role: "", castAmount: 0 };
+}
+
+function fmtVND(n: number) { return n.toLocaleString("vi-VN") + "đ"; }
+
+function lookupStaffRate(staffId: number | null, role: string, rates: StaffRate[]): number {
+  if (!staffId || !role) return 0;
+  const found = rates.find(r => r.staffId === staffId && r.role === role);
+  return found?.amount ?? 0;
 }
 
 interface StaffAssignmentEditorProps {
   value: StaffAssignment[];
   onChange: (items: StaffAssignment[]) => void;
   staffOptions: { id: number; name: string; roles: string[] }[];
-  roleOptions: { value: string; label: string }[];
+  allStaffRates: StaffRate[];
   className?: string;
 }
 
@@ -29,9 +39,20 @@ export function StaffAssignmentEditor({
   value,
   onChange,
   staffOptions,
-  roleOptions,
+  allStaffRates,
   className,
 }: StaffAssignmentEditorProps) {
+  const roleOptions = [
+    { value: "photographer", label: "📷 Nhiếp ảnh" },
+    { value: "makeup", label: "💄 Makeup" },
+    { value: "assistant", label: "🤝 Trợ lý" },
+    { value: "videographer", label: "🎬 Quay phim" },
+    { value: "assistant_photo", label: "🔧 Thợ phụ" },
+    { value: "marketing", label: "📢 Marketing" },
+    { value: "sales", label: "💼 Sale" },
+    { value: "other", label: "👤 Khác" },
+  ];
+
   const update = (id: string, patch: Partial<StaffAssignment>) => {
     onChange(value.map(item => item.id === id ? { ...item, ...patch } : item));
   };
@@ -42,6 +63,11 @@ export function StaffAssignmentEditor({
 
   const add = () => {
     onChange([...value, newStaffAssignment()]);
+  };
+
+  const handleStaffChange = (itemId: string, staffId: number, role: string) => {
+    const castAmount = lookupStaffRate(staffId, role, allStaffRates);
+    update(itemId, { staffId, staffName: staffOptions.find(s => s.id === staffId)?.name ?? "", castAmount });
   };
 
   return (
@@ -71,18 +97,25 @@ export function StaffAssignmentEditor({
           Thêm nhân sự cho công việc
         </button>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {value.map((item, idx) => (
-            <div key={item.id} className="flex items-end gap-2">
+            <div key={item.id} className="flex items-center gap-2">
               <span className="text-[10px] text-muted-foreground w-4 flex-shrink-0 text-center">{idx + 1}</span>
               
               {/* Role */}
               <select
                 className="flex-1 px-2.5 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary/40"
                 value={item.role}
-                onChange={e => update(item.id, { role: e.target.value })}
+                onChange={e => {
+                  const newRole = e.target.value;
+                  update(item.id, { role: newRole });
+                  if (item.staffId) {
+                    const castAmount = lookupStaffRate(item.staffId, newRole, allStaffRates);
+                    update(item.id, { castAmount });
+                  }
+                }}
               >
-                <option value="">— Chọn vai trò —</option>
+                <option value="">— Vai trò —</option>
                 {roleOptions.map(opt => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}
@@ -95,15 +128,11 @@ export function StaffAssignmentEditor({
                 className="flex-1 px-2.5 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary/40"
                 value={item.staffId ?? ""}
                 onChange={e => {
-                  const staff = staffOptions.find(s => s.id === parseInt(e.target.value));
-                  update(item.id, {
-                    staffId: staff?.id ?? null,
-                    staffName: staff?.name ?? "",
-                    task: "",
-                  });
+                  const staffId = parseInt(e.target.value);
+                  handleStaffChange(item.id, staffId, item.role);
                 }}
               >
-                <option value="">— Chọn nhân sự —</option>
+                <option value="">— Nhân sự —</option>
                 {staffOptions.map(s => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -111,20 +140,12 @@ export function StaffAssignmentEditor({
                 ))}
               </select>
 
-              {/* Task (optional, shows if staff selected) */}
-              {item.staffId && (
-                <select
-                  className="flex-1 px-2.5 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary/40"
-                  value={item.task}
-                  onChange={e => update(item.id, { task: e.target.value })}
-                >
-                  <option value="">— Loại công việc —</option>
-                  <option value="chinh">Chính</option>
-                  <option value="phu">Phụ</option>
-                  <option value="ho_tro">Hỗ trợ</option>
-                  <option value="mac_dinh">Mặc định</option>
-                </select>
-              )}
+              {/* Cost display */}
+              <div className="flex-shrink-0 w-24 text-right">
+                <span className="text-xs font-semibold text-amber-600">
+                  {item.castAmount > 0 ? fmtVND(item.castAmount) : "—"}
+                </span>
+              </div>
 
               {/* Delete */}
               <button
