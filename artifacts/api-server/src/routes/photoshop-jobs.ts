@@ -184,8 +184,8 @@ router.put("/photoshop-jobs/:id", async (req, res) => {
     const [row] = await db.update(photoshopJobsTable).set(updates as never).where(eq(photoshopJobsTable.id, +req.params.id)).returning();
     if (!row) return res.status(404).json({ error: "Not found" });
 
-    // Sync extra_retouched booking_item when donePhotos changes and job is linked to a booking
-    if (donePhotos !== undefined && row.bookingId) {
+    // Sync extra_retouched booking_item when donePhotos or bookingId changes and job is linked to a booking
+    if ((donePhotos !== undefined || bookingId !== undefined) && row.bookingId) {
       await syncExtraRetouchedItem(row.bookingId, row.donePhotos ?? 0).catch(err =>
         console.error("[photoshop-jobs] syncExtraRetouchedItem (PUT) failed:", err)
       );
