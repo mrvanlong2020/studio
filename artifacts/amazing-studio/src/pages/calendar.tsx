@@ -125,7 +125,7 @@ function PhoneAutocomplete({ value, onChange, onSelect }: {
   const autoSelectedRef = useRef<string | null>(null);
   const { data: results = [] } = useQuery<Customer[]>({
     queryKey: ["customer-search", value],
-    queryFn: () => fetch(`${BASE}/api/customers?search=${encodeURIComponent(value)}`).then(r => r.json()),
+    queryFn: () => authFetch(`${BASE}/api/customers?search=${encodeURIComponent(value)}`).then(r => r.json()),
     enabled: value.length >= 3,
     staleTime: 5_000,
   });
@@ -597,7 +597,7 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
               setUploadingConcept(true);
               setUploadConceptError(null);
               try {
-                const res = await fetch(`${BASE}/api/storage/uploads/request-url`, {
+                const res = await authFetch(`${BASE}/api/storage/uploads/request-url`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
@@ -750,15 +750,15 @@ function ShowFormPanel({
     setSubDrafts(p => [...p, { id: genId(), serviceLabel: "", shootDate: shootDate, shootTime: "08:00", items: [emptyOrderLine()], photoId: null, photoName: "", photoTask: "", makeupId: null, makeupName: "", makeupTask: "", notes: "" }]);
 
   const { data: allStaff = [] } = useQuery<Staff[]>({ queryKey: ["staff"], queryFn: () => authFetch(`${BASE}/api/staff`).then(r => r.ok ? r.json() : []) });
-  const { data: services = [] } = useQuery<Service[]>({ queryKey: ["services"], queryFn: () => fetch(`${BASE}/api/services`).then(r => r.json()) });
+  const { data: services = [] } = useQuery<Service[]>({ queryKey: ["services"], queryFn: () => authFetch(`${BASE}/api/services`).then(r => r.json()) });
   const { data: pricingPackages = [] } = useQuery<{
     id: number; name: string; price: number;
     printCost: number; operatingCost: number; salePercent: number;
     items?: PkgItem[]; addons?: Addon[]; products?: string[]; description?: string | null; notes?: string | null;
     serviceType?: string | null; photoCount?: number | null; includesMakeup?: boolean;
-  }[]>({ queryKey: ["service-packages"], queryFn: () => fetch(`${BASE}/api/service-packages`).then(r => r.json()) });
-  const { data: allStaffRates = [] } = useQuery<StaffRate[]>({ queryKey: ["staff-rates"], queryFn: () => fetch(`${BASE}/api/staff-rates`).then(r => r.json()) });
-  const { data: allCastRates = [] } = useQuery<CastRatePkg[]>({ queryKey: ["staff-cast-all"], queryFn: () => fetch(`${BASE}/api/staff-cast`).then(r => r.json()), staleTime: 60_000 });
+  }[]>({ queryKey: ["service-packages"], queryFn: () => authFetch(`${BASE}/api/service-packages`).then(r => r.json()) });
+  const { data: allStaffRates = [] } = useQuery<StaffRate[]>({ queryKey: ["staff-rates"], queryFn: () => authFetch(`${BASE}/api/staff-rates`).then(r => r.json()) });
+  const { data: allCastRates = [] } = useQuery<CastRatePkg[]>({ queryKey: ["staff-cast-all"], queryFn: () => authFetch(`${BASE}/api/staff-cast`).then(r => r.json()), staleTime: 60_000 });
 
   // Support both old single-role and new multi-role staff
   const hasRole = (s: Staff, role: string) => s.roles?.includes(role) || s.role === role;
@@ -830,13 +830,13 @@ function ShowFormPanel({
         if (existing) {
           cid = existing.id;
           if (avatar && !existing.avatar) {
-            await fetch(`${BASE}/api/customers/${cid}`, {
+            await authFetch(`${BASE}/api/customers/${cid}`, {
               method: "PUT", headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ avatar }),
             });
           }
         } else {
-          const nc = await fetch(`${BASE}/api/customers`, {
+          const nc = await authFetch(`${BASE}/api/customers`, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name: customerName, phone, facebook: facebook || undefined, zalo: zalo || undefined, avatar: avatar || undefined, source: "walk-in" }),
           }).then(r => r.json()) as Customer;
@@ -885,7 +885,7 @@ function ShowFormPanel({
           subServices: subServicePayloads,
         };
 
-        saved = await fetch(`${BASE}/api/bookings`, {
+        saved = await authFetch(`${BASE}/api/bookings`, {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
         }).then(r => { if (!r.ok) throw new Error("Lỗi tạo hợp đồng"); return r.json(); });
 
@@ -934,11 +934,11 @@ function ShowFormPanel({
       };
 
       if (isEdit && booking) {
-        saved = await fetch(`${BASE}/api/bookings/${booking.id}`, {
+        saved = await authFetch(`${BASE}/api/bookings/${booking.id}`, {
           method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
         }).then(r => { if (!r.ok) throw new Error("Lỗi cập nhật"); return r.json(); });
       } else {
-        saved = await fetch(`${BASE}/api/bookings`, {
+        saved = await authFetch(`${BASE}/api/bookings`, {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
         }).then(r => { if (!r.ok) throw new Error("Lỗi tạo đơn"); return r.json(); });
       }
@@ -952,7 +952,7 @@ function ShowFormPanel({
   };
 
   const deleteMutation = useMutation({
-    mutationFn: () => fetch(`${BASE}/api/bookings/${booking?.id}`, { method: "DELETE" }),
+    mutationFn: () => authFetch(`${BASE}/api/bookings/${booking?.id}`, { method: "DELETE" }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["bookings"] }); onSaved(); },
   });
 
@@ -1645,7 +1645,7 @@ function ShowDetailPanel({
   });
   const { data: allPackages = [] } = useQuery<DetailPackage[]>({
     queryKey: ["service-packages"],
-    queryFn: () => fetch(`${BASE}/api/service-packages`).then(r => r.json()),
+    queryFn: () => authFetch(`${BASE}/api/service-packages`).then(r => r.json()),
     staleTime: 60_000,
   });
 
@@ -1653,7 +1653,7 @@ function ShowDetailPanel({
   const needsFullDetail = !!booking.parentId || !!booking.isParentContract;
   const { data: fullDetail } = useQuery<Booking & { siblings?: Booking[]; parentContract?: Booking; children?: Booking[] }>({
     queryKey: ["booking-full", booking.id],
-    queryFn: () => fetch(`${BASE}/api/bookings/${booking.id}`).then(r => r.json()),
+    queryFn: () => authFetch(`${BASE}/api/bookings/${booking.id}`).then(r => r.json()),
     enabled: needsFullDetail,
     staleTime: 30_000,
   });
@@ -1709,7 +1709,7 @@ function ShowDetailPanel({
     if (!confirm("Xoá show này? Hành động không thể hoàn tác.")) return;
     setDeleting(true);
     try {
-      await fetch(`${BASE}/api/bookings/${booking.id}`, { method: "DELETE" });
+      await authFetch(`${BASE}/api/bookings/${booking.id}`, { method: "DELETE" });
       qc.invalidateQueries({ queryKey: ["bookings"] });
       onDeleteDone();
     } finally { setDeleting(false); }
@@ -2554,7 +2554,7 @@ export default function CalendarPage() {
 
   const { data: bookings = [], isLoading } = useQuery<Booking[]>({
     queryKey: ["bookings"],
-    queryFn: () => fetch(`${BASE}/api/bookings`).then(r => r.json()),
+    queryFn: () => authFetch(`${BASE}/api/bookings`).then(r => r.json()),
     staleTime: 30_000,
   });
 
