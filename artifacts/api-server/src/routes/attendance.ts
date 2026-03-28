@@ -207,7 +207,7 @@ router.get("/attendance/me", async (req, res) => {
   const callerId = verifyToken(req.headers.authorization);
   if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
 
-  const month = String(req.query.month || new Date().toISOString().slice(0, 7));
+  const month = String(req.query.month || todayVN().slice(0, 7));
 
   const logsR = await pool.query(
     `SELECT id, staff_id, type, method, lat, lng, distance_m, notes, created_at,
@@ -353,7 +353,7 @@ router.get("/attendance/admin", async (req, res) => {
   const isAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
   if (!isAdmin) return res.status(403).json({ error: "Không có quyền" });
 
-  const month = String(req.query.month || new Date().toISOString().slice(0, 7));
+  const month = String(req.query.month || todayVN().slice(0, 7));
   const logsR = await pool.query(
     `SELECT al.id, al.staff_id, al.type, al.method, al.lat, al.lng, al.accuracy_m, al.distance_m, al.booking_id, al.notes, al.created_at, s.name as staff_name FROM attendance_logs al
      JOIN staff s ON s.id = al.staff_id
@@ -462,7 +462,7 @@ router.get("/attendance/adjustments", async (req, res) => {
   const requestedStaffId = req.query.staffId ? parseInt(String(req.query.staffId)) : callerId;
   // Non-admins can only see their own adjustments
   const staffId = callerIsAdmin ? requestedStaffId : callerId;
-  const month = String(req.query.month || new Date().toISOString().slice(0, 7));
+  const month = String(req.query.month || todayVN().slice(0, 7));
 
   const adj = await pool.query(
     `SELECT aa.*, s.name as staff_name FROM attendance_adjustments aa
