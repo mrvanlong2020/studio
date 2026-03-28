@@ -20,7 +20,7 @@ async function clearExtraRetouchedItem(bookingId: number) {
 }
 
 // ── Helper: sync extra_retouched booking_item after job update ────────────────
-// included = 0 means "unlimited" → no extra charges (early return)
+// extra = max(0, donePhotos - includedSnapshot); when extra > 0, upsert booking_item; when 0, deactivate
 async function syncExtraRetouchedItem(bookingId: number, donePhotos: number) {
   const [booking] = await db
     .select({ snap: bookingsTable.includedRetouchedPhotosSnapshot })
@@ -228,6 +228,16 @@ router.put("/photoshop-jobs/:id", async (req, res) => {
 
 router.delete("/photoshop-jobs/:id", async (req, res) => {
   try {
+    // Clear extra_retouched booking item before deleting the job
+    const [job] = await db
+      .select({ bookingId: photoshopJobsTable.bookingId })
+      .from(photoshopJobsTable)
+      .where(eq(photoshopJobsTable.id, +req.params.id));
+    if (job?.bookingId) {
+      await clearExtraRetouchedItem(job.bookingId).catch(err =>
+        console.error("[photoshop-jobs] clearExtraRetouchedItem (DELETE) failed:", err)
+      );
+    }
     await db.delete(photoshopJobsTable).where(eq(photoshopJobsTable.id, +req.params.id));
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: String(e) }); }
