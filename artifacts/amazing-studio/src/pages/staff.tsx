@@ -17,8 +17,17 @@ import StaffAvatar from "@/components/StaffAvatar";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem("amazingStudioToken_v2");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function fetchJson(url: string, opts?: RequestInit) {
-  const res = await fetch(url, opts);
+  const headers = {
+    ...getAuthHeaders(),
+    ...(opts?.headers as Record<string, string> | undefined),
+  };
+  const res = await fetch(url, { ...opts, headers });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
