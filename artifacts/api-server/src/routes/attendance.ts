@@ -8,23 +8,36 @@ import { eq, desc, and } from "drizzle-orm";
 import { verifyToken } from "./auth";
 import { createHmac, timingSafeEqual, randomBytes } from "crypto";
 
-// Use SESSION_SECRET if set; otherwise generate a random per-instance secret.
-// Per-instance secret means QR tokens expire on server restart — acceptable for
-// dev/staging; production should always set SESSION_SECRET.
 const QR_SECRET = process.env.SESSION_SECRET || randomBytes(32).toString("hex");
+const DOMAIN = process.env.REPLIT_DEV_DOMAIN || "localhost:8080";
 
-function generateQrToken(dateStr: string): string {
+function generateQrCode(dateStr: string): string {
   const sig = createHmac("sha256", QR_SECRET).update(`qr:${dateStr}`).digest("hex").slice(0, 16);
   return `AMAZING-QR-${dateStr}-${sig}`;
+}
+
+function generateQrUrl(dateStr: string): string {
+  const code = generateQrCode(dateStr);
+  return `https://${DOMAIN}/attendance/check-in?code=${code}`;
 }
 
 function todayVN(): string {
   return new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
+function extractQrCode(payload: string): string {
+  try {
+    const url = new URL(payload);
+    const code = url.searchParams.get("code");
+    if (code) return code;
+  } catch {}
+  return payload;
+}
+
 function verifyQrToken(payload: string): boolean {
   if (!QR_SECRET) return false;
-  const match = payload.match(/^AMAZING-QR-(\d{4}-\d{2}-\d{2})-([0-9a-f]{16})$/);
+  const code = extractQrCode(payload);
+  const match = code.match(/^AMAZING-QR-(\d{4}-\d{2}-\d{2})-([0-9a-f]{16})$/);
   if (!match) return false;
   const [, dateStr, providedSig] = match;
   if (dateStr !== todayVN()) return false;
@@ -55,7 +68,6 @@ router.post("/attendance/check-in", async (req, res) => {
 
   const { lat, lng, accuracyM, qrPayload, bookingId } = req.body;
 
-  // Validate QR token if provided (HMAC-signed daily token)
   let qrVerified = false;
   if (qrPayload) {
     qrVerified = verifyQrToken(qrPayload);
@@ -82,7 +94,6 @@ router.post("/attendance/check-in", async (req, res) => {
     const inGeofence = distanceM <= radiusM;
 
     if (inGeofence) {
-      // Inside studio geofence: QR code is required
       if (!qrVerified) {
         return res.status(400).json({
           error: "Bạn đang ở trong studio. Vui lòng quét mã QR để chấm công.",
@@ -92,7 +103,6 @@ router.post("/attendance/check-in", async (req, res) => {
       }
       method = "qr";
     } else {
-      // Outside geofence: only allowed if has offsite booking today (VN timezone)
       const today = todayVN();
       const offsite = await pool.query(`
         SELECT id FROM bookings
@@ -120,11 +130,9 @@ router.post("/attendance/check-in", async (req, res) => {
       }
     }
   } else {
-    // No GPS provided — GPS location is always required for self-service check-in
     return res.status(400).json({ error: "Vui lòng cấp quyền GPS để chấm công. QR + GPS đều cần thiết." });
   }
 
-  // Kiểm tra đã check-in hôm nay chưa (so sánh theo giờ VN UTC+7)
   const today = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
   const existing = await pool.query(
     `SELECT id FROM attendance_logs WHERE staff_id = $1 AND type = 'check_in' AND (created_at + interval '7 hours')::date = $2::date LIMIT 1`,
@@ -148,7 +156,7 @@ router.post("/attendance/check-in", async (req, res) => {
   res.status(201).json(log);
 });
 
-// ── QR Token: generate daily QR payload (admin only) ──────────────────────────
+// ── QR Token: generate daily QR URL (admin only) ──────────────────────────────
 router.get("/attendance/qr-token", async (req, res) => {
   const callerId = verifyToken(req.headers.authorization);
   if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
@@ -158,8 +166,8 @@ router.get("/attendance/qr-token", async (req, res) => {
   if (!isAdmin) return res.status(403).json({ error: "Không có quyền" });
 
   const todayDateStr = todayVN();
-  const token = generateQrToken(todayDateStr);
-  res.json({ token, date: todayDateStr });
+  const url = generateQrUrl(todayDateStr);
+  res.json({ url, date: todayDateStr });
 });
 
 // ── Check Out ─────────────────────────────────────────────────────────────────
@@ -178,7 +186,6 @@ router.post("/attendance/check-out", async (req, res) => {
     return res.status(400).json({ error: "Bạn đã check-out hôm nay rồi" });
   }
 
-  // Require same-day check-in before allowing check-out
   const checkInR = await pool.query(
     `SELECT method FROM attendance_logs WHERE staff_id = $1 AND type = 'check_in' AND (created_at + interval '7 hours')::date = $2::date LIMIT 1`,
     [callerId, today]
@@ -214,7 +221,6 @@ router.get("/attendance/me", async (req, res) => {
      FROM attendance_logs WHERE staff_id = $1 AND to_char(created_at + interval '7 hours', 'YYYY-MM') = $2 ORDER BY created_at`,
     [callerId, month]
   );
-  // Return camelCase for frontend; isOffsite derived from method="offsite"
   const logs = (logsR.rows as Record<string, unknown>[]).map(l => ({
     id: l.id,
     staffId: l.staff_id,
@@ -237,51 +243,40 @@ router.get("/attendance/me", async (req, res) => {
   const lateRules = rule
     ? await db.select().from(attendanceLateRulesTable)
         .where(eq(attendanceLateRulesTable.ruleId, rule.id))
-        .orderBy(attendanceLateRulesTable.minutesLateMin)
+        .orderBy(attendanceLateRulesTable.lateFromTime)
     : [];
   const checkInTo = rule?.checkInTo ?? "09:00";
 
-  // Helper: compute minutes late relative to checkInTo (end of on-time window)
-  // Uses VN local time (HH:MM) pre-extracted by PostgreSQL AT TIME ZONE
-  function minutesLate(localTime: string): number {
+  // Helper: find penalty for a given check-in time (HH:MM in VN timezone)
+  // Compares the actual check-in time against lateFromTime/lateToTime ranges
+  function findPenalty(localTime: string): number {
     if (!localTime || localTime <= checkInTo) return 0;
-    const [th, tm] = localTime.split(":").map(Number);
-    const [eh, em] = checkInTo.split(":").map(Number);
-    return Math.max(0, (th * 60 + tm) - (eh * 60 + em));
-  }
-
-  // Helper: find penalty tier for given minutes late
-  function findPenalty(mins: number): number {
-    if (mins === 0) return 0;
-    let penalty = 0;
     for (const lr of lateRules) {
-      const minThreshold = lr.minutesLateMin ?? 0;
-      const maxThreshold = lr.minutesLateMax ?? Infinity;
-      if (mins >= minThreshold && mins < maxThreshold) {
-        penalty = lr.penaltyAmount ? parseFloat(String(lr.penaltyAmount)) : 0;
-        break;
+      const fromTime = lr.lateFromTime ?? "00:00";
+      const toTime = lr.lateToTime;
+      const inRange = localTime >= fromTime && (toTime === null || localTime < toTime);
+      if (inRange) {
+        return lr.penaltyAmount ? parseFloat(String(lr.penaltyAmount)) : 0;
       }
     }
-    return penalty;
+    return 0;
   }
 
   let onTimeCount = 0;
   const bonusPenalty: { type: string; amount: number; description: string; date: string }[] = [];
 
   checkIns.forEach(ci => {
-    const localTime = ci.localTime; // "HH:MM" in VN timezone
+    const localTime = ci.localTime;
     if (localTime <= checkInTo) {
       onTimeCount++;
     } else {
-      // Late check-in: compute penalty using VN local time
-      const mins = minutesLate(localTime);
-      const penaltyAmt = findPenalty(mins);
+      const penaltyAmt = findPenalty(localTime);
       const dateStr = ci.localDate ?? ci.createdAt.slice(0, 10);
       if (penaltyAmt > 0) {
         bonusPenalty.push({
           type: "penalty",
           amount: penaltyAmt,
-          description: `Đi trễ ${mins} phút (${localTime})`,
+          description: `Đi trễ lúc ${localTime}`,
           date: dateStr,
         });
       }
@@ -309,7 +304,6 @@ router.get("/attendance/me", async (req, res) => {
   const weeklyBonus = parseFloat(String(rule?.weeklyOnTimeBonus ?? "50000"));
   const weeksOnTime = Math.floor(onTimeCount / 5);
 
-  // Weekly on-time bonuses
   const [y, mo] = month.split("-").map(Number);
   for (let w = 0; w < weeksOnTime; w++) {
     const weekEnd = new Date(y, mo - 1, (w + 1) * 7);
@@ -321,7 +315,6 @@ router.get("/attendance/me", async (req, res) => {
     });
   }
 
-  // Sort bonusPenalty by date
   bonusPenalty.sort((a, b) => a.date.localeCompare(b.date));
 
   const latePenaltyTotal = bonusPenalty.filter(bp => bp.type === "penalty").reduce((s, bp) => s + bp.amount, 0);
@@ -389,12 +382,15 @@ router.get("/attendance/rules", async (req, res) => {
   const late = activeRule
     ? await db.select().from(attendanceLateRulesTable)
         .where(eq(attendanceLateRulesTable.ruleId, activeRule.id))
-        .orderBy(attendanceLateRulesTable.minutesLateMin)
+        .orderBy(attendanceLateRulesTable.lateFromTime)
     : [];
   const fmtLate = late.map(l => ({
-    ...l, penaltyAmount: l.penaltyAmount ? parseFloat(String(l.penaltyAmount)) : null,
+    id: l.id,
+    ruleId: l.ruleId,
+    lateFromTime: l.lateFromTime ?? "08:00",
+    lateToTime: l.lateToTime ?? null,
+    penaltyAmount: l.penaltyAmount ? parseFloat(String(l.penaltyAmount)) : null,
   }));
-  // Map backend field names to frontend-expected contract
   const rule = activeRule ? {
     id: activeRule.id,
     name: activeRule.name,
@@ -439,8 +435,8 @@ router.put("/attendance/rules", async (req, res) => {
     for (const lr of lateRules) {
       await db.insert(attendanceLateRulesTable).values({
         ruleId: rule.id,
-        minutesLateMin: parseInt(String(lr.minutesLateMin ?? 0)),
-        minutesLateMax: lr.minutesLateMax ? parseInt(String(lr.minutesLateMax)) : null,
+        lateFromTime: String(lr.lateFromTime ?? "08:00"),
+        lateToTime: lr.lateToTime ? String(lr.lateToTime) : null,
         penaltyAmount: lr.penaltyAmount ? String(lr.penaltyAmount) : null,
       });
     }
@@ -460,7 +456,6 @@ router.get("/attendance/adjustments", async (req, res) => {
 
   const parsedStaffId = req.query.staffId ? parseInt(String(req.query.staffId)) : NaN;
   const requestedStaffId = (!isNaN(parsedStaffId) && parsedStaffId > 0) ? parsedStaffId : callerId;
-  // Non-admins can only see their own adjustments
   const staffId = callerIsAdmin ? requestedStaffId : callerId;
   const month = String(req.query.month || todayVN().slice(0, 7));
 

@@ -24,6 +24,7 @@ import RevenuePage from "@/pages/revenue";
 import PhotoshopJobsPage from "@/pages/photoshop-jobs";
 import InternalCommsPage from "@/pages/internal-comms";
 import AttendancePage from "@/pages/attendance";
+import AttendanceCheckinPage from "@/pages/attendance-checkin";
 import MyProfilePage from "@/pages/my-profile";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
@@ -72,6 +73,7 @@ function Router() {
         <Route path="/reports" component={() => <AdminRoute component={ReportsPage} />} />
         <Route path="/my-profile" component={MyProfilePage} />
         <Route path="/photoshop-jobs" component={PhotoshopJobsPage} />
+        <Route path="/attendance/check-in" component={AttendanceCheckinPage} />
         <Route path="/attendance" component={AttendancePage} />
         <Route path="/internal-comms" component={InternalCommsPage} />
         <Route component={NotFound} />

@@ -33,11 +33,13 @@ export const attendanceRulesTable = pgTable("attendance_rules", {
 });
 
 // ─── Quy tắc phạt đi muộn ─────────────────────────────────────────────────────
+// lateFromTime / lateToTime: HH:mm format, e.g. "08:05"
+// lateToTime = null means "from lateFromTime and beyond"
 export const attendanceLateRulesTable = pgTable("attendance_late_rules", {
   id: serial("id").primaryKey(),
   ruleId: integer("rule_id").notNull().references(() => attendanceRulesTable.id, { onDelete: "cascade" }),
-  minutesLateMin: integer("minutes_late_min").notNull().default(0),
-  minutesLateMax: integer("minutes_late_max"),
+  lateFromTime: text("late_from_time").notNull().default("08:00"),
+  lateToTime: text("late_to_time"),
   penaltyAmount: numeric("penalty_amount", { precision: 12, scale: 2 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

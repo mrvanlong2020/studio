@@ -1,7 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, Input, Button, Textarea } from "@/components/ui";
 import { Save, Store, Mail, Phone, MapPin, Building, Clock, Navigation, Loader2, LocateFixed, CheckCircle2, AlertCircle } from "lucide-react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 function GpsDetectButton({ onDetected }: { onDetected: (lat: number, lng: number) => void }) {
   const [state, setState] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -57,6 +59,54 @@ function GpsDetectButton({ onDetected }: { onDetected: (lat: number, lng: number
       )}
     </div>
   );
+}
+
+function StudioMap({ lat, lng, radius }: { lat: number; lng: number; radius: number }) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const markerRef = useRef<L.Marker | null>(null);
+  const circleRef = useRef<L.Circle | null>(null);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    if (!mapInstanceRef.current) {
+      const map = L.map(mapRef.current, { zoomControl: true, attributionControl: false });
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+      }).addTo(map);
+      mapInstanceRef.current = map;
+    }
+    const map = mapInstanceRef.current;
+    const center: [number, number] = [lat || 11.3101, lng || 106.1074];
+    map.setView(center, 17);
+    if (markerRef.current) markerRef.current.remove();
+    if (circleRef.current) circleRef.current.remove();
+    const icon = L.divIcon({
+      html: `<div style="background:#e11d48;width:20px;height:20px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.4)"></div>`,
+      className: "",
+      iconAnchor: [10, 10],
+    });
+    markerRef.current = L.marker(center, { icon }).addTo(map).bindPopup("📍 Studio").openPopup();
+    circleRef.current = L.circle(center, {
+      radius: radius || 300,
+      color: "#7c3aed",
+      fillColor: "#7c3aed",
+      fillOpacity: 0.12,
+      weight: 2,
+    }).addTo(map);
+    return () => {};
+  }, [lat, lng, radius]);
+
+  useEffect(() => {
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, []);
+
+  return <div ref={mapRef} style={{ height: 280, borderRadius: "0.75rem", zIndex: 0 }} />;
 }
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -216,6 +266,18 @@ export default function SettingsPage() {
               <Input type="number" {...f("attendance_radius_m")} placeholder="300" />
             </div>
           </div>
+          {(form.studio_lat || form.studio_lng) && (
+            <div>
+              <label className="text-sm font-medium block mb-2 flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-primary" /> Bản đồ vị trí Studio
+              </label>
+              <StudioMap
+                lat={Number(form.studio_lat)}
+                lng={Number(form.studio_lng)}
+                radius={Number(form.attendance_radius_m) || 300}
+              />
+            </div>
+          )}
           <div className="text-xs text-muted-foreground space-y-1">
             <p>💡 <strong>Cách đơn giản nhất:</strong> Mở trang này <em>tại tiệm</em>, bấm nút "Lấy vị trí hiện tại" → tọa độ tự động điền.</p>
             <p>📌 Hoặc mở Google Maps, nhấp chuột phải vào studio → chọn <em>"What's here?"</em> để thấy lat/lng.</p>

@@ -58,8 +58,8 @@ type MyAttendance = {
 
 type LateRule = {
   id?: number;
-  minutesLateMin: number;
-  minutesLateMax: number | null;
+  lateFromTime: string;
+  lateToTime: string | null;
   penaltyAmount: number | null;
 };
 
@@ -221,7 +221,7 @@ export default function AttendancePage() {
     enabled: effectiveIsAdmin,
   });
 
-  const { data: qrTokenData } = useQuery<{ token: string; date: string }>({
+  const { data: qrTokenData } = useQuery<{ url: string; date: string }>({
     queryKey: ["attendance-qr-token"],
     queryFn: () => fetchAuth(`/api/attendance/qr-token`),
     enabled: tab === "admin" && effectiveIsAdmin,
@@ -236,8 +236,8 @@ export default function AttendancePage() {
 
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
-    if (!qrTokenData?.token || !qrCanvasRef.current) return;
-    QRCode.toCanvas(qrCanvasRef.current, qrTokenData.token, {
+    if (!qrTokenData?.url || !qrCanvasRef.current) return;
+    QRCode.toCanvas(qrCanvasRef.current, qrTokenData.url, {
       width: 200, margin: 2, color: { dark: "#1e1b4b", light: "#ffffff" },
     }).catch(() => {});
   }, [qrTokenData]);
@@ -342,13 +342,20 @@ export default function AttendancePage() {
   // ── QR scanned ─────────────────────────────────────────────────────────────
   async function handleQrScan(data: string) {
     setShowQr(false);
+    // Extract code from URL if QR encodes a full URL
+    let qrPayload = data;
+    try {
+      const url = new URL(data);
+      const code = url.searchParams.get("code");
+      if (code) qrPayload = code;
+    } catch {}
     setGeoLoading(true);
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
         navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 12000, enableHighAccuracy: true })
       );
       const { latitude: lat, longitude: lng } = pos.coords;
-      if (qrAction === "checkin") await checkin.mutateAsync({ lat, lng, qrPayload: data });
+      if (qrAction === "checkin") await checkin.mutateAsync({ lat, lng, qrPayload });
       else await checkout.mutateAsync({ lat, lng });
     } catch (e: unknown) {
       setGeoErr((e as Error)?.message ?? "Lỗi khi lấy GPS sau khi quét QR");
@@ -989,7 +996,7 @@ export default function AttendancePage() {
                     </h3>
                     {editingRules && (
                       <button
-                        onClick={() => setLateRules(r => [...r, { minutesLateMin: 0, minutesLateMax: null, penaltyAmount: null }])}
+                        onClick={() => setLateRules(r => [...r, { lateFromTime: "08:00", lateToTime: null, penaltyAmount: null }])}
                         className="flex items-center gap-1 text-xs text-primary hover:underline">
                         <Plus className="w-3.5 h-3.5" /> Thêm dòng
                       </button>
@@ -1004,25 +1011,25 @@ export default function AttendancePage() {
                       {lateRules.map((lr, i) => (
                         <div key={i} className="px-4 py-3 grid grid-cols-[1fr_1fr_1fr_auto] gap-3 items-center text-sm">
                           <div>
-                            <label className="text-xs text-muted-foreground block mb-1">Muộn từ (phút)</label>
+                            <label className="text-xs text-muted-foreground block mb-1">Muộn từ (giờ)</label>
                             {editingRules
-                              ? <input type="number" value={lr.minutesLateMin} onChange={e => {
+                              ? <input type="time" value={lr.lateFromTime ?? "08:00"} onChange={e => {
                                   const copy = [...lateRules];
-                                  copy[i] = { ...copy[i], minutesLateMin: parseInt(e.target.value) || 0 };
+                                  copy[i] = { ...copy[i], lateFromTime: e.target.value };
                                   setLateRules(copy);
                                 }} className={inputCls} />
-                              : <span className="font-medium">{lr.minutesLateMin}'</span>}
+                              : <span className="font-medium">{lr.lateFromTime ?? "08:00"}</span>}
                           </div>
                           <div>
-                            <label className="text-xs text-muted-foreground block mb-1">Muộn đến (phút)</label>
+                            <label className="text-xs text-muted-foreground block mb-1">Muộn đến (giờ, trống=∞)</label>
                             {editingRules
-                              ? <input type="number" value={lr.minutesLateMax ?? ""} placeholder="∞"
+                              ? <input type="time" value={lr.lateToTime ?? ""}
                                   onChange={e => {
                                     const copy = [...lateRules];
-                                    copy[i] = { ...copy[i], minutesLateMax: e.target.value ? parseInt(e.target.value) : null };
+                                    copy[i] = { ...copy[i], lateToTime: e.target.value || null };
                                     setLateRules(copy);
                                   }} className={inputCls} />
-                              : <span className="font-medium">{lr.minutesLateMax ? `${lr.minutesLateMax}'` : "∞"}</span>}
+                              : <span className="font-medium">{lr.lateToTime ?? "∞"}</span>}
                           </div>
                           <div>
                             <label className="text-xs text-muted-foreground block mb-1">Phạt (đ, trống=không phạt)</label>
