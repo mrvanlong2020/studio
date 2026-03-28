@@ -5,22 +5,17 @@ import { eq, desc, inArray, and } from "drizzle-orm";
 
 const router = Router();
 
-// ── Helper: deactivate existing extra_retouched item for a booking ────────────
+// ── Helper: deactivate ALL extra_retouched items for a booking ───────────────
 async function clearExtraRetouchedItem(bookingId: number) {
-  const [existing] = await db
-    .select()
-    .from(bookingItemsTable)
+  await db
+    .update(bookingItemsTable)
+    .set({ qty: 0, totalPrice: "0", isActive: 0 })
     .where(and(eq(bookingItemsTable.bookingId, bookingId), eq(bookingItemsTable.type, "extra_retouched")));
-  if (existing) {
-    await db
-      .update(bookingItemsTable)
-      .set({ qty: 0, totalPrice: "0", isActive: 0 })
-      .where(eq(bookingItemsTable.id, existing.id));
-  }
 }
 
 // ── Helper: sync extra_retouched booking_item after job update ────────────────
-// extra = max(0, donePhotos - includedSnapshot); when extra > 0, upsert booking_item; when 0, deactivate
+// extra = max(0, donePhotos - includedSnapshot)
+// Keeps canonical row (highest id), deactivates duplicates, inserts when none exists
 async function syncExtraRetouchedItem(bookingId: number, donePhotos: number) {
   const [booking] = await db
     .select({ snap: bookingsTable.includedRetouchedPhotosSnapshot })
@@ -31,20 +26,26 @@ async function syncExtraRetouchedItem(bookingId: number, donePhotos: number) {
   const included = booking.snap ?? 0;
   const extra = Math.max(0, donePhotos - included);
 
-  // Find existing extra_retouched item for this booking
-  const [existing] = await db
+  // Fetch all existing extra_retouched items for this booking (sorted so canonical is first)
+  const allExisting = await db
     .select()
     .from(bookingItemsTable)
     .where(and(eq(bookingItemsTable.bookingId, bookingId), eq(bookingItemsTable.type, "extra_retouched")));
 
   if (extra > 0) {
-    const unitPrice = existing ? parseFloat(String(existing.unitPrice)) : 0;
-    const totalPrice = unitPrice * extra;
-    if (existing) {
+    // Use the first row as canonical; deactivate any duplicates
+    const [canonical, ...duplicates] = allExisting;
+    if (duplicates.length > 0) {
+      for (const dup of duplicates) {
+        await db.update(bookingItemsTable).set({ qty: 0, totalPrice: "0", isActive: 0 }).where(eq(bookingItemsTable.id, dup.id));
+      }
+    }
+    if (canonical) {
+      const unitPrice = parseFloat(String(canonical.unitPrice)) || 0;
       await db
         .update(bookingItemsTable)
-        .set({ qty: extra, totalPrice: String(totalPrice), isActive: 1 })
-        .where(eq(bookingItemsTable.id, existing.id));
+        .set({ qty: extra, totalPrice: String(unitPrice * extra), isActive: 1 })
+        .where(eq(bookingItemsTable.id, canonical.id));
     } else {
       await db.insert(bookingItemsTable).values({
         bookingId,
@@ -58,7 +59,7 @@ async function syncExtraRetouchedItem(bookingId: number, donePhotos: number) {
       });
     }
   } else {
-    // No extra — deactivate any existing item
+    // No extra — deactivate ALL existing items for this booking
     await clearExtraRetouchedItem(bookingId);
   }
 }
