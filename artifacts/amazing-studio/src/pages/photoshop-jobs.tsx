@@ -83,14 +83,14 @@ export default function PhotoshopJobsPage() {
 
   const { data: jobs = [], isLoading } = useQuery<PhotoshopJob[]>({
     queryKey: ["photoshop-jobs"],
-    queryFn: () => fetch(`${BASE}/api/photoshop-jobs`).then(r => r.json()),
+    queryFn: () => fetch(`${BASE}/api/photoshop-jobs`).then(r => r.ok ? r.json() : []).catch(() => []).then(d => Array.isArray(d) ? d : []),
     refetchInterval: 30000,
   });
 
   // Booking search for modal — enabled as soon as dropdown is shown
   const { data: bookingResults = [] } = useQuery<any[]>({
     queryKey: ["bookings-search", bookingSearch],
-    queryFn: () => fetch(`${BASE}/api/bookings?q=${encodeURIComponent(bookingSearch.trim())}`).then(r => r.json()),
+    queryFn: () => fetch(`${BASE}/api/bookings?q=${encodeURIComponent(bookingSearch.trim())}`).then(r => r.ok ? r.json() : []).catch(() => []).then(d => Array.isArray(d) ? d : []),
     enabled: showBookingDrop,
     staleTime: 10_000,
   });

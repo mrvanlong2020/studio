@@ -89,12 +89,12 @@ export default function WardrobePage() {
 
   const { data: dresses = [], isLoading } = useQuery<Dress[]>({
     queryKey: ["dresses"],
-    queryFn: () => fetch(`${BASE}/api/dresses`).then(r => r.json()),
+    queryFn: () => fetch(`${BASE}/api/dresses`).then(r => r.ok ? r.json() : []).catch(() => []).then(d => Array.isArray(d) ? d : []),
   });
 
   const { data: dbCategories = [] } = useQuery<string[]>({
     queryKey: ["dress-categories"],
-    queryFn: () => fetch(`${BASE}/api/dresses/categories`).then(r => r.json()),
+    queryFn: () => fetch(`${BASE}/api/dresses/categories`).then(r => r.ok ? r.json() : []).catch(() => []).then(d => Array.isArray(d) ? d : []),
   });
 
   const [catInput, setCatInput] = useState("");

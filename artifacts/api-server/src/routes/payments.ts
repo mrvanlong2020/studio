@@ -74,6 +74,7 @@ const BOOKING_JOIN_SQL = `
 
 // GET /payments/suggestions — gợi ý thông minh khi mở ô tìm kiếm (chưa nhập)
 router.get("/payments/suggestions", async (req, res) => {
+  try {
   const [bookingsResult, paymentsResult] = await Promise.all([
     pool.query(`${BOOKING_JOIN_SQL}
       AND b.status NOT IN ('cancelled')
@@ -106,10 +107,15 @@ router.get("/payments/suggestions", async (req, res) => {
   }).slice(0, 15);
 
   res.json(sorted);
+  } catch (err) {
+    console.error("GET /payments/suggestions error:", err);
+    res.status(500).json({ error: "Lỗi hệ thống" });
+  }
 });
 
 // GET /payments/recent?period=today|7days|month&limit=10 — lịch sử thu gần đây
 router.get("/payments/recent", async (req, res) => {
+  try {
   const period = (req.query.period as string) || "today";
   const limit  = Math.min(parseInt((req.query.limit as string) || "10"), 100);
 
@@ -200,11 +206,16 @@ router.get("/payments/recent", async (req, res) => {
       total: parseFloat(summary.total),
     },
   });
+  } catch (err) {
+    console.error("GET /payments/recent error:", err);
+    res.status(500).json({ error: "Lỗi hệ thống" });
+  }
 });
 
 // GET /payments/search?q=... — tìm đơn hàng cần thu theo tên/SĐT/mã đơn
 // Hỗ trợ tìm kiếm có dấu/không dấu nhờ unaccent()
 router.get("/payments/search", async (req, res) => {
+  try {
   const q = ((req.query.q as string) || "").trim();
   if (!q) { res.json([]); return; }
 
@@ -223,6 +234,10 @@ router.get("/payments/search", async (req, res) => {
   );
 
   res.json(result.rows.map(fmtBookingRow));
+  } catch (err) {
+    console.error("GET /payments/search error:", err);
+    res.status(500).json({ error: "Lỗi hệ thống" });
+  }
 });
 
 // POST /payments — tạo phiếu thu mới
@@ -272,6 +287,7 @@ router.post("/payments", async (req, res) => {
 // - Tạo deposit record cho booking nào có depositAmount > 0 nhưng chưa có phiếu thu nào
 // - Cập nhật lại paid_amount trên bookings table
 router.post("/payments/sync-deposits", async (_req, res) => {
+  try {
   const report: { created: number; removed: number; recalculated: number } = {
     created: 0, removed: 0, recalculated: 0,
   };
@@ -341,6 +357,10 @@ router.post("/payments/sync-deposits", async (_req, res) => {
     message: `Đồng bộ hoàn tất: tạo ${report.created} phiếu cọc mới, xóa ${report.removed} bản trùng, cập nhật ${report.recalculated} đơn hàng`,
     ...report,
   });
+  } catch (err) {
+    console.error("POST /payments/sync-deposits error:", err);
+    res.status(500).json({ error: "Lỗi hệ thống khi đồng bộ cọc" });
+  }
 });
 
 // DELETE /payments/:id

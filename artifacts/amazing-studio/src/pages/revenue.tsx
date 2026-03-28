@@ -159,19 +159,19 @@ export default function RevenuePage() {
 
   const { data: periodData = [], isLoading: periodLoading } = useQuery<PeriodPoint[]>({
     queryKey: ["revenue-by-period", filterKey, periodMode],
-    queryFn: () => fetch(`${BASE}/api/revenue/by-period?${buildFilterParams()}&mode=${periodMode}`).then(r => r.json()),
+    queryFn: () => fetch(`${BASE}/api/revenue/by-period?${buildFilterParams()}&mode=${periodMode}`).then(r => r.ok ? r.json() : []).catch(() => []).then(d => Array.isArray(d) ? d : []),
     refetchInterval: 60000,
   });
 
   const { data: serviceData = [], isLoading: serviceLoading } = useQuery<ServiceRow[]>({
     queryKey: ["revenue-by-service", filterKey],
-    queryFn: () => fetch(`${BASE}/api/revenue/by-service?${buildFilterParams()}`).then(r => r.json()),
+    queryFn: () => fetch(`${BASE}/api/revenue/by-service?${buildFilterParams()}`).then(r => r.ok ? r.json() : []).catch(() => []).then(d => Array.isArray(d) ? d : []),
     refetchInterval: 60000,
   });
 
   const { data: saleData = [], isLoading: saleLoading } = useQuery<SaleRow[]>({
     queryKey: ["revenue-by-sale", filterKey],
-    queryFn: () => fetch(`${BASE}/api/revenue/by-sale?${buildFilterParams()}`).then(r => r.json()),
+    queryFn: () => fetch(`${BASE}/api/revenue/by-sale?${buildFilterParams()}`).then(r => r.ok ? r.json() : []).catch(() => []).then(d => Array.isArray(d) ? d : []),
     refetchInterval: 60000,
   });
 

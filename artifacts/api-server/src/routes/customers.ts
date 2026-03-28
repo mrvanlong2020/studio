@@ -35,6 +35,7 @@ async function ensureCustomerPhoneUnique() {
 ensureCustomerPhoneUnique().catch(console.error);
 
 router.get("/customers", async (req, res) => {
+  try {
   const search = req.query.search as string | undefined;
   let customers;
   if (search) {
@@ -74,9 +75,14 @@ router.get("/customers", async (req, res) => {
   );
 
   res.json(result);
+  } catch (err) {
+    console.error("GET /customers error:", err);
+    res.status(500).json({ error: "Lỗi hệ thống" });
+  }
 });
 
 router.get("/customers/by-phone", async (req, res) => {
+  try {
   const rawPhone = (req.query.phone as string | undefined) ?? "";
   const phone = normalizePhone(rawPhone.trim());
   if (!phone) return res.status(400).json({ error: "Thiếu số điện thoại" });
@@ -94,6 +100,10 @@ router.get("/customers/by-phone", async (req, res) => {
     zalo: row.zalo, source: row.source, tags: row.tags, gender: row.gender,
     avatar: row.avatar, customCode: row.custom_code, createdAt: row.created_at,
   });
+  } catch (err) {
+    console.error("GET /customers/by-phone error:", err);
+    res.status(500).json({ error: "Lỗi hệ thống" });
+  }
 });
 
 router.post("/customers", async (req, res) => {
@@ -122,6 +132,7 @@ router.post("/customers", async (req, res) => {
 });
 
 router.get("/customers/:id", async (req, res) => {
+  try {
   const id = parseInt(req.params.id);
   const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, id));
   if (!customer) return res.status(404).json({ error: "Không tìm thấy khách hàng" });
@@ -132,6 +143,10 @@ router.get("/customers/:id", async (req, res) => {
   const totalOwed = bookings.reduce((s, b) => s + parseFloat(b.totalAmount), 0);
   const totalDebt = Math.max(0, totalOwed - totalPaid);
   res.json({ ...customer, totalBookings: bookings.length, totalPaid, totalDebt, bookings });
+  } catch (err) {
+    console.error("GET /customers/:id error:", err);
+    res.status(500).json({ error: "Lỗi hệ thống" });
+  }
 });
 
 router.put("/customers/:id", async (req, res) => {
@@ -164,9 +179,14 @@ router.put("/customers/:id", async (req, res) => {
 });
 
 router.delete("/customers/:id", async (req, res) => {
+  try {
   const id = parseInt(req.params.id);
   await db.delete(customersTable).where(eq(customersTable.id, id));
   res.status(204).send();
+  } catch (err) {
+    console.error("DELETE /customers/:id error:", err);
+    res.status(500).json({ error: "Lỗi hệ thống" });
+  }
 });
 
 export default router;

@@ -818,7 +818,10 @@ function ShowFormPanel({
       // ── 1. Tạo / tìm khách hàng ──
       let cid = customerId;
       if (!cid) {
-        const found = await fetch(`${BASE}/api/customers?search=${encodeURIComponent(phone)}`).then(r => r.json()) as Customer[];
+        const token = localStorage.getItem("amazingStudioToken_v2");
+        const authHeaders = { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+        const foundRaw = await fetch(`${BASE}/api/customers?search=${encodeURIComponent(phone)}`, { headers: authHeaders }).then(r => r.ok ? r.json() : []).catch(() => []);
+        const found: Customer[] = Array.isArray(foundRaw) ? foundRaw : [];
         const existing = found.find(c => c.phone === phone);
         if (existing) {
           cid = existing.id;

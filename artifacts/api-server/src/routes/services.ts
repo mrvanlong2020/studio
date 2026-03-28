@@ -42,24 +42,29 @@ async function fetchSplitsMap(serviceIds: number[]) {
 
 // ─── GET /services ─────────────────────────────────────────────────────────────
 router.get("/services", async (_req, res) => {
+  try {
   const services = await db.select().from(servicesTable).orderBy(asc(servicesTable.sortOrder), asc(servicesTable.createdAt));
   const ids = services.map(s => s.id);
   const splitsMap = await fetchSplitsMap(ids);
   res.json(services.map(s => ({ ...fmtService(s), splits: splitsMap[s.id] || [] })));
+  } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
 // ─── GET /services/:id ─────────────────────────────────────────────────────────
 router.get("/services/:id", async (req, res) => {
+  try {
   const id = parseInt(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
   const [service] = await db.select().from(servicesTable).where(eq(servicesTable.id, id));
   if (!service) return res.status(404).json({ error: "Service not found" });
   const splitsMap = await fetchSplitsMap([id]);
   res.json({ ...fmtService(service), splits: splitsMap[id] || [] });
+  } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
 // ─── POST /services ────────────────────────────────────────────────────────────
 router.post("/services", async (req, res) => {
+  try {
   const { name, code, category, description, type, price, costPrice, duration, includes, sortOrder, isActive, splits } = req.body;
   const [service] = await db
     .insert(servicesTable)
@@ -89,10 +94,12 @@ router.post("/services", async (req, res) => {
 
   const splitsMap = await fetchSplitsMap([service.id]);
   res.status(201).json({ ...fmtService(service), splits: splitsMap[service.id] || [] });
+  } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
 // ─── PUT /services/:id ─────────────────────────────────────────────────────────
 router.put("/services/:id", async (req, res) => {
+  try {
   const id = parseInt(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
   const { name, code, category, description, type, price, costPrice, duration, includes, sortOrder, isActive, splits } = req.body;
@@ -131,23 +138,28 @@ router.put("/services/:id", async (req, res) => {
 
   const splitsMap = await fetchSplitsMap([id]);
   res.json({ ...fmtService(service), splits: splitsMap[id] || [] });
+  } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
 // ─── DELETE /services/:id ──────────────────────────────────────────────────────
 router.delete("/services/:id", async (req, res) => {
+  try {
   const id = parseInt(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
   await db.delete(servicesTable).where(eq(servicesTable.id, id));
   res.status(204).send();
+  } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
 // ─── GET /service-splits?serviceId=X ──────────────────────────────────────────
 // Lookup splits for a specific service (used by job-earnings compute)
 router.get("/service-splits", async (req, res) => {
+  try {
   const serviceId = req.query.serviceId ? parseInt(req.query.serviceId as string) : undefined;
   if (!serviceId) return res.json([]);
   const splits = await db.select().from(serviceJobSplitsTable).where(eq(serviceJobSplitsTable.serviceId, serviceId));
   res.json(splits.map(fmtSplit));
+  } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
 export { ROLES };
