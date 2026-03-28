@@ -1324,71 +1324,51 @@ function formatShootDate(dateStr: string): string {
   try { const d = parseISO(dateStr); return isNaN(d.getTime()) ? dateStr : format(d, "dd/MM/yyyy"); } catch { return dateStr; }
 }
 
-async function exportContractAsImages(htmlContent: string, customerName: string) {
-  try {
-    // Load html2canvas từ CDN
-    const script = document.createElement("script");
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
-    
-    await new Promise<void>((resolve, reject) => {
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error("Không thể tải html2canvas"));
-      document.head.appendChild(script);
-    });
+async function buildContractImages(htmlContent: string): Promise<string[]> {
+  const html2canvas = (await import("html2canvas")).default;
 
-    // Tạo container tạm thời
-    const container = document.createElement("div");
-    container.style.position = "fixed";
-    container.style.left = "-10000px";
-    container.style.width = "820px";
-    container.style.background = "#fff";
-    container.innerHTML = htmlContent;
-    document.body.appendChild(container);
+  const container = document.createElement("div");
+  container.style.position = "fixed";
+  container.style.left = "-10000px";
+  container.style.top = "0";
+  container.style.width = "820px";
+  container.style.background = "#fff";
+  container.style.zIndex = "-9999";
+  container.innerHTML = htmlContent;
+  document.body.appendChild(container);
 
-    // Đợi ảnh load
-    await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise(resolve => setTimeout(resolve, 600));
 
-    const html2canvas = (window as any).html2canvas;
-    if (!html2canvas) throw new Error("html2canvas không tải được");
+  const pageHeight = 1200;
+  const totalHeight = container.scrollHeight;
+  const pageCount = Math.max(1, Math.ceil(totalHeight / pageHeight));
+  const dataUrls: string[] = [];
 
-    // Tính số page (mỗi page ~1200px)
-    const pageHeight = 1200;
-    const totalHeight = container.scrollHeight;
-    const pageCount = Math.ceil(totalHeight / pageHeight);
+  for (let i = 0; i < pageCount; i++) {
+    const pageDiv = document.createElement("div");
+    pageDiv.style.position = "fixed";
+    pageDiv.style.left = "-10000px";
+    pageDiv.style.top = "0";
+    pageDiv.style.width = "820px";
+    pageDiv.style.height = pageHeight + "px";
+    pageDiv.style.overflow = "hidden";
+    pageDiv.style.background = "#fff";
+    pageDiv.style.zIndex = "-9999";
 
-    // Export từng page
-    for (let i = 0; i < pageCount; i++) {
-      const pageDiv = document.createElement("div");
-      pageDiv.style.position = "fixed";
-      pageDiv.style.left = "-10000px";
-      pageDiv.style.width = "820px";
-      pageDiv.style.height = pageHeight + "px";
-      pageDiv.style.overflow = "hidden";
-      pageDiv.style.background = "#fff";
+    const cloned = container.cloneNode(true) as HTMLElement;
+    cloned.style.marginTop = `-${i * pageHeight}px`;
+    cloned.style.width = "820px";
+    pageDiv.appendChild(cloned);
+    document.body.appendChild(pageDiv);
 
-      const cloned = container.cloneNode(true) as HTMLElement;
-      cloned.style.marginTop = `-${i * pageHeight}px`;
-      cloned.style.width = "820px";
-      pageDiv.appendChild(cloned);
-      document.body.appendChild(pageDiv);
+    const canvas = await html2canvas(pageDiv, { scale: 2, useCORS: true, logging: false, backgroundColor: "#ffffff" });
+    dataUrls.push(canvas.toDataURL("image/jpeg", 0.95));
 
-      const canvas = await html2canvas(pageDiv, { scale: 2, useCORS: true, logging: false });
-      const link = document.createElement("a");
-      link.href = canvas.toDataURL("image/jpeg", 0.95);
-      link.download = `hop-dong-${customerName}-trang-${i + 1}.jpg`;
-      link.click();
-
-      document.body.removeChild(pageDiv);
-      
-      // Delay giữa export
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-
-    document.body.removeChild(container);
-  } catch (err) {
-    console.error("Export error:", err);
-    alert(`Lỗi xuất ảnh: ${err instanceof Error ? err.message : String(err)}`);
+    document.body.removeChild(pageDiv);
   }
+
+  document.body.removeChild(container);
+  return dataUrls;
 }
 
 function generateContractHTML(booking: Booking, siblings: Booking[], allPackages: DetailPackage[]): string {
@@ -1730,6 +1710,10 @@ function ShowDetailPanel({
   const [deleting, setDeleting] = useState(false);
   const [previewImg, setPreviewImg] = useState<string | null>(null);
 
+  const [showContractImages, setShowContractImages] = useState(false);
+  const [contractImageUrls, setContractImageUrls] = useState<string[]>([]);
+  const [contractImagesLoading, setContractImagesLoading] = useState(false);
+
   const [showReschedule, setShowReschedule] = useState(false);
   const [rescheduleForm, setRescheduleForm] = useState({ newDate: booking.shootDate, newTime: booking.shootTime || "", reason: "" });
   const [rescheduleError, setRescheduleError] = useState<string | null>(null);
@@ -1831,11 +1815,21 @@ function ShowDetailPanel({
         </button>
         <button
           onClick={async () => {
-            const html = generateContractHTML(booking, siblings, allPackages);
-            await exportContractAsImages(html, booking.customerName || "hop-dong");
+            setContractImagesLoading(true);
+            setShowContractImages(true);
+            try {
+              const html = generateContractHTML(booking, siblings, allPackages);
+              const urls = await buildContractImages(html);
+              setContractImageUrls(urls);
+            } catch (err) {
+              alert(`Lỗi tạo ảnh: ${err instanceof Error ? err.message : String(err)}`);
+              setShowContractImages(false);
+            } finally {
+              setContractImagesLoading(false);
+            }
           }}
           className="p-1.5 rounded-lg text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors flex-shrink-0"
-          title="Xuất ảnh JPG"
+          title="Xem hợp đồng dạng ảnh"
         >
           <Camera className="w-4 h-4" />
         </button>
@@ -2200,7 +2194,53 @@ function ShowDetailPanel({
         </div>
       </div>
 
-      {/* Lightbox — ảnh concept toàn màn hình */}
+      {/* Modal xem hợp đồng dạng ảnh */}
+      {showContractImages && (
+        <div className="fixed inset-0 z-[300] bg-black/95 flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0">
+            <div>
+              <p className="text-white font-semibold text-sm">Hợp đồng dạng ảnh</p>
+              <p className="text-white/50 text-xs mt-0.5">Bấm giữ ảnh để lưu vào điện thoại</p>
+            </div>
+            <button
+              onClick={() => { setShowContractImages(false); setContractImageUrls([]); }}
+              className="text-white/70 hover:text-white p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto">
+            {contractImagesLoading ? (
+              <div className="flex flex-col items-center justify-center h-full gap-3">
+                <div className="w-10 h-10 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                <p className="text-white/60 text-sm">Đang tạo ảnh hợp đồng...</p>
+              </div>
+            ) : contractImageUrls.length === 0 ? (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-white/50 text-sm">Không có dữ liệu</p>
+              </div>
+            ) : (
+              <div className="p-4 space-y-6 max-w-2xl mx-auto">
+                {contractImageUrls.map((url, idx) => (
+                  <div key={idx}>
+                    <p className="text-white/50 text-xs mb-2 text-center">Trang {idx + 1} / {contractImageUrls.length}</p>
+                    <img
+                      src={url}
+                      alt={`Trang ${idx + 1}`}
+                      className="w-full rounded-lg shadow-xl"
+                      style={{ touchAction: "manipulation" }}
+                    />
+                  </div>
+                ))}
+                <p className="text-center text-white/40 text-xs pb-4">Bấm giữ ảnh để lưu vào thư viện điện thoại</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {previewImg && (
         <div
           className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-4"
