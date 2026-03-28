@@ -6,9 +6,12 @@ import {
 } from "@workspace/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { verifyToken } from "./auth";
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHmac, timingSafeEqual, randomBytes } from "crypto";
 
-const QR_SECRET = process.env.SESSION_SECRET ?? "amazing-studio-secret-2025";
+// Use SESSION_SECRET if set; otherwise generate a random per-instance secret.
+// Per-instance secret means QR tokens expire on server restart — acceptable for
+// dev/staging; production should always set SESSION_SECRET.
+const QR_SECRET = process.env.SESSION_SECRET || randomBytes(32).toString("hex");
 
 function generateQrToken(dateStr: string): string {
   const sig = createHmac("sha256", QR_SECRET).update(`qr:${dateStr}`).digest("hex").slice(0, 16);
