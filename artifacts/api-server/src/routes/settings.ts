@@ -16,6 +16,9 @@ const DEFAULT_SETTINGS = {
   logoUrl: null,
   workingHours: "08:00 - 18:00",
   defaultDeposit: 30,
+  studio_lat: 11.3101,
+  studio_lng: 106.1074,
+  attendance_radius_m: 300,
 };
 
 async function loadSettings() {
@@ -34,6 +37,9 @@ async function loadSettings() {
     logoUrl: map["logoUrl"] ?? DEFAULT_SETTINGS.logoUrl,
     workingHours: map["workingHours"] ?? DEFAULT_SETTINGS.workingHours,
     defaultDeposit: parseFloat(map["defaultDeposit"] ?? String(DEFAULT_SETTINGS.defaultDeposit)),
+    studio_lat: parseFloat(map["studio_lat"] ?? String(DEFAULT_SETTINGS.studio_lat)),
+    studio_lng: parseFloat(map["studio_lng"] ?? String(DEFAULT_SETTINGS.studio_lng)),
+    attendance_radius_m: parseFloat(map["attendance_radius_m"] ?? String(DEFAULT_SETTINGS.attendance_radius_m)),
   };
 }
 

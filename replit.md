@@ -80,6 +80,16 @@ A wedding photography studio and wedding dress rental management system for "Ama
   - Filter tabs by status with counts; search by job code/customer/staff
   - Sort by: deadline, progress, status, newest
   - API: GET/POST/PUT/DELETE `/api/photoshop-jobs`
+- **Chấm công (Attendance)** `/attendance`: Full attendance module with QR + GPS check-in/out
+  - DB tables: `attendance_logs` (check_in/check_out logs), `attendance_rules` (on-time window + weekly bonus), `attendance_late_rules` (late penalty tiers), `attendance_adjustments` (manual bonus/penalty by admin)
+  - **Check-in flow**: "Chấm vào (QR)" button → opens jsQR camera scanner (device camera) → scans QR code → gets GPS location → POST /api/attendance/check-in; falls back to GPS-only button
+  - **Geofence**: Studio lat/lng/radius in `settings` table; within radius → method=`qr`; outside but has offsite booking today → method=`offsite`; else rejected
+  - **My tab**: Monthly calendar view (color: green=full day, amber=offsite, blue=check-in only), summary cards (Ngày công / Đúng giờ % / Thưởng/Phạt net), bonus/penalty list, admin adjustments panel with staff dropdown
+  - **Admin tab**: Per-staff summary table (Ngày công, Đủ giờ/Total, Ngoài studio, Lần cuối); raw log table (collapsible); manual check-in form with staff dropdown
+  - **Rules tab**: Editable form (tên quy tắc, giờ vào từ/đến, bonus tuần); late rules table with "+" Thêm dòng + per-row delete; save saves all to DB
+  - **Settings**: Added Geofence section (lat/lng/radius) to settings page, linked to DB via PUT /api/settings; default 11.3101,106.1074,300m
+  - **API**: POST /api/attendance/check-in (geofence + offsite check), POST /api/attendance/check-out, GET /api/attendance/me?month, GET /api/attendance/admin?month, GET/PUT /api/attendance/rules, GET/POST /api/attendance/adjustments, POST /api/attendance/manual (admin)
+  - **jsQR** package installed for QR code scanning from camera frame
 - **ServiceSearchBox** (`src/components/service-search-box.tsx`): Shared searchable package picker — live filtering, smart suggestions from localStorage recent, shows tags (serviceType, makeup, addon, album). Used in booking forms and calendar.
 - **SurchargeEditor** (`src/components/surcharge-editor.tsx`): Shared multi-line phát sinh/phụ thu editor. Each row: name + amount, auto-sum. Stores as JSONB `surcharges` column on bookings table.
 - **Booking surcharges**: `surcharges` JSONB column on `bookingsTable` (`[{name, amount}]`). POST/PUT /bookings accept `surcharges`. Total = sum(line items) + sum(surcharges). Auto-computed in form when package selected.

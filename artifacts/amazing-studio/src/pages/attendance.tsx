@@ -1,57 +1,204 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Timer, MapPin, CheckCircle2, LogIn, LogOut, Calendar,
-  Users, AlertCircle, Clock, Plus, Settings, Loader2
+  Users, AlertCircle, Clock, Plus, Settings, Loader2, QrCode,
+  X, CameraOff, Camera, Trash2, ChevronDown
 } from "lucide-react";
 import { useStaffAuth } from "@/contexts/StaffAuthContext";
 import { Button } from "@/components/ui";
+import jsQR from "jsqr";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 const vnd = (n: number) =>
   new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
 
+const authH = () => {
+  const token = localStorage.getItem("amazingStudioToken_v2");
+  return { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+};
+
+const fetchAuth = (url: string, opts?: RequestInit) =>
+  fetch(`${BASE}${url}`, { headers: authH(), ...opts }).then(async r => {
+    const d = await r.json();
+    if (!r.ok) throw new Error(d?.error || "Lỗi kết nối");
+    return d;
+  });
+
 type LogEntry = {
   id: number;
   staffId: number;
   staffName?: string;
   type: "check_in" | "check_out";
+  method?: string;
   lat: number | null;
   lng: number | null;
-  isOffsite: number;
+  distanceM?: number | null;
+  isOffsite: number | boolean;
   notes: string | null;
   createdAt: string;
 };
 
 type MyAttendance = {
   logs: LogEntry[];
-  rule: { checkinStartTime: string; checkinEndTime: string; workStartTime: string; checkoutTime: string; weeklyBonusAmount: number } | null;
   bonusPenalty: { type: string; amount: number; description: string; date: string }[];
   adjustments: { id: number; type: string; amount: number; reason: string; date: string }[];
+  totalDays: number;
+  onTimeCount: number;
+  onTimeRate: number;
+  earnedBonus: number;
+  penalty: number;
+  net: number;
 };
 
-type AdminLog = LogEntry & { staffName: string };
+type LateRule = {
+  id?: number;
+  minutesLateMin: number;
+  minutesLateMax: number | null;
+  penaltyAmount: number | null;
+};
 
+type AttRules = {
+  rule: {
+    id?: number;
+    name?: string;
+    checkinStartTime: string;
+    checkinEndTime: string;
+    workStartTime?: string;
+    checkoutTime?: string;
+    weeklyBonusAmount: number;
+    isActive?: number;
+  } | null;
+  lateRules: LateRule[];
+};
+
+type AdminLog = LogEntry & { staff_name: string; staff_id: number };
+
+type StaffInfo = { id: number; name: string; role: string };
+
+// ─── QR Scanner component ────────────────────────────────────────────────────
+function QrScanner({ onScan, onClose }: { onScan: (data: string) => void; onClose: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animRef = useRef<number>(0);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [cameraErr, setCameraErr] = useState<string | null>(null);
+
+  const startScan = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+      }
+    } catch {
+      setCameraErr("Không thể mở camera. Hãy cho phép truy cập camera trong trình duyệt.");
+    }
+  }, []);
+
+  const stopScan = useCallback(() => {
+    cancelAnimationFrame(animRef.current);
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    startScan();
+    return stopScan;
+  }, [startScan, stopScan]);
+
+  useEffect(() => {
+    if (cameraErr) return;
+    const tick = () => {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas || video.readyState < 2) {
+        animRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+      if (code?.data) {
+        onScan(code.data);
+        stopScan();
+        return;
+      }
+      animRef.current = requestAnimationFrame(tick);
+    };
+    animRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animRef.current);
+  }, [cameraErr, onScan, stopScan]);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-center p-4">
+      <div className="w-full max-w-sm bg-background rounded-2xl overflow-hidden shadow-2xl">
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <span className="font-semibold text-sm flex items-center gap-2"><QrCode className="w-4 h-4" /> Quét mã QR</span>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="relative bg-black aspect-square overflow-hidden">
+          {cameraErr ? (
+            <div className="flex flex-col items-center justify-center h-full gap-3 p-6 text-center text-white">
+              <CameraOff className="w-10 h-10 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">{cameraErr}</p>
+            </div>
+          ) : (
+            <>
+              <video ref={videoRef} className="w-full h-full object-cover" playsInline muted autoPlay />
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-52 h-52 border-4 border-white rounded-2xl opacity-60" />
+              </div>
+            </>
+          )}
+          <canvas ref={canvasRef} className="hidden" />
+        </div>
+        <div className="px-4 py-3 text-center">
+          <p className="text-xs text-muted-foreground">Đặt mã QR vào khung hình để chấm công</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function AttendancePage() {
   const qc = useQueryClient();
-  const { effectiveIsAdmin, viewer } = useStaffAuth();
-  const token = localStorage.getItem("amazingStudioToken_v2");
-  const authH = { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  const { effectiveIsAdmin } = useStaffAuth();
 
-  const [tab, setTab] = useState<"me" | "admin" | "rules">(effectiveIsAdmin ? "me" : "me");
+  const [tab, setTab] = useState<"me" | "admin" | "rules">("me");
   const [geoErr, setGeoErr] = useState<string | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
+  const [checkMsg, setCheckMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [showQr, setShowQr] = useState(false);
+  const [qrAction, setQrAction] = useState<"checkin" | "checkout">("checkin");
+
+  // Admin adjustments form
   const [showAdjForm, setShowAdjForm] = useState(false);
   const [adjForm, setAdjForm] = useState({ staffId: "", type: "bonus", amount: "", reason: "", date: new Date().toISOString().slice(0, 10) });
+
+  // Admin manual check form
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualForm, setManualForm] = useState({ staffId: "", type: "check_in", notes: "" });
 
-  const fetchAuth = (url: string, opts?: RequestInit) =>
-    fetch(`${BASE}${url}`, { headers: authH, ...opts }).then(r => r.json());
+  // Rules edit state
+  const [editingRules, setEditingRules] = useState(false);
+  const [ruleForm, setRuleForm] = useState({ name: "Mặc định", checkInFrom: "07:30", checkInTo: "09:00", weeklyOnTimeBonus: "50000" });
+  const [lateRules, setLateRules] = useState<LateRule[]>([]);
 
-  const { data: myAtt } = useQuery<MyAttendance>({
+  // ── Queries ────────────────────────────────────────────────────────────────
+  const { data: myAtt, isLoading: myLoading } = useQuery<MyAttendance>({
     queryKey: ["attendance-me", month],
     queryFn: () => fetchAuth(`/api/attendance/me?month=${month}`),
     enabled: tab === "me",
@@ -63,70 +210,158 @@ export default function AttendancePage() {
     enabled: tab === "admin" && effectiveIsAdmin,
   });
 
-  type AttRules = { rule: Record<string, unknown> | null; lateRules: { id: number; minutesLateMin: number; minutesLateMax: number | null; penaltyAmount: number }[] };
-  const { data: rules } = useQuery<AttRules>({
+  const { data: staffList = [] } = useQuery<StaffInfo[]>({
+    queryKey: ["staff-list"],
+    queryFn: () => fetchAuth(`/api/staff`),
+    enabled: effectiveIsAdmin,
+  });
+
+  const { data: rules, isLoading: rulesLoading } = useQuery<AttRules>({
     queryKey: ["attendance-rules"],
     queryFn: () => fetchAuth(`/api/attendance/rules`),
     enabled: tab === "rules" && effectiveIsAdmin,
   });
 
+  // Sync rules into local edit state when loaded
+  useEffect(() => {
+    if (rules) {
+      if (rules.rule) {
+        setRuleForm({
+          name: (rules.rule.name as string) ?? "Mặc định",
+          checkInFrom: rules.rule.checkinStartTime ?? "07:30",
+          checkInTo: rules.rule.checkinEndTime ?? "09:00",
+          weeklyOnTimeBonus: String(rules.rule.weeklyBonusAmount ?? 50000),
+        });
+      }
+      setLateRules(rules.lateRules ?? []);
+    }
+  }, [rules]);
+
+  // ── Mutations ─────────────────────────────────────────────────────────────
   const checkin = useMutation({
-    mutationFn: (coords: { lat: number; lng: number }) =>
+    mutationFn: (coords: { lat?: number; lng?: number; qrPayload?: string }) =>
       fetchAuth(`/api/attendance/check-in`, { method: "POST", body: JSON.stringify(coords) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["attendance-me"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["attendance-me"] });
+      setCheckMsg({ ok: true, text: "✓ Check-in thành công!" });
+      setTimeout(() => setCheckMsg(null), 3000);
+    },
+    onError: (e: Error) => {
+      setCheckMsg({ ok: false, text: e.message });
+      setTimeout(() => setCheckMsg(null), 4000);
+    },
   });
 
   const checkout = useMutation({
-    mutationFn: (coords: { lat: number; lng: number }) =>
+    mutationFn: (coords: { lat?: number; lng?: number }) =>
       fetchAuth(`/api/attendance/check-out`, { method: "POST", body: JSON.stringify(coords) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["attendance-me"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["attendance-me"] });
+      setCheckMsg({ ok: true, text: "✓ Check-out thành công!" });
+      setTimeout(() => setCheckMsg(null), 3000);
+    },
+    onError: (e: Error) => {
+      setCheckMsg({ ok: false, text: e.message });
+      setTimeout(() => setCheckMsg(null), 4000);
+    },
+  });
+
+  const saveRules = useMutation({
+    mutationFn: (body: { name: string; checkInFrom: string; checkInTo: string; weeklyOnTimeBonus: string; lateRules: LateRule[] }) =>
+      fetchAuth(`/api/attendance/rules`, { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["attendance-rules"] });
+      setEditingRules(false);
+    },
   });
 
   const addAdjustment = useMutation({
     mutationFn: (data: Record<string, unknown>) => fetchAuth(`/api/attendance/adjustments`, { method: "POST", body: JSON.stringify(data) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["attendance-me"] }); setShowAdjForm(false); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["attendance-me"] });
+      qc.invalidateQueries({ queryKey: ["attendance-admin"] });
+      setShowAdjForm(false);
+      setAdjForm({ staffId: "", type: "bonus", amount: "", reason: "", date: new Date().toISOString().slice(0, 10) });
+    },
   });
 
   const addManual = useMutation({
     mutationFn: (data: Record<string, unknown>) => fetchAuth(`/api/attendance/manual`, { method: "POST", body: JSON.stringify(data) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["attendance-admin"] }); setShowManualForm(false); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["attendance-admin"] });
+      setShowManualForm(false);
+      setManualForm({ staffId: "", type: "check_in", notes: "" });
+    },
   });
 
+  // ── GPS actions ────────────────────────────────────────────────────────────
   async function doGPS(action: "checkin" | "checkout") {
     setGeoErr(null);
     setGeoLoading(true);
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
-        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 })
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 12000, enableHighAccuracy: true })
       );
-      const { latitude: lat, longitude: lng } = pos.coords;
-      if (action === "checkin") await checkin.mutateAsync({ lat, lng });
+      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+      if (action === "checkin") await checkin.mutateAsync({ lat, lng, qrPayload: "gps-auto" });
       else await checkout.mutateAsync({ lat, lng });
+      void accuracy;
     } catch (e: unknown) {
-      setGeoErr((e as Error)?.message || "Không lấy được vị trí GPS");
+      setGeoErr((e as Error)?.message ?? "Không lấy được vị trí GPS");
     } finally {
       setGeoLoading(false);
     }
   }
 
-  const todayLogs = (myAtt?.logs ?? []).filter(l => l.createdAt.slice(0, 10) === new Date().toISOString().slice(0, 10));
+  // ── QR scanned ─────────────────────────────────────────────────────────────
+  async function handleQrScan(data: string) {
+    setShowQr(false);
+    setGeoLoading(true);
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 12000, enableHighAccuracy: true })
+      );
+      const { latitude: lat, longitude: lng } = pos.coords;
+      if (qrAction === "checkin") await checkin.mutateAsync({ lat, lng, qrPayload: data });
+      else await checkout.mutateAsync({ lat, lng });
+    } catch (e: unknown) {
+      setGeoErr((e as Error)?.message ?? "Lỗi khi lấy GPS sau khi quét QR");
+    } finally {
+      setGeoLoading(false);
+    }
+  }
+
+  // ── Derived data ───────────────────────────────────────────────────────────
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayLogs = (myAtt?.logs ?? []).filter(l => l.createdAt.slice(0, 10) === todayStr);
   const hasCheckedIn = todayLogs.some(l => l.type === "check_in");
   const hasCheckedOut = todayLogs.some(l => l.type === "check_out");
 
   const daysInMonth = (() => {
     const [y, m] = month.split("-").map(Number);
-    const days = [];
     const total = new Date(y, m, 0).getDate();
-    for (let d = 1; d <= total; d++) {
+    return Array.from({ length: total }, (_, i) => {
+      const d = i + 1;
       const dateStr = `${month}-${String(d).padStart(2, "0")}`;
       const dayLogs = (myAtt?.logs ?? []).filter(l => l.createdAt.slice(0, 10) === dateStr);
-      days.push({ date: dateStr, dayNum: d, logs: dayLogs });
-    }
-    return days;
+      return { date: dateStr, dayNum: d, logs: dayLogs };
+    });
   })();
 
-  const netAdjust = (myAtt?.adjustments ?? []).reduce((s, a) => s + (a.type === "bonus" ? a.amount : -a.amount), 0);
-  const netBP = (myAtt?.bonusPenalty ?? []).reduce((s, b) => s + (b.type === "bonus" ? b.amount : -b.amount), 0);
+  // Per-staff summary for admin tab
+  const staffSummary = (() => {
+    const map = new Map<number, { name: string; checkIns: AdminLog[]; checkOuts: AdminLog[] }>();
+    for (const l of adminLogs) {
+      const sid = l.staff_id ?? l.staffId;
+      const name = l.staff_name ?? l.staffName ?? `#${sid}`;
+      if (!map.has(sid)) map.set(sid, { name, checkIns: [], checkOuts: [] });
+      if (l.type === "check_in") map.get(sid)!.checkIns.push(l);
+      else map.get(sid)!.checkOuts.push(l);
+    }
+    return Array.from(map.entries()).map(([id, v]) => ({ id, ...v }));
+  })();
+
+  const inputCls = "w-full border border-border rounded-lg px-2.5 py-1.5 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary";
 
   return (
     <div className="min-h-full bg-background">
@@ -144,23 +379,24 @@ export default function AttendancePage() {
           </div>
         </div>
 
-        {/* Tabs */}
         <div className="flex gap-1 mt-3">
-          <button onClick={() => setTab("me")}
-            className={`px-4 py-1.5 rounded-xl text-xs font-medium transition-colors ${tab === "me" ? "bg-blue-600 text-white" : "bg-muted text-muted-foreground"}`}>
-            Của tôi
-          </button>
-          {effectiveIsAdmin && (
-            <button onClick={() => setTab("admin")}
-              className={`px-4 py-1.5 rounded-xl text-xs font-medium transition-colors ${tab === "admin" ? "bg-blue-600 text-white" : "bg-muted text-muted-foreground"}`}>
-              <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />Toàn nhân sự</span>
+          {(["me"] as const).map(t => (
+            <button key={t} onClick={() => setTab("me")}
+              className={`px-4 py-1.5 rounded-xl text-xs font-medium transition-colors ${tab === "me" ? "bg-blue-600 text-white" : "bg-muted text-muted-foreground"}`}>
+              Của tôi
             </button>
-          )}
+          ))}
           {effectiveIsAdmin && (
-            <button onClick={() => setTab("rules")}
-              className={`px-4 py-1.5 rounded-xl text-xs font-medium transition-colors ${tab === "rules" ? "bg-blue-600 text-white" : "bg-muted text-muted-foreground"}`}>
-              <span className="flex items-center gap-1"><Settings className="w-3.5 h-3.5" />Quy tắc</span>
-            </button>
+            <>
+              <button onClick={() => setTab("admin")}
+                className={`px-4 py-1.5 rounded-xl text-xs font-medium transition-colors ${tab === "admin" ? "bg-blue-600 text-white" : "bg-muted text-muted-foreground"}`}>
+                <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />Toàn nhân sự</span>
+              </button>
+              <button onClick={() => setTab("rules")}
+                className={`px-4 py-1.5 rounded-xl text-xs font-medium transition-colors ${tab === "rules" ? "bg-blue-600 text-white" : "bg-muted text-muted-foreground"}`}>
+                <span className="flex items-center gap-1"><Settings className="w-3.5 h-3.5" />Quy tắc</span>
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -172,81 +408,122 @@ export default function AttendancePage() {
             className="border border-border rounded-xl px-3 py-1.5 text-sm bg-background focus:outline-none" />
         </div>
 
-        {/* ── MY ATTENDANCE TAB ─────────────────────────────────────────── */}
+        {/* ── MY ATTENDANCE TAB ──────────────────────────────────────────── */}
         {tab === "me" && (
           <div className="space-y-4">
-            {/* Check-in / Check-out buttons */}
+            {/* Check-in / Check-out panel */}
             <div className="rounded-2xl border border-border bg-card p-4">
               <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-blue-600" /> Hôm nay — {new Date().toLocaleDateString("vi-VN", { weekday: "long", day: "numeric", month: "numeric" })}
+                <Clock className="w-4 h-4 text-blue-600" />
+                Hôm nay — {new Date().toLocaleDateString("vi-VN", { weekday: "long", day: "numeric", month: "numeric" })}
               </h3>
-              {geoErr && (
+
+              {/* Messages */}
+              {checkMsg && (
+                <div className={`flex items-center gap-2 text-sm p-2.5 rounded-lg mb-3 ${checkMsg.ok ? "bg-green-50 text-green-700" : "bg-destructive/10 text-destructive"}`}>
+                  {checkMsg.ok ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+                  {checkMsg.text}
+                </div>
+              )}
+              {geoErr && !checkMsg && (
                 <div className="flex items-center gap-2 text-destructive text-xs p-2 bg-destructive/10 rounded-lg mb-3">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" /> {geoErr}
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3">
+
+              {/* Buttons */}
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <button
+                  onClick={() => { setQrAction("checkin"); setShowQr(true); }}
+                  disabled={hasCheckedIn || geoLoading}
+                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all font-semibold text-sm ${
+                    hasCheckedIn
+                      ? "border-green-300 bg-green-50 text-green-700 opacity-60 cursor-default"
+                      : "border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 active:scale-95"
+                  }`}>
+                  {(checkin.isPending || (geoLoading && qrAction === "checkin")) ? <Loader2 className="w-6 h-6 animate-spin" /> : (hasCheckedIn ? <CheckCircle2 className="w-6 h-6" /> : <QrCode className="w-6 h-6" />)}
+                  {hasCheckedIn ? "✓ Đã chấm vào" : "Chấm vào (QR)"}
+                </button>
+                <button
+                  onClick={() => { setQrAction("checkout"); setShowQr(true); }}
+                  disabled={!hasCheckedIn || hasCheckedOut || geoLoading}
+                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all font-semibold text-sm ${
+                    hasCheckedOut
+                      ? "border-green-300 bg-green-50 text-green-700 opacity-60 cursor-default"
+                      : hasCheckedIn
+                        ? "border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-700 active:scale-95"
+                        : "border-muted bg-muted/30 text-muted-foreground opacity-50 cursor-default"
+                  }`}>
+                  {(checkout.isPending || (geoLoading && qrAction === "checkout")) ? <Loader2 className="w-6 h-6 animate-spin" /> : (hasCheckedOut ? <CheckCircle2 className="w-6 h-6" /> : <QrCode className="w-6 h-6" />)}
+                  {hasCheckedOut ? "✓ Đã chấm ra" : "Chấm ra (QR)"}
+                </button>
+              </div>
+
+              {/* GPS fallback buttons */}
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => doGPS("checkin")}
                   disabled={hasCheckedIn || geoLoading || checkin.isPending}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all font-semibold text-sm ${
-                    hasCheckedIn
-                      ? "border-green-300 bg-green-50 text-green-700 opacity-60"
-                      : "border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700"
-                  }`}>
-                  {geoLoading && !hasCheckedIn ? <Loader2 className="w-6 h-6 animate-spin" /> : <LogIn className="w-6 h-6" />}
-                  {hasCheckedIn ? "✓ Đã chấm vào" : "Chấm vào"}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-blue-300 text-xs text-blue-600 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-default transition-colors">
+                  <MapPin className="w-3.5 h-3.5" />
+                  Vào bằng GPS
                 </button>
                 <button
                   onClick={() => doGPS("checkout")}
                   disabled={!hasCheckedIn || hasCheckedOut || geoLoading || checkout.isPending}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all font-semibold text-sm ${
-                    hasCheckedOut
-                      ? "border-green-300 bg-green-50 text-green-700 opacity-60"
-                      : hasCheckedIn
-                        ? "border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-700"
-                        : "border-muted bg-muted/30 text-muted-foreground opacity-50"
-                  }`}>
-                  {geoLoading && hasCheckedIn && !hasCheckedOut ? <Loader2 className="w-6 h-6 animate-spin" /> : <LogOut className="w-6 h-6" />}
-                  {hasCheckedOut ? "✓ Đã chấm ra" : "Chấm ra"}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-orange-300 text-xs text-orange-600 hover:bg-orange-50 disabled:opacity-40 disabled:cursor-default transition-colors">
+                  <MapPin className="w-3.5 h-3.5" />
+                  Ra bằng GPS
                 </button>
               </div>
+
+              {/* Today's logs */}
               {todayLogs.length > 0 && (
-                <div className="mt-3 space-y-1.5">
+                <div className="mt-3 space-y-1.5 border-t border-border pt-3">
                   {todayLogs.map(l => (
                     <div key={l.id} className="flex items-center gap-2 text-xs text-muted-foreground">
                       {l.type === "check_in" ? <LogIn className="w-3.5 h-3.5 text-blue-500" /> : <LogOut className="w-3.5 h-3.5 text-orange-500" />}
-                      <span>{l.type === "check_in" ? "Vào" : "Ra"}: {new Date(l.createdAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</span>
-                      {l.isOffsite ? <span className="text-amber-600 font-medium">📍 Ngoài studio</span> : <span className="text-green-600">✓ Tại studio</span>}
+                      <span className="font-medium">{l.type === "check_in" ? "Vào" : "Ra"}:</span>
+                      <span>{new Date(l.createdAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</span>
+                      {l.isOffsite
+                        ? <span className="text-amber-600">📍 Ngoài studio {l.distanceM ? `(${Math.round(Number(l.distanceM))}m)` : ""}</span>
+                        : <span className="text-green-600">✓ Tại studio</span>}
+                      {l.method === "manual" && <span className="text-violet-500 font-medium">[Thủ công]</span>}
                     </div>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Summary */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-xl border border-border bg-card p-3 text-center">
-                <p className="text-2xl font-black text-blue-600">{daysInMonth.filter(d => d.logs.some(l => l.type === "check_in")).length}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Ngày công</p>
+            {/* Summary cards */}
+            {myLoading ? (
+              <div className="flex items-center justify-center h-16 text-muted-foreground text-sm">
+                <Loader2 className="w-4 h-4 animate-spin mr-2" /> Đang tải...
               </div>
-              <div className={`rounded-xl border border-border bg-card p-3 text-center`}>
-                <p className={`text-2xl font-black ${netBP + netAdjust >= 0 ? "text-green-600" : "text-red-600"}`}>
-                  {netBP + netAdjust >= 0 ? "+" : ""}{vnd(netBP + netAdjust)}
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">Thưởng/Phạt</p>
+            ) : (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-xl border border-border bg-card p-3 text-center">
+                  <p className="text-2xl font-black text-blue-600">{myAtt?.totalDays ?? 0}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Ngày công</p>
+                </div>
+                <div className="rounded-xl border border-border bg-card p-3 text-center">
+                  <p className="text-2xl font-black text-emerald-600">{myAtt?.onTimeRate ?? 0}%</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Đúng giờ</p>
+                </div>
+                <div className="rounded-xl border border-border bg-card p-3 text-center">
+                  <p className={`text-lg font-black ${(myAtt?.net ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
+                    {(myAtt?.net ?? 0) >= 0 ? "+" : ""}{vnd(myAtt?.net ?? 0)}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Thưởng/Phạt</p>
+                </div>
               </div>
-              <div className="rounded-xl border border-border bg-card p-3 text-center">
-                <p className="text-2xl font-black text-muted-foreground">{daysInMonth.filter(d => d.logs.some(l => l.isOffsite)).length}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Ngoài studio</p>
-              </div>
-            </div>
+            )}
 
-            {/* Calendar view */}
+            {/* Calendar */}
             <div className="rounded-2xl border border-border bg-card overflow-hidden">
               <div className="px-4 py-2.5 border-b flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-blue-600" />
-                <span className="font-semibold text-sm">Lịch chấm công tháng {month.slice(5)}/{month.slice(0, 4)}</span>
+                <span className="font-semibold text-sm">Tháng {month.slice(5)}/{month.slice(0, 4)}</span>
               </div>
               <div className="p-3">
                 <div className="grid grid-cols-7 gap-1 mb-1">
@@ -266,7 +543,7 @@ export default function AttendancePage() {
                       const isOffsite = logs.some(l => l.isOffsite);
                       cells.push(
                         <div key={dayNum} className={`aspect-square flex flex-col items-center justify-center rounded-lg text-xs font-semibold transition-colors ${
-                          hasIn && hasOut ? isOffsite ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"
+                          hasIn && hasOut ? (isOffsite ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700")
                             : hasIn ? "bg-blue-100 text-blue-700"
                             : "text-muted-foreground"
                         }`}>
@@ -278,18 +555,18 @@ export default function AttendancePage() {
                     return cells;
                   })()}
                 </div>
-                <div className="flex gap-3 mt-2 text-[10px] text-muted-foreground">
-                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-green-200" />Đầy đủ tại studio</span>
+                <div className="flex flex-wrap gap-3 mt-2 text-[10px] text-muted-foreground">
+                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-green-200" />Đầy đủ</span>
                   <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-amber-200" />Ngoài studio</span>
                   <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-blue-200" />Vào chưa ra</span>
                 </div>
               </div>
             </div>
 
-            {/* Bonuses/Penalties */}
+            {/* Bonuses */}
             {(myAtt?.bonusPenalty?.length ?? 0) > 0 && (
               <div className="rounded-2xl border border-border bg-card overflow-hidden">
-                <div className="px-4 py-2.5 border-b font-semibold text-sm">Thưởng / Phạt trong tháng</div>
+                <div className="px-4 py-2.5 border-b font-semibold text-sm">Thưởng / Phạt tháng</div>
                 <div className="divide-y divide-border">
                   {myAtt?.bonusPenalty?.map((bp, i) => (
                     <div key={i} className="flex items-center justify-between px-4 py-2.5 text-sm">
@@ -306,46 +583,56 @@ export default function AttendancePage() {
               </div>
             )}
 
-            {/* Admin adjustments section */}
+            {/* Admin adjustments (visible in "me" tab for admin) */}
             {effectiveIsAdmin && (
               <div className="rounded-2xl border border-border bg-card overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-2.5 border-b">
                   <span className="font-semibold text-sm">Điều chỉnh thủ công</span>
-                  <button onClick={() => setShowAdjForm(true)} className="text-xs text-primary hover:underline flex items-center gap-1">
+                  <button onClick={() => setShowAdjForm(v => !v)}
+                    className="text-xs text-primary hover:underline flex items-center gap-1">
                     <Plus className="w-3.5 h-3.5" /> Thêm
                   </button>
                 </div>
                 {showAdjForm && (
-                  <div className="p-4 space-y-3 bg-muted/20">
+                  <div className="p-4 space-y-3 bg-muted/20 border-b border-border">
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-xs text-muted-foreground">Nhân viên ID</label>
-                        <input type="number" value={adjForm.staffId} onChange={e => setAdjForm(f => ({ ...f, staffId: e.target.value }))}
-                          className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-background focus:outline-none" placeholder="Staff ID" />
+                        <label className="text-xs text-muted-foreground mb-1 block">Nhân viên *</label>
+                        <select value={adjForm.staffId} onChange={e => setAdjForm(f => ({ ...f, staffId: e.target.value }))}
+                          className={inputCls}>
+                          <option value="">-- Chọn --</option>
+                          {staffList.map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
                       </div>
                       <div>
-                        <label className="text-xs text-muted-foreground">Loại</label>
+                        <label className="text-xs text-muted-foreground mb-1 block">Loại</label>
                         <select value={adjForm.type} onChange={e => setAdjForm(f => ({ ...f, type: e.target.value }))}
-                          className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-background focus:outline-none">
+                          className={inputCls}>
                           <option value="bonus">Thưởng</option>
                           <option value="penalty">Phạt</option>
                         </select>
                       </div>
                       <div>
-                        <label className="text-xs text-muted-foreground">Số tiền</label>
+                        <label className="text-xs text-muted-foreground mb-1 block">Số tiền (đ)</label>
                         <input type="number" value={adjForm.amount} onChange={e => setAdjForm(f => ({ ...f, amount: e.target.value }))}
-                          className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-background focus:outline-none" placeholder="0" />
+                          className={inputCls} placeholder="0" />
                       </div>
                       <div>
-                        <label className="text-xs text-muted-foreground">Ngày</label>
+                        <label className="text-xs text-muted-foreground mb-1 block">Ngày</label>
                         <input type="date" value={adjForm.date} onChange={e => setAdjForm(f => ({ ...f, date: e.target.value }))}
-                          className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-background focus:outline-none" />
+                          className={inputCls} />
                       </div>
                     </div>
                     <input value={adjForm.reason} onChange={e => setAdjForm(f => ({ ...f, reason: e.target.value }))}
-                      className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-background focus:outline-none" placeholder="Lý do..." />
+                      className={inputCls} placeholder="Lý do..." />
                     <div className="flex gap-2">
-                      <Button size="sm" onClick={() => addAdjustment.mutate({ staffId: parseInt(adjForm.staffId), type: adjForm.type, amount: parseFloat(adjForm.amount), reason: adjForm.reason, date: adjForm.date })}
+                      <Button size="sm"
+                        onClick={() => addAdjustment.mutate({
+                          staffId: parseInt(adjForm.staffId), type: adjForm.type,
+                          amount: parseFloat(adjForm.amount), reason: adjForm.reason, date: adjForm.date,
+                        })}
                         disabled={!adjForm.staffId || !adjForm.amount || addAdjustment.isPending}>
                         {addAdjustment.isPending ? "Đang lưu..." : "Lưu"}
                       </Button>
@@ -353,66 +640,135 @@ export default function AttendancePage() {
                     </div>
                   </div>
                 )}
-                {(myAtt?.adjustments?.length ?? 0) === 0 && !showAdjForm && (
+                {(myAtt?.adjustments?.length ?? 0) === 0 && !showAdjForm ? (
                   <div className="text-center py-4 text-xs text-muted-foreground">Chưa có điều chỉnh</div>
-                )}
-                {(myAtt?.adjustments ?? []).map(adj => (
-                  <div key={adj.id} className="flex items-center justify-between px-4 py-2.5 text-sm border-t border-border">
-                    <div>
-                      <p className="font-medium">{adj.reason}</p>
-                      <p className="text-xs text-muted-foreground">{adj.date}</p>
+                ) : (
+                  (myAtt?.adjustments ?? []).map(adj => (
+                    <div key={adj.id} className="flex items-center justify-between px-4 py-2.5 text-sm border-t border-border">
+                      <div>
+                        <p className="font-medium">{adj.reason || "(Không ghi chú)"}</p>
+                        <p className="text-xs text-muted-foreground">{adj.date}</p>
+                      </div>
+                      <span className={`font-bold ${adj.type === "bonus" ? "text-green-600" : "text-red-600"}`}>
+                        {adj.type === "bonus" ? "+" : "-"}{vnd(adj.amount)}
+                      </span>
                     </div>
-                    <span className={`font-bold ${adj.type === "bonus" ? "text-green-600" : "text-red-600"}`}>
-                      {adj.type === "bonus" ? "+" : "-"}{vnd(adj.amount)}
-                    </span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             )}
           </div>
         )}
 
-        {/* ── ADMIN TAB ────────────────────────────────────────────────── */}
+        {/* ── ADMIN TAB ──────────────────────────────────────────────────── */}
         {tab === "admin" && effectiveIsAdmin && (
           <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <p className="font-semibold text-sm">{adminLogs.length} lượt chấm công</p>
-              <button onClick={() => setShowManualForm(true)} className="flex items-center gap-1 text-sm text-primary hover:underline">
-                <Plus className="w-3.5 h-3.5" /> Chấm thủ công
-              </button>
+            {/* Per-staff summary table */}
+            <div className="rounded-2xl border border-border bg-card overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b">
+                <span className="font-semibold text-sm flex items-center gap-2">
+                  <Users className="w-4 h-4 text-blue-600" />
+                  Tổng hợp tháng {month.slice(5)}/{month.slice(0, 4)}
+                </span>
+                <button onClick={() => setShowManualForm(v => !v)}
+                  className="flex items-center gap-1 text-xs text-primary hover:underline">
+                  <Plus className="w-3.5 h-3.5" /> Chấm thủ công
+                </button>
+              </div>
+
+              {showManualForm && (
+                <div className="p-4 bg-muted/20 border-b border-border space-y-3">
+                  <h4 className="font-semibold text-sm">Chấm công thủ công</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Nhân viên *</label>
+                      <select value={manualForm.staffId} onChange={e => setManualForm(f => ({ ...f, staffId: e.target.value }))}
+                        className={inputCls}>
+                        <option value="">-- Chọn --</option>
+                        {staffList.map(s => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Loại *</label>
+                      <select value={manualForm.type} onChange={e => setManualForm(f => ({ ...f, type: e.target.value }))}
+                        className={inputCls}>
+                        <option value="check_in">Vào</option>
+                        <option value="check_out">Ra</option>
+                      </select>
+                    </div>
+                  </div>
+                  <input value={manualForm.notes} onChange={e => setManualForm(f => ({ ...f, notes: e.target.value }))}
+                    className={inputCls} placeholder="Ghi chú..." />
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => addManual.mutate({ staffId: parseInt(manualForm.staffId), type: manualForm.type, notes: manualForm.notes })}
+                      disabled={!manualForm.staffId || addManual.isPending}>
+                      {addManual.isPending ? "Đang lưu..." : "Lưu"}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setShowManualForm(false)}>Hủy</Button>
+                  </div>
+                </div>
+              )}
+
+              {staffSummary.length === 0 ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">Chưa có dữ liệu chấm công tháng này</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/30">
+                      <tr>
+                        <th className="text-left px-4 py-2.5 font-semibold text-xs text-muted-foreground">Nhân viên</th>
+                        <th className="text-center px-3 py-2.5 font-semibold text-xs text-muted-foreground">Ngày công</th>
+                        <th className="text-center px-3 py-2.5 font-semibold text-xs text-muted-foreground">Đủ giờ</th>
+                        <th className="text-center px-3 py-2.5 font-semibold text-xs text-muted-foreground">Ngoài studio</th>
+                        <th className="text-left px-3 py-2.5 font-semibold text-xs text-muted-foreground">Lần cuối</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {staffSummary.map(s => {
+                        const fullDays = s.checkIns.filter(ci => {
+                          const ciDate = ci.createdAt.slice(0, 10);
+                          return s.checkOuts.some(co => co.createdAt.slice(0, 10) === ciDate);
+                        }).length;
+                        const offsite = s.checkIns.filter(l => l.isOffsite).length;
+                        const lastLog = [...s.checkIns, ...s.checkOuts].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+                        return (
+                          <tr key={s.id} className="hover:bg-muted/20 transition-colors">
+                            <td className="px-4 py-2.5 font-medium">{s.name}</td>
+                            <td className="px-3 py-2.5 text-center">
+                              <span className="font-bold text-blue-600">{s.checkIns.length}</span>
+                            </td>
+                            <td className="px-3 py-2.5 text-center">
+                              <span className={`font-bold ${fullDays === s.checkIns.length ? "text-green-600" : "text-amber-600"}`}>
+                                {fullDays}/{s.checkIns.length}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-center">
+                              {offsite > 0
+                                ? <span className="text-amber-600 font-medium">{offsite}</span>
+                                : <span className="text-muted-foreground">0</span>}
+                            </td>
+                            <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                              {lastLog
+                                ? `${new Date(lastLog.createdAt).toLocaleDateString("vi-VN")} ${new Date(lastLog.createdAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}`
+                                : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
-            {showManualForm && (
-              <div className="rounded-xl border border-border p-4 bg-muted/20 space-y-3">
-                <h4 className="font-semibold text-sm">Chấm công thủ công</h4>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-xs text-muted-foreground">Nhân viên ID *</label>
-                    <input type="number" value={manualForm.staffId} onChange={e => setManualForm(f => ({ ...f, staffId: e.target.value }))}
-                      className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-background focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground">Loại *</label>
-                    <select value={manualForm.type} onChange={e => setManualForm(f => ({ ...f, type: e.target.value }))}
-                      className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-background focus:outline-none">
-                      <option value="check_in">Vào</option>
-                      <option value="check_out">Ra</option>
-                    </select>
-                  </div>
-                </div>
-                <input value={manualForm.notes} onChange={e => setManualForm(f => ({ ...f, notes: e.target.value }))}
-                  className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-background focus:outline-none" placeholder="Ghi chú..." />
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => addManual.mutate({ staffId: parseInt(manualForm.staffId), type: manualForm.type, notes: manualForm.notes })}
-                    disabled={!manualForm.staffId || addManual.isPending}>
-                    {addManual.isPending ? "Đang lưu..." : "Lưu"}
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setShowManualForm(false)}>Hủy</Button>
-                </div>
-              </div>
-            )}
-
-            <div className="rounded-2xl border border-border bg-card overflow-hidden">
+            {/* Raw log (collapsible) */}
+            <details className="rounded-2xl border border-border bg-card overflow-hidden">
+              <summary className="flex items-center gap-2 px-4 py-2.5 cursor-pointer font-semibold text-sm select-none hover:bg-muted/20">
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                Nhật ký chấm công ({adminLogs.length} lượt)
+              </summary>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/30">
@@ -424,84 +780,191 @@ export default function AttendancePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {adminLogs.length === 0 ? (
-                      <tr><td colSpan={4} className="text-center py-8 text-muted-foreground">Chưa có dữ liệu</td></tr>
-                    ) : adminLogs.map(l => (
-                      <tr key={l.id} className="hover:bg-muted/10">
-                        <td className="px-4 py-2.5 font-medium">{l.staffName}</td>
+                    {adminLogs.map(l => (
+                      <tr key={l.id} className="hover:bg-muted/20 transition-colors">
+                        <td className="px-4 py-2.5 font-medium">{l.staff_name ?? l.staffName ?? `#${l.staff_id ?? l.staffId}`}</td>
                         <td className="px-4 py-2.5">
-                          <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full ${l.type === "check_in" ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"}`}>
-                            {l.type === "check_in" ? <LogIn className="w-3 h-3" /> : <LogOut className="w-3 h-3" />}
-                            {l.type === "check_in" ? "Vào" : "Ra"}
-                          </span>
+                          {l.type === "check_in"
+                            ? <span className="flex items-center gap-1 text-blue-600 font-medium"><LogIn className="w-3.5 h-3.5" />Vào</span>
+                            : <span className="flex items-center gap-1 text-orange-600 font-medium"><LogOut className="w-3.5 h-3.5" />Ra</span>}
                         </td>
-                        <td className="px-4 py-2.5 text-muted-foreground text-xs">
-                          {new Date(l.createdAt).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                        <td className="px-4 py-2.5 text-xs">
+                          {new Date(l.createdAt).toLocaleDateString("vi-VN")} {new Date(l.createdAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
                         </td>
                         <td className="px-4 py-2.5">
-                          {l.isOffsite ? (
-                            <span className="flex items-center gap-1 text-xs text-amber-600"><MapPin className="w-3 h-3" />Ngoài</span>
-                          ) : (
-                            <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle2 className="w-3 h-3" />Studio</span>
-                          )}
+                          {l.isOffsite
+                            ? <span className="flex items-center gap-1 text-xs text-amber-600"><MapPin className="w-3 h-3" />Ngoài</span>
+                            : l.method === "manual"
+                              ? <span className="text-xs text-violet-600">Thủ công</span>
+                              : <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle2 className="w-3 h-3" />Studio</span>}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </div>
+            </details>
           </div>
         )}
 
-        {/* ── RULES TAB ────────────────────────────────────────────────── */}
+        {/* ── RULES TAB ──────────────────────────────────────────────────── */}
         {tab === "rules" && effectiveIsAdmin && (
           <div className="space-y-4">
-            <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
-              <h3 className="font-semibold text-sm">Cấu hình quy tắc chấm công</h3>
-              {rules ? (
-                <div className="space-y-2 text-sm">
-                  {rules.rule && (
-                    <>
-                      <div className="flex justify-between py-1.5 border-b border-border/50">
-                        <span className="text-muted-foreground">Giờ chấm vào cho phép</span>
-                        <span className="font-medium">{(rules.rule as Record<string, string>).checkinStartTime} – {(rules.rule as Record<string, string>).checkinEndTime}</span>
+            {rulesLoading ? (
+              <div className="flex items-center justify-center h-16 text-muted-foreground text-sm">
+                <Loader2 className="w-4 h-4 animate-spin mr-2" /> Đang tải...
+              </div>
+            ) : (
+              <>
+                {/* Main rule form */}
+                <div className="rounded-2xl border border-border bg-card p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-sm flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-blue-600" /> Quy tắc giờ vào chuẩn
+                    </h3>
+                    {!editingRules ? (
+                      <Button size="sm" variant="outline" onClick={() => setEditingRules(true)}>Chỉnh sửa</Button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => saveRules.mutate({ ...ruleForm, lateRules })}
+                          disabled={saveRules.isPending}>
+                          {saveRules.isPending ? "Đang lưu..." : "Lưu quy tắc"}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => {
+                          setEditingRules(false);
+                          if (rules?.rule) {
+                            setRuleForm({
+                              name: (rules.rule.name as string) ?? "Mặc định",
+                              checkInFrom: rules.rule.checkinStartTime,
+                              checkInTo: rules.rule.checkinEndTime,
+                              weeklyOnTimeBonus: String(rules.rule.weeklyBonusAmount),
+                            });
+                          }
+                          setLateRules(rules?.lateRules ?? []);
+                        }}>Hủy</Button>
                       </div>
-                      <div className="flex justify-between py-1.5 border-b border-border/50">
-                        <span className="text-muted-foreground">Giờ bắt đầu làm</span>
-                        <span className="font-medium">{(rules.rule as Record<string, string>).workStartTime}</span>
-                      </div>
-                      <div className="flex justify-between py-1.5 border-b border-border/50">
-                        <span className="text-muted-foreground">Giờ chấm ra</span>
-                        <span className="font-medium">{(rules.rule as Record<string, string>).checkoutTime}</span>
-                      </div>
-                      <div className="flex justify-between py-1.5">
-                        <span className="text-muted-foreground">Thưởng chuyên cần tuần</span>
-                        <span className="font-bold text-green-600">{vnd((rules.rule as Record<string, number>).weeklyBonusAmount ?? 0)}</span>
-                      </div>
-                    </>
-                  )}
-                  {rules.lateRules.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mt-3 mb-2">Quy tắc đi muộn</p>
-                      <div className="space-y-1.5">
-                        {rules.lateRules.map(lr => (
-                          <div key={lr.id} className="flex justify-between text-sm py-1 px-2 bg-muted/20 rounded-lg">
-                            <span>Muộn {lr.minutesLateMin}'{lr.minutesLateMax ? `–${lr.minutesLateMax}'` : "+"}</span>
-                            <span className="font-bold text-red-600">-{vnd(lr.penaltyAmount)}</span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Tên quy tắc</label>
+                      {editingRules
+                        ? <input value={ruleForm.name} onChange={e => setRuleForm(f => ({ ...f, name: e.target.value }))} className={inputCls} />
+                        : <p className="text-sm font-medium py-1.5">{ruleForm.name}</p>}
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Giờ vào hợp lệ từ</label>
+                      {editingRules
+                        ? <input type="time" value={ruleForm.checkInFrom} onChange={e => setRuleForm(f => ({ ...f, checkInFrom: e.target.value }))} className={inputCls} />
+                        : <p className="text-sm font-medium py-1.5">{ruleForm.checkInFrom}</p>}
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Giờ vào hợp lệ đến (muộn nhất)</label>
+                      {editingRules
+                        ? <input type="time" value={ruleForm.checkInTo} onChange={e => setRuleForm(f => ({ ...f, checkInTo: e.target.value }))} className={inputCls} />
+                        : <p className="text-sm font-medium py-1.5">{ruleForm.checkInTo}</p>}
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Bonus tuần chuyên cần (đ/tuần)</label>
+                      {editingRules
+                        ? <input type="number" value={ruleForm.weeklyOnTimeBonus} onChange={e => setRuleForm(f => ({ ...f, weeklyOnTimeBonus: e.target.value }))} className={inputCls} />
+                        : <p className="text-sm font-bold text-green-600 py-1.5">{vnd(parseFloat(ruleForm.weeklyOnTimeBonus || "0"))}</p>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Late penalty rules */}
+                <div className="rounded-2xl border border-border bg-card overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b">
+                    <h3 className="font-semibold text-sm flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-500" /> Quy tắc phạt đi muộn
+                    </h3>
+                    {editingRules && (
+                      <button
+                        onClick={() => setLateRules(r => [...r, { minutesLateMin: 0, minutesLateMax: null, penaltyAmount: null }])}
+                        className="flex items-center gap-1 text-xs text-primary hover:underline">
+                        <Plus className="w-3.5 h-3.5" /> Thêm dòng
+                      </button>
+                    )}
+                  </div>
+                  {lateRules.length === 0 ? (
+                    <div className="text-center py-6 text-sm text-muted-foreground">
+                      {editingRules ? 'Chưa có quy tắc phạt. Nhấn "+ Thêm dòng" để thêm.' : "Chưa có quy tắc phạt."}
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border">
+                      {lateRules.map((lr, i) => (
+                        <div key={i} className="px-4 py-3 grid grid-cols-[1fr_1fr_1fr_auto] gap-3 items-center text-sm">
+                          <div>
+                            <label className="text-xs text-muted-foreground block mb-1">Muộn từ (phút)</label>
+                            {editingRules
+                              ? <input type="number" value={lr.minutesLateMin} onChange={e => {
+                                  const copy = [...lateRules];
+                                  copy[i] = { ...copy[i], minutesLateMin: parseInt(e.target.value) || 0 };
+                                  setLateRules(copy);
+                                }} className={inputCls} />
+                              : <span className="font-medium">{lr.minutesLateMin}'</span>}
                           </div>
-                        ))}
-                      </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground block mb-1">Muộn đến (phút)</label>
+                            {editingRules
+                              ? <input type="number" value={lr.minutesLateMax ?? ""} placeholder="∞"
+                                  onChange={e => {
+                                    const copy = [...lateRules];
+                                    copy[i] = { ...copy[i], minutesLateMax: e.target.value ? parseInt(e.target.value) : null };
+                                    setLateRules(copy);
+                                  }} className={inputCls} />
+                              : <span className="font-medium">{lr.minutesLateMax ? `${lr.minutesLateMax}'` : "∞"}</span>}
+                          </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground block mb-1">Phạt (đ, trống=không phạt)</label>
+                            {editingRules
+                              ? <input type="number" value={lr.penaltyAmount ?? ""}
+                                  onChange={e => {
+                                    const copy = [...lateRules];
+                                    copy[i] = { ...copy[i], penaltyAmount: e.target.value ? parseFloat(e.target.value) : null };
+                                    setLateRules(copy);
+                                  }} className={inputCls} placeholder="Không phạt" />
+                              : <span className={`font-bold ${lr.penaltyAmount ? "text-red-600" : "text-muted-foreground"}`}>
+                                  {lr.penaltyAmount ? `-${vnd(lr.penaltyAmount)}` : "Không phạt"}
+                                </span>}
+                          </div>
+                          {editingRules && (
+                            <button onClick={() => setLateRules(r => r.filter((_, j) => j !== i))}
+                              className="p-1.5 text-destructive hover:bg-destructive/10 rounded-lg mt-4">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Chưa có cấu hình. Đang dùng giá trị mặc định.</p>
-              )}
-            </div>
+
+                {/* Save button at bottom when editing */}
+                {editingRules && (
+                  <div className="flex justify-end gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setEditingRules(false)}>Hủy</Button>
+                    <Button size="sm" onClick={() => saveRules.mutate({ ...ruleForm, lateRules })}
+                      disabled={saveRules.isPending}>
+                      {saveRules.isPending ? "Đang lưu..." : "Lưu tất cả"}
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>
+
+      {/* QR Scanner overlay */}
+      {showQr && (
+        <QrScanner
+          onScan={handleQrScan}
+          onClose={() => setShowQr(false)}
+        />
+      )}
     </div>
   );
 }
