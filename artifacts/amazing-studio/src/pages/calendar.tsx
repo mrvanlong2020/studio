@@ -1384,9 +1384,10 @@ function generateContractHTML(booking: Booking, siblings: Booking[], allPackages
   const allServices = siblings.length > 0 ? siblings : [booking];
   const isMulti = allServices.length > 1;
 
-  const totalAmount = allServices.reduce((s, b) => s + (parseFloat(String(b.totalAmount ?? 0)) || 0), 0);
-  const paidAmount  = parseFloat(String(booking.depositAmount ?? 0)) || 0;
-  const remainingAmount = Math.max(0, totalAmount - paidAmount);
+  // Payment summary: same source as on-screen detail (booking-level API fields)
+  const totalAmount     = Number(booking.totalAmount     ?? 0) || 0;
+  const paidAmount      = Number(booking.paidAmount      ?? 0) || 0;
+  const remainingAmount = Number(booking.remainingAmount ?? Math.max(0, totalAmount - paidAmount)) || 0;
 
   // ── Lịch chụp section ─────────────────────────────────────────────────────
   const scheduleSectionHTML = isMulti

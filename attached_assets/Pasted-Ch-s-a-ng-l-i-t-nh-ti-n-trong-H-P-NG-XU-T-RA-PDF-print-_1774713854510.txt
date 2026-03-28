@@ -1,0 +1,61 @@
+Chỉ sửa đúng lỗi tính tiền trong HỢP ĐỒNG XUẤT RA (PDF / print / ảnh hợp đồng). Không scan toàn bộ project. Không thêm tính năng mới. Không refactor rộng. Chỉ sửa các file trực tiếp liên quan đến render/export hợp đồng.
+
+Lỗi hiện tại:
+- Ở màn hình booking / contract summary bên trong đã đúng:
+  + Tổng hợp đồng: 7.400.000đ
+  + Đã đặt cọc: 500.000đ
+  + Còn lại: 6.900.000đ
+- Nhưng khi xuất hợp đồng ra PDF / print / ảnh thì lại sai:
+  + Đã đặt cọc / đã thanh toán = 0đ
+  + Còn lại = 7.400.000đ
+
+Yêu cầu bắt buộc:
+1. KHÔNG được tự tính từ field deposit của từng dịch vụ con nữa.
+2. Hợp đồng xuất ra phải dùng CÙNG NGUỒN DỮ LIỆU với phần summary bên trong đang hiển thị đúng.
+3. Phần thanh toán trong hợp đồng phải luôn lấy đúng:
+   - totalAmount
+   - paidAmount hoặc depositAmount của HỢP ĐỒNG CHA / BOOKING CHA
+   - remainingAmount = totalAmount - paidAmount
+4. Nếu có nhiều payment thì phải cộng đúng tổng payment đã thu.
+5. Tuyệt đối không để:
+   - paidAmount = 0 sai
+   - remainingAmount = totalAmount sai
+   - NaN
+6. Parse number an toàn:
+   - Number(...)
+   - fallback 0 nếu null/undefined
+   - không dùng string format tiền để tính toán
+7. Sau khi sửa, PDF / bản in / ảnh hợp đồng phải khớp 100% với summary bên trong.
+
+Cách làm:
+- Tìm đúng file đang render payment summary trong hợp đồng export.
+- Tìm đúng chỗ đang lấy sai field.
+- So sánh với source dữ liệu của summary bên trong đang đúng.
+- Sửa để contract export dùng cùng source đó.
+
+Bắt buộc test lại đúng case này:
+- total = 7.400.000
+- paid = 500.000
+- remaining = 6.900.000
+
+Kết quả mong muốn:
+- Trong mọi nơi:
+  + màn hình hợp đồng
+  + PDF
+  + print
+  + ảnh hợp đồng
+  đều phải hiển thị:
+  Tổng giá trị hợp đồng: 7.400.000đ
+  Đã đặt cọc / đã thanh toán: 500.000đ
+  Còn lại cần thanh toán: 6.900.000đ
+
+Trước khi code:
+- chỉ ra file nào đang render sai
+- chỉ ra đang lấy sai field nào
+- chỉ ra file nào đang là source đúng của summary bên trong
+
+Sau khi sửa:
+- báo lại file đã sửa
+- nguyên nhân lỗi gốc
+- xác nhận đã test case 7.400.000 - 500.000 = 6.900.000
+- xong thì dừng
