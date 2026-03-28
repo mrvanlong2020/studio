@@ -203,6 +203,7 @@ export default function StaffProfilePage() {
   const [notesForm, setNotesForm] = useState<Partial<InternalNotes>>({});
   const [jobDetailId, setJobDetailId] = useState<number | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [coverUploading, setCoverUploading] = useState(false);
   const [castSheet, setCastSheet] = useState(false);
   const [castNewRole, setCastNewRole] = useState("photographer");
   const [castPkgEdits, setCastPkgEdits] = useState<Record<number, string>>({}); // packageId → amount string
@@ -213,6 +214,7 @@ export default function StaffProfilePage() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [imgError, setImgError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const coverFileInputRef = useRef<HTMLInputElement>(null);
 
   // Leave form
   const [leaveForm, setLeaveForm] = useState({ startDate: "", endDate: "", reason: "", notes: "" });
@@ -326,6 +328,50 @@ export default function StaffProfilePage() {
     }
   };
 
+  const handleCoverUpload = async (base64: string) => {
+    setCoverUploading(true);
+    try {
+      await fetchJson(`/api/staff/${staffId}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ coverImageUrl: base64 }),
+      });
+      qc.invalidateQueries({ queryKey: ["staff-profile", staffId] });
+      qc.invalidateQueries({ queryKey: ["staff"] });
+    } finally {
+      setCoverUploading(false);
+    }
+  };
+
+  const handleCoverFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    try {
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        const base64 = evt.target?.result as string;
+        await handleCoverUpload(base64);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error("Cover upload error:", err);
+    }
+  };
+
+  const handleCoverDelete = async () => {
+    setCoverUploading(true);
+    try {
+      await fetchJson(`/api/staff/${staffId}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ coverImageUrl: null }),
+      });
+      qc.invalidateQueries({ queryKey: ["staff-profile", staffId] });
+      qc.invalidateQueries({ queryKey: ["staff"] });
+    } finally {
+      setCoverUploading(false);
+    }
+  };
+
   // ── Access control ─────────────────────────────────────────────────────────
   if (!viewer) {
     return (
@@ -376,6 +422,7 @@ export default function StaffProfilePage() {
   // ── Avatar helpers ─────────────────────────────────────────────────────────
   const avatarRaw = (staff as Record<string, unknown>).avatar as string | undefined;
   const avatarUrl = !imgError ? avatarRaw : undefined;
+  const coverImageUrl = (staff as Record<string, unknown>).coverImageUrl as string | undefined;
 
   const handleAvatarClick = () => {
     if (canEdit) {
@@ -383,6 +430,10 @@ export default function StaffProfilePage() {
     } else if (avatarUrl) {
       setLightboxOpen(true);
     }
+  };
+
+  const handleCoverClick = () => {
+    if (canEdit) coverFileInputRef.current?.click();
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -433,14 +484,47 @@ export default function StaffProfilePage() {
       </button>
 
       {/* ── A. IDENTITY CARD ─────────────────────────────────────────────── */}
-      <section className="bg-card border border-border rounded-2xl shadow-md">
-        {/* Cover gradient – rounded top corners only */}
-        <div
+      <section className="bg-card border border-border rounded-2xl shadow-md overflow-hidden">
+        {/* Cover image – rounded top corners only */}
+        <button
+          type="button"
+          onClick={handleCoverClick}
+          disabled={!canEdit}
           className={cn(
-            "h-24 sm:h-28 rounded-t-2xl bg-gradient-to-br opacity-90",
-            COVER_GRADIENT[rolesDisplay[0]] ?? "from-primary/60 via-primary/30 to-primary/10"
+            "block relative w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary",
+            canEdit ? "cursor-pointer" : "cursor-default"
           )}
-        />
+          aria-label={canEdit ? "Chỉnh sửa ảnh bìa" : "Ảnh bìa"}
+        >
+          <div
+            className={cn(
+              "h-24 sm:h-28 rounded-t-2xl bg-gradient-to-br opacity-90 overflow-hidden relative",
+              COVER_GRADIENT[rolesDisplay[0]] ?? "from-primary/60 via-primary/30 to-primary/10"
+            )}
+          >
+            {coverImageUrl && (
+              <img
+                src={coverImageUrl}
+                alt="Cover"
+                className="w-full h-full object-cover"
+              />
+            )}
+            
+            {/* Uploading overlay */}
+            {coverUploading && (
+              <div className="absolute inset-0 bg-black/45 flex items-center justify-center">
+                <div className="w-6 h-6 border-[3px] border-white border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+            
+            {/* Hover edit overlay */}
+            {!coverUploading && canEdit && (
+              <div className="absolute inset-0 bg-black/0 hover:bg-black/25 transition-colors flex items-center justify-center group">
+                <Camera size={24} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            )}
+          </div>
+        </button>
 
         {/* Body */}
         <div className="px-4 sm:px-5 pb-5">
@@ -554,6 +638,15 @@ export default function StaffProfilePage() {
                 onChange={handleFileChange}
               />
             </div>
+
+            {/* Hidden cover file input */}
+            <input
+              ref={coverFileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleCoverFileChange}
+            />
 
             {/* ── Info column ───────────────────────────────────────────── */}
             <div className="flex-1 min-w-0 pt-3 sm:pt-4">

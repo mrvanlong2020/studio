@@ -14,6 +14,7 @@ export const staffTable = pgTable("staff", {
   email: text("email"),
   avatar: text("avatar"),
   banner: text("banner"),
+  coverImageUrl: text("cover_image_url"),
   salary: text("salary"),
   baseSalaryAmount: numeric("base_salary_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   salaryType: text("salary_type").notNull().default("fixed"),
