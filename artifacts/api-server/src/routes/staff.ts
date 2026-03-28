@@ -78,7 +78,7 @@ router.get("/staff/:id", async (req, res) => {
 });
 
 router.post("/staff", async (req, res) => {
-  const { name, phone, role, roles, email, salary, baseSalaryAmount, joinDate, isActive, status, staffType, notes, salaryNotes, avatar } = req.body;
+  const { name, phone, role, roles, email, salary, baseSalaryAmount, joinDate, isActive, status, staffType, notes, salaryNotes, avatar, banner } = req.body;
   const statusVal = status || "active";
   const activeVal = isActive !== undefined ? (isActive ? 1 : 0) : (statusVal === "inactive" || statusVal === "probation" ? 0 : 1);
   const notesVal = [notes, salaryNotes].filter(Boolean).join(" | ") || null;
@@ -90,6 +90,7 @@ router.post("/staff", async (req, res) => {
       roles: Array.isArray(roles) ? roles : [],
       email: email || null,
       avatar: avatar || null,
+      banner: banner || null,
       salary: salary ? String(salary) : null,
       baseSalaryAmount: baseSalaryAmount ? String(baseSalaryAmount) : "0",
       joinDate: joinDate || null,
@@ -115,13 +116,14 @@ router.put("/staff/:id", async (req, res) => {
     return res.status(403).json({ error: "Không có quyền chỉnh sửa hồ sơ này" });
   }
 
-  const { name, phone, role, roles, email, salary, baseSalaryAmount, joinDate, isActive, status, staffType, notes, salaryNotes, avatar } = req.body;
+  const { name, phone, role, roles, email, salary, baseSalaryAmount, joinDate, isActive, status, staffType, notes, salaryNotes, avatar, banner } = req.body;
   const update: Record<string, unknown> = {};
 
   if (name !== undefined) update.name = name;
   if (phone !== undefined) update.phone = phone;
   if (email !== undefined) update.email = email || null;
   if (avatar !== undefined) update.avatar = avatar || null;
+  if (banner !== undefined) update.banner = banner || null;
 
   // Admin-only fields
   if (isAdmin) {

@@ -13,6 +13,7 @@ export const staffTable = pgTable("staff", {
   roles: jsonb("roles").notNull().default([]),
   email: text("email"),
   avatar: text("avatar"),
+  banner: text("banner"),
   salary: text("salary"),
   baseSalaryAmount: numeric("base_salary_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   salaryType: text("salary_type").notNull().default("fixed"),

@@ -191,11 +191,13 @@ type StaffFormData = {
   name: string; phone: string; email: string; address: string;
   status: string; staffType: string; joinDate: string; notes: string;
   baseSalaryAmount: string; allowance: string; salaryNotes: string;
+  avatar?: string | null; banner?: string | null;
 };
 const EMPTY_FORM: StaffFormData = {
   name: "", phone: "", email: "", address: "",
   status: "active", staffType: "official", joinDate: "", notes: "",
   baseSalaryAmount: "", allowance: "", salaryNotes: "",
+  avatar: null, banner: null,
 };
 
 interface StaffFormSheetProps {
@@ -229,6 +231,8 @@ function StaffFormSheet({ open, onClose, editStaff }: StaffFormSheetProps) {
         baseSalaryAmount: editStaff.baseSalaryAmount ? String(editStaff.baseSalaryAmount) : "",
         allowance: editStaff.allowance ? String(editStaff.allowance) : "",
         salaryNotes: String(editStaff.salaryNotes || ""),
+        avatar: (editStaff.avatar as string | null) || null,
+        banner: (editStaff.banner as string | null) || null,
       });
       setSelectedRoles(getRoles(editStaff as { roles?: unknown; role?: unknown }));
     } else {
@@ -293,6 +297,8 @@ function StaffFormSheet({ open, onClose, editStaff }: StaffFormSheetProps) {
         baseSalaryAmount: form.baseSalaryAmount ? parseFloat(form.baseSalaryAmount) : null,
         allowance: form.allowance ? parseFloat(form.allowance) : null,
         salaryNotes: form.salaryNotes.trim(),
+        avatar: form.avatar || null,
+        banner: form.banner || null,
         roles: selectedRoles,
         role: selectedRoles[0] || null,
       };
@@ -421,6 +427,26 @@ function StaffFormSheet({ open, onClose, editStaff }: StaffFormSheetProps) {
                   <Label>Ghi chú</Label>
                   <Textarea value={form.notes} onChange={e => setField("notes", e.target.value)}
                     placeholder="Ghi chú thêm..." rows={2} className="mt-1" />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label>Ảnh đại diện</Label>
+                  <input type="file" accept="image/*" onChange={async (e) => {
+                    const file = e.currentTarget.files?.[0]; if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => setField("avatar", String(reader.result));
+                    reader.readAsDataURL(file);
+                  }} className="block w-full text-sm border border-border rounded-lg p-2 mt-1 cursor-pointer" />
+                  {form.avatar && <div className="mt-2 text-xs text-muted-foreground">✓ Ảnh đã chọn (sẽ lưu khi nhấn "Thêm nhân viên")</div>}
+                </div>
+                <div className="sm:col-span-2">
+                  <Label>Ảnh bìa</Label>
+                  <input type="file" accept="image/*" onChange={async (e) => {
+                    const file = e.currentTarget.files?.[0]; if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => setField("banner", String(reader.result));
+                    reader.readAsDataURL(file);
+                  }} className="block w-full text-sm border border-border rounded-lg p-2 mt-1 cursor-pointer" />
+                  {form.banner && <div className="mt-2 text-xs text-muted-foreground">✓ Ảnh đã chọn (sẽ lưu khi nhấn "Thêm nhân viên")</div>}
                 </div>
               </div>
             </section>
