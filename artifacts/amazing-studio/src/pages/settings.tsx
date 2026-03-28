@@ -1,7 +1,63 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, Input, Button, Textarea } from "@/components/ui";
-import { Save, Store, Mail, Phone, MapPin, Building, Clock, Navigation, Loader2 } from "lucide-react";
+import { Save, Store, Mail, Phone, MapPin, Building, Clock, Navigation, Loader2, LocateFixed, CheckCircle2, AlertCircle } from "lucide-react";
+
+function GpsDetectButton({ onDetected }: { onDetected: (lat: number, lng: number) => void }) {
+  const [state, setState] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [msg, setMsg] = useState("");
+
+  const detect = () => {
+    if (!navigator.geolocation) {
+      setState("error");
+      setMsg("Trình duyệt không hỗ trợ GPS");
+      return;
+    }
+    setState("loading");
+    setMsg("");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = Math.round(pos.coords.latitude * 1000000) / 1000000;
+        const lng = Math.round(pos.coords.longitude * 1000000) / 1000000;
+        onDetected(lat, lng);
+        setState("success");
+        setMsg(`Đã lấy vị trí: ${lat}, ${lng} (độ chính xác ~${Math.round(pos.coords.accuracy)}m)`);
+        setTimeout(() => setState("idle"), 8000);
+      },
+      (err) => {
+        setState("error");
+        if (err.code === 1) setMsg("Bị từ chối quyền GPS. Hãy cho phép trình duyệt truy cập vị trí.");
+        else if (err.code === 2) setMsg("Không lấy được vị trí. Hãy thử lại.");
+        else setMsg("Hết thời gian chờ GPS. Hãy thử lại.");
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  };
+
+  return (
+    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-xl border border-dashed bg-muted/30">
+      <Button type="button" variant="outline" className="gap-2 shrink-0" onClick={detect} disabled={state === "loading"}>
+        {state === "loading"
+          ? <Loader2 className="w-4 h-4 animate-spin" />
+          : <LocateFixed className="w-4 h-4 text-blue-500" />}
+        {state === "loading" ? "Đang lấy vị trí..." : "Lấy vị trí hiện tại"}
+      </Button>
+      {state === "success" && (
+        <span className="flex items-center gap-1.5 text-sm text-green-700">
+          <CheckCircle2 className="w-4 h-4" /> {msg}
+        </span>
+      )}
+      {state === "error" && (
+        <span className="flex items-center gap-1.5 text-sm text-red-600">
+          <AlertCircle className="w-4 h-4" /> {msg}
+        </span>
+      )}
+      {state === "idle" && (
+        <span className="text-sm text-muted-foreground">Bấm nút này khi đang đứng <strong>tại tiệm</strong> để tự động lấy tọa độ GPS</span>
+      )}
+    </div>
+  );
+}
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -142,23 +198,28 @@ export default function SettingsPage() {
           </p>
         </div>
         <CardContent className="p-6 space-y-6">
+          {/* Auto-detect location button */}
+          <GpsDetectButton
+            onDetected={(lat, lng) => setForm(p => ({ ...p, studio_lat: lat, studio_lng: lng }))}
+          />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="space-y-2">
               <label className="text-sm font-medium">Vĩ độ Studio (Latitude)</label>
-              <Input type="number" step="0.0001" {...f("studio_lat")} placeholder="11.3101" />
+              <Input type="number" step="0.000001" {...f("studio_lat")} placeholder="11.3101" />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Kinh độ Studio (Longitude)</label>
-              <Input type="number" step="0.0001" {...f("studio_lng")} placeholder="106.1074" />
+              <Input type="number" step="0.000001" {...f("studio_lng")} placeholder="106.1074" />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Bán kính cho phép (mét)</label>
               <Input type="number" {...f("attendance_radius_m")} placeholder="300" />
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Để lấy tọa độ: mở Google Maps, nhấp chuột phải vào studio → chọn "What's here?" để thấy lat/lng.
-          </p>
+          <div className="text-xs text-muted-foreground space-y-1">
+            <p>💡 <strong>Cách đơn giản nhất:</strong> Mở trang này <em>tại tiệm</em>, bấm nút "Lấy vị trí hiện tại" → tọa độ tự động điền.</p>
+            <p>📌 Hoặc mở Google Maps, nhấp chuột phải vào studio → chọn <em>"What's here?"</em> để thấy lat/lng.</p>
+          </div>
         </CardContent>
       </Card>
 
