@@ -372,9 +372,9 @@ export default function PhotoshopJobsPage() {
                             👤 Khách: {formatDate(job.customerDeadline)} {dlInfo.label && `(${dlInfo.label})`}
                           </span>
                         )}
-                        {job.includedCount != null && (
+                        {job.includedCount != null && job.includedCount > 0 && (
                           <span className="text-xs px-2 py-0.5 rounded-full border font-medium text-violet-600 bg-violet-50 border-violet-200 dark:bg-violet-950/30 dark:border-violet-800">
-                            🖼️ Gói gồm: {job.includedCount > 0 ? `${job.includedCount} ảnh hậu kỳ` : "Không giới hạn"}
+                            🖼️ Gói gồm: {job.includedCount} ảnh hậu kỳ
                           </span>
                         )}
                         {job.extraCount != null && job.extraCount > 0 && (

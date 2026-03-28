@@ -29,13 +29,6 @@ async function syncExtraRetouchedItem(bookingId: number, donePhotos: number) {
   if (!booking) return;
 
   const included = booking.snap ?? 0;
-
-  // included = 0 means unlimited — never charge extras for this booking
-  if (included === 0) {
-    await clearExtraRetouchedItem(bookingId);
-    return;
-  }
-
   const extra = Math.max(0, donePhotos - included);
 
   // Find existing extra_retouched item for this booking
@@ -112,8 +105,8 @@ router.get("/photoshop-jobs", async (req, res) => {
 
     const result = rows.map(r => {
       const included = r.bookingId != null ? (includedMap[r.bookingId] ?? null) : null;
-      // included = null → not linked; included = 0 → unlimited (no extras); included > 0 → has limit
-      const extraCount = (included != null && included > 0)
+      // extraCount is null when not linked; otherwise max(0, done - included)
+      const extraCount = included != null
         ? Math.max(0, (r.donePhotos ?? 0) - included)
         : null;
       const extraFee = r.bookingId != null ? (extraFeeMap[r.bookingId] ?? null) : null;

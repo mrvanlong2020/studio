@@ -977,7 +977,7 @@ function PackageModal({
               placeholder="0"
               className="h-9 text-sm"
             />
-            <p className="text-[11px] text-muted-foreground mt-1">Số ảnh đã chỉnh màu/retouch giao cho khách. 0 = không giới hạn</p>
+            <p className="text-[11px] text-muted-foreground mt-1">Số ảnh retouch/hậu kỳ giao khách theo gói. Nếu donePhotos vượt số này, phần dư sẽ tính thêm phí.</p>
           </div>
 
           <div>
