@@ -139,7 +139,6 @@ export default function LoginPage({ onLogin }: Props) {
 
           <p className="text-xs text-muted-foreground/70 text-center mt-6">
             Mật khẩu mặc định là số điện thoại của bạn.
-            <br />Quản trị viên: dùng <strong>admin</strong> / <strong>admin123</strong>
             <br />Liên hệ quản trị viên nếu cần hỗ trợ.
           </p>
         </div>
