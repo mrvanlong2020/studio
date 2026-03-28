@@ -457,17 +457,35 @@ router.get("/staff/:id/profile", async (req, res) => {
   });
 });
 
+// ── Helper: check if caller is admin ──────────────────────────────────────────
+async function isCallerAdmin(callerId: number): Promise<boolean> {
+  const r = await pool.query(`SELECT role FROM staff WHERE id = $1`, [callerId]);
+  return (r.rows[0] as { role?: string })?.role === "admin";
+}
+
 // ── Đơn xin nghỉ ──────────────────────────────────────────────────────────────
+// GET: admin or self can view leave requests
 router.get("/staff/:id/leave-requests", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
   const staffId = parseInt(req.params.id);
+  if (!(await isCallerAdmin(callerId)) && callerId !== staffId) {
+    return res.status(403).json({ error: "Không có quyền xem đơn của người khác" });
+  }
   const leaves = await db.select().from(staffLeaveRequestsTable)
     .where(eq(staffLeaveRequestsTable.staffId, staffId))
     .orderBy(desc(staffLeaveRequestsTable.createdAt));
   res.json(leaves);
 });
 
+// POST: staff can only submit their own leave request
 router.post("/staff/:id/leave-requests", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
   const staffId = parseInt(req.params.id);
+  if (!(await isCallerAdmin(callerId)) && callerId !== staffId) {
+    return res.status(403).json({ error: "Chỉ được nộp đơn xin nghỉ của chính mình" });
+  }
   const { startDate, endDate, reason, notes } = req.body;
   if (!startDate || !endDate || !reason?.trim()) {
     return res.status(400).json({ error: "Vui lòng điền đầy đủ thông tin" });
@@ -478,7 +496,13 @@ router.post("/staff/:id/leave-requests", async (req, res) => {
   res.status(201).json(created);
 });
 
+// PUT: admin only (approve/reject leave requests)
 router.put("/leave-requests/:id", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
+  if (!(await isCallerAdmin(callerId))) {
+    return res.status(403).json({ error: "Chỉ admin mới có thể duyệt/từ chối đơn xin nghỉ" });
+  }
   const id = parseInt(req.params.id);
   const { status, approvedByName, notes } = req.body;
   const update: Record<string, unknown> = {};
@@ -493,8 +517,13 @@ router.put("/leave-requests/:id", async (req, res) => {
   res.json(updated);
 });
 
-// ── Ghi chú nội bộ ────────────────────────────────────────────────────────────
+// ── Ghi chú nội bộ: admin-only ────────────────────────────────────────────────
 router.get("/staff/:id/internal-notes", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
+  if (!(await isCallerAdmin(callerId))) {
+    return res.status(403).json({ error: "Chỉ admin mới có thể xem ghi chú nội bộ" });
+  }
   const staffId = parseInt(req.params.id);
   const [notes] = await db.select().from(staffInternalNotesTable)
     .where(eq(staffInternalNotesTable.staffId, staffId));
@@ -502,6 +531,11 @@ router.get("/staff/:id/internal-notes", async (req, res) => {
 });
 
 router.put("/staff/:id/internal-notes", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
+  if (!(await isCallerAdmin(callerId))) {
+    return res.status(403).json({ error: "Chỉ admin mới có thể cập nhật ghi chú nội bộ" });
+  }
   const staffId = parseInt(req.params.id);
   const { skillsStrong, workNotes, internalRating, generalNotes } = req.body;
   const [existing] = await db.select().from(staffInternalNotesTable)
