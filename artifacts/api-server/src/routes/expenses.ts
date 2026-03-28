@@ -27,11 +27,26 @@ router.get("/expenses", async (req, res) => {
   const statusFilter = req.query.status as string | undefined;
   const mine = req.query.mine === "1" || req.query.mine === "true";
 
-  if (mine) {
-    const callerId = verifyToken(req.headers.authorization);
-    if (callerId) {
-      filtered = filtered.filter(e => e.createdByStaffId === callerId);
-    }
+  // Kiểm tra quyền caller — nhân viên không phải admin luôn chỉ thấy chi tiêu của mình
+  const callerId = verifyToken(req.headers.authorization);
+  let callerIsAdmin = false;
+  if (callerId) {
+    const callerR = await pool.query(`SELECT role, roles FROM staff WHERE id = $1`, [callerId]);
+    const caller = callerR.rows[0] as Record<string, unknown> | undefined;
+    callerIsAdmin = !!(caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin"))));
+  }
+
+  if (!callerId) {
+    // Không có token hợp lệ — trả về danh sách rỗng
+    return res.json([]);
+  }
+
+  if (!callerIsAdmin) {
+    // Nhân viên không phải admin luôn chỉ thấy chi tiêu của mình
+    filtered = filtered.filter(e => e.createdByStaffId === callerId);
+  } else if (mine) {
+    // Admin chọn xem của mình thôi
+    filtered = filtered.filter(e => e.createdByStaffId === callerId);
   }
 
   if (category) filtered = filtered.filter(e => e.category === category);
@@ -128,6 +143,19 @@ router.post("/expenses", async (req, res) => {
 
 router.put("/expenses/:id", async (req, res) => {
   const id = parseInt(req.params.id);
+  const callerId = verifyToken(req.headers.authorization);
+  if (callerId) {
+    const callerR = await pool.query(`SELECT role, roles FROM staff WHERE id = $1`, [callerId]);
+    const caller = callerR.rows[0] as Record<string, unknown> | undefined;
+    const isAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
+    if (!isAdmin) {
+      // Staff can only edit their own submitted expenses
+      const [existing] = await db.select().from(expensesTable).where(eq(expensesTable.id, id));
+      if (!existing) return res.status(404).json({ error: "Không tìm thấy chi phí" });
+      if (existing.createdByStaffId !== callerId) return res.status(403).json({ error: "Không có quyền sửa chi phí này" });
+      if (existing.status !== "submitted") return res.status(403).json({ error: "Chỉ có thể sửa chi phí chưa duyệt" });
+    }
+  }
   const { type, category, amount, description, bookingId, paymentMethod, expenseDate, receiptUrl, notes, bankName, bankAccount, createdBy } = req.body;
   const update: Record<string, unknown> = {};
   if (type !== undefined) update.type = type;
@@ -215,6 +243,18 @@ router.patch("/expenses/:id/pay", async (req, res) => {
 
 router.delete("/expenses/:id", async (req, res) => {
   const id = parseInt(req.params.id);
+  const callerId = verifyToken(req.headers.authorization);
+  if (callerId) {
+    const callerR = await pool.query(`SELECT role, roles FROM staff WHERE id = $1`, [callerId]);
+    const caller = callerR.rows[0] as Record<string, unknown> | undefined;
+    const isAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
+    if (!isAdmin) {
+      const [existing] = await db.select().from(expensesTable).where(eq(expensesTable.id, id));
+      if (!existing) return res.status(404).json({ error: "Không tìm thấy chi phí" });
+      if (existing.createdByStaffId !== callerId) return res.status(403).json({ error: "Không có quyền xoá chi phí này" });
+      if (existing.status !== "submitted") return res.status(403).json({ error: "Chỉ có thể xoá chi phí chưa duyệt" });
+    }
+  }
   await db.delete(expensesTable).where(eq(expensesTable.id, id));
   res.status(204).send();
 });
