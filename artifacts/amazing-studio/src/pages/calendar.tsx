@@ -1376,7 +1376,12 @@ async function buildContractImages(htmlContent: string): Promise<string[]> {
   }
 }
 
-function generateContractHTML(booking: Booking, siblings: Booking[], allPackages: DetailPackage[]): string {
+function generateContractHTML(
+  booking: Booking,
+  siblings: Booking[],
+  allPackages: DetailPackage[],
+  paymentSummary?: { totalAmount: number; paidAmount: number; remainingAmount: number },
+): string {
   const today = new Date();
   const todayStr = format(today, "dd/MM/yyyy");
 
@@ -1384,10 +1389,10 @@ function generateContractHTML(booking: Booking, siblings: Booking[], allPackages
   const allServices = siblings.length > 0 ? siblings : [booking];
   const isMulti = allServices.length > 1;
 
-  // Payment summary: same source as on-screen detail (booking-level API fields)
-  const totalAmount     = Number(booking.totalAmount     ?? 0) || 0;
-  const paidAmount      = Number(booking.paidAmount      ?? 0) || 0;
-  const remainingAmount = Number(booking.remainingAmount ?? Math.max(0, totalAmount - paidAmount)) || 0;
+  // Payment summary: use caller-supplied summary (from parentContract or booking) — same source as on-screen
+  const totalAmount     = Number(paymentSummary?.totalAmount     ?? booking.totalAmount     ?? 0) || 0;
+  const paidAmount      = Number(paymentSummary?.paidAmount      ?? booking.paidAmount      ?? 0) || 0;
+  const remainingAmount = Number(paymentSummary?.remainingAmount ?? booking.remainingAmount ?? Math.max(0, totalAmount - paidAmount)) || 0;
 
   // ── Lịch chụp section ─────────────────────────────────────────────────────
   const scheduleSectionHTML = isMulti
@@ -1773,7 +1778,18 @@ function ShowDetailPanel({
   };
 
   const handlePrintContract = () => {
-    const html = generateContractHTML(booking, siblings, allPackages);
+    const paymentSummary = parentContract
+      ? {
+          totalAmount:     Number(parentContract.totalAmount     ?? 0) || 0,
+          paidAmount:      Number(parentContract.depositAmount   ?? 0) || 0,
+          remainingAmount: Number(parentContract.remainingAmount ?? 0) || 0,
+        }
+      : {
+          totalAmount:     Number(booking.totalAmount     ?? 0) || 0,
+          paidAmount:      Number(booking.paidAmount      ?? booking.depositAmount ?? 0) || 0,
+          remainingAmount: Number(booking.remainingAmount ?? 0) || 0,
+        };
+    const html = generateContractHTML(booking, siblings, allPackages, paymentSummary);
     const win = window.open("", "_blank");
     if (!win) { alert("Vui lòng cho phép trình duyệt mở cửa sổ mới để xuất hợp đồng."); return; }
     win.document.write(html);
@@ -1825,7 +1841,18 @@ function ShowDetailPanel({
             setContractImagesLoading(true);
             setShowContractImages(true);
             try {
-              const html = generateContractHTML(booking, siblings, allPackages);
+              const paymentSummary = parentContract
+                ? {
+                    totalAmount:     Number(parentContract.totalAmount     ?? 0) || 0,
+                    paidAmount:      Number(parentContract.depositAmount   ?? 0) || 0,
+                    remainingAmount: Number(parentContract.remainingAmount ?? 0) || 0,
+                  }
+                : {
+                    totalAmount:     Number(booking.totalAmount     ?? 0) || 0,
+                    paidAmount:      Number(booking.paidAmount      ?? booking.depositAmount ?? 0) || 0,
+                    remainingAmount: Number(booking.remainingAmount ?? 0) || 0,
+                  };
+              const html = generateContractHTML(booking, siblings, allPackages, paymentSummary);
               const urls = await buildContractImages(html);
               setContractImageUrls(urls);
             } catch (err) {
