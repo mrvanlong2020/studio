@@ -31,8 +31,14 @@ async function getCallerRole(callerId: number): Promise<string | null> {
 router.get("/staff", async (req, res) => {
   const callerId = verifyToken(req.headers.authorization);
   if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
+  const callerRole = await getCallerRole(callerId);
   const staff = await db.select().from(staffTable).orderBy(staffTable.createdAt);
-  res.json(staff.map(fmt));
+  if (callerRole === "admin") {
+    res.json(staff.map(fmt));
+  } else {
+    // Non-admin: only return own record
+    res.json(staff.filter(s => s.id === callerId).map(fmt));
+  }
 });
 
 router.get("/staff/:id", async (req, res) => {
@@ -40,6 +46,12 @@ router.get("/staff/:id", async (req, res) => {
   if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
 
   const id = parseInt(req.params.id);
+
+  // Non-admin can only fetch their own record
+  const callerRole = await getCallerRole(callerId);
+  if (callerRole !== "admin" && callerId !== id) {
+    return res.status(403).json({ error: "Không có quyền xem hồ sơ nhân viên khác" });
+  }
   const [member] = await db.select().from(staffTable).where(eq(staffTable.id, id));
   if (!member) return res.status(404).json({ error: "Không tìm thấy nhân viên" });
 

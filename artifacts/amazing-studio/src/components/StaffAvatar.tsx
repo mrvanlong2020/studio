@@ -52,7 +52,7 @@ interface StaffAvatarProps {
   role?: string;
   status?: string;
   isActive?: boolean;
-  size?: "xs" | "sm" | "md" | "lg" | "xl";
+  size?: "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
   editable?: boolean;
   onUpload?: (base64: string) => void;
   onDelete?: () => void;
@@ -61,11 +61,12 @@ interface StaffAvatarProps {
 
 // ─── Size map ─────────────────────────────────────────────────────────────────
 const SIZE_MAP = {
-  xs: { outer: "w-7 h-7",   initials: "text-[11px]", dot: "w-2 h-2 bottom-0 right-0",   cam: 12 },
-  sm: { outer: "w-9 h-9",   initials: "text-xs",      dot: "w-2 h-2 bottom-0 right-0",   cam: 14 },
-  md: { outer: "w-11 h-11", initials: "text-sm",      dot: "w-2.5 h-2.5 bottom-0 right-0", cam: 16 },
-  lg: { outer: "w-16 h-16", initials: "text-xl",      dot: "w-3 h-3 bottom-0.5 right-0.5", cam: 18 },
-  xl: { outer: "w-20 h-20", initials: "text-2xl",     dot: "w-3.5 h-3.5 bottom-0.5 right-0.5", cam: 20 },
+  xs:  { outer: "w-7 h-7",    initials: "text-[11px]", dot: "w-2 h-2 bottom-0 right-0",         cam: 12 },
+  sm:  { outer: "w-9 h-9",    initials: "text-xs",      dot: "w-2 h-2 bottom-0 right-0",         cam: 14 },
+  md:  { outer: "w-14 h-14",  initials: "text-base",    dot: "w-2.5 h-2.5 bottom-0 right-0",     cam: 16 },
+  lg:  { outer: "w-20 h-20",  initials: "text-2xl",     dot: "w-3 h-3 bottom-0.5 right-0.5",     cam: 18 },
+  xl:  { outer: "w-28 h-28",  initials: "text-3xl",     dot: "w-4 h-4 bottom-1 right-1",         cam: 22 },
+  "2xl": { outer: "w-36 h-36", initials: "text-4xl",   dot: "w-4.5 h-4.5 bottom-1.5 right-1.5", cam: 26 },
 };
 
 export default function StaffAvatar({

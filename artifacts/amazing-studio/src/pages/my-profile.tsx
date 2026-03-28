@@ -170,7 +170,7 @@ export default function MyProfilePage() {
         <div className="px-5 pb-5">
           <div className="flex items-start gap-4">
             {/* Avatar */}
-            <div className="relative flex-shrink-0 -mt-14 sm:-mt-16">
+            <div className="relative flex-shrink-0 -mt-16 sm:-mt-20">
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
@@ -178,8 +178,8 @@ export default function MyProfilePage() {
                 aria-label="Đổi ảnh đại diện"
               >
                 <div className={cn(
-                  "w-32 h-32 sm:w-40 sm:h-40 rounded-full overflow-hidden",
-                  "ring-[3px] ring-white shadow-[0_8px_32px_rgba(0,0,0,0.18)]",
+                  "w-36 h-36 sm:w-44 sm:h-44 rounded-full overflow-hidden",
+                  "ring-4 ring-white shadow-[0_8px_32px_rgba(0,0,0,0.18)]",
                   "border-2 border-primary/20",
                 )}>
                   <StaffAvatar
@@ -187,7 +187,7 @@ export default function MyProfilePage() {
                     avatar={avatarUrl}
                     role={mainRole}
                     status={staff?.status ?? (staff?.isActive !== false ? "active" : "inactive")}
-                    size="xl"
+                    size="2xl"
                     editable={true}
                     onUpload={async (b64) => {
                       if (!viewer) return;

@@ -131,7 +131,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   avatar={(viewer as Record<string, unknown>).avatar as string | undefined}
                   role={viewer.role ?? "assistant"}
                   status="active"
-                  size="md"
+                  size="lg"
                 />
               ) : (
                 <div className="h-11 w-11 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
