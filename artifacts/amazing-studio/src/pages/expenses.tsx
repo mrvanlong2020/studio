@@ -113,7 +113,7 @@ export default function ExpensesPage() {
 
   const { data: stats } = useQuery<Stats>({
     queryKey: ["expense-stats"],
-    queryFn: () => fetch(`${BASE}/api/expenses/stats`).then(r => r.json()),
+    queryFn: () => fetch(`${BASE}/api/expenses/stats`, { headers: authHeaders }).then(r => r.json()),
     refetchInterval: 30000,
   });
 

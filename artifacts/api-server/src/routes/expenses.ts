@@ -69,8 +69,18 @@ router.get("/expenses", async (req, res) => {
   res.json(filtered.map(fmt));
 });
 
-router.get("/expenses/stats", async (_req, res) => {
-  const rows = await db.select().from(expensesTable);
+router.get("/expenses/stats", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.json({ today: 0, todayCount: 0, week: 0, weekCount: 0, month: 0, monthCount: 0, total: 0, totalCount: 0 });
+
+  const callerR = await pool.query(`SELECT role, roles FROM staff WHERE id = $1`, [callerId]);
+  const caller = callerR.rows[0] as Record<string, unknown> | undefined;
+  const isAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
+
+  let allRows = await db.select().from(expensesTable);
+  // Nhân viên chỉ thấy thống kê chi phí của mình
+  const rows = isAdmin ? allRows : allRows.filter(e => e.createdByStaffId === callerId);
+
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
   const d7 = new Date(now); d7.setDate(d7.getDate() - 6);
@@ -94,9 +104,18 @@ router.get("/expenses/stats", async (_req, res) => {
 });
 
 router.get("/expenses/:id", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
+
+  const callerR = await pool.query(`SELECT role, roles FROM staff WHERE id = $1`, [callerId]);
+  const caller = callerR.rows[0] as Record<string, unknown> | undefined;
+  const isAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
+
   const id = parseInt(req.params.id);
   const [e] = await db.select().from(expensesTable).where(eq(expensesTable.id, id));
   if (!e) return res.status(404).json({ error: "Không tìm thấy" });
+  // Staff can only see their own expense detail
+  if (!isAdmin && e.createdByStaffId !== callerId) return res.status(403).json({ error: "Không có quyền xem chi phí này" });
   res.json(fmt(e));
 });
 
