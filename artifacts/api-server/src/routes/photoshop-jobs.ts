@@ -146,7 +146,9 @@ router.post("/photoshop-jobs", async (req, res) => {
 
     // Sync extra_retouched item if linked to a booking
     if (row.bookingId && row.donePhotos > 0) {
-      await syncExtraRetouchedItem(row.bookingId, row.donePhotos).catch(() => {});
+      await syncExtraRetouchedItem(row.bookingId, row.donePhotos).catch(err =>
+        console.error("[photoshop-jobs] syncExtraRetouchedItem (POST) failed:", err)
+      );
     }
 
     res.status(201).json(row);
@@ -184,7 +186,9 @@ router.put("/photoshop-jobs/:id", async (req, res) => {
 
     // Sync extra_retouched booking_item when donePhotos changes and job is linked to a booking
     if (donePhotos !== undefined && row.bookingId) {
-      await syncExtraRetouchedItem(row.bookingId, row.donePhotos ?? 0).catch(() => {});
+      await syncExtraRetouchedItem(row.bookingId, row.donePhotos ?? 0).catch(err =>
+        console.error("[photoshop-jobs] syncExtraRetouchedItem (PUT) failed:", err)
+      );
     }
 
     res.json(row);
