@@ -350,8 +350,9 @@ export default function AttendancePage() {
   }
 
   // ── Derived data ───────────────────────────────────────────────────────────
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const todayLogs = (myAtt?.logs ?? []).filter(l => l.createdAt.slice(0, 10) === todayStr);
+  // Compute today in VN timezone (UTC+7) to correctly match localDate from server
+  const todayStr = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
+  const todayLogs = (myAtt?.logs ?? []).filter(l => (l.localDate ?? l.createdAt.slice(0, 10)) === todayStr);
   const hasCheckedIn = todayLogs.some(l => l.type === "check_in");
   const hasCheckedOut = todayLogs.some(l => l.type === "check_out");
 
@@ -361,7 +362,7 @@ export default function AttendancePage() {
     return Array.from({ length: total }, (_, i) => {
       const d = i + 1;
       const dateStr = `${month}-${String(d).padStart(2, "0")}`;
-      const dayLogs = (myAtt?.logs ?? []).filter(l => l.createdAt.slice(0, 10) === dateStr);
+      const dayLogs = (myAtt?.logs ?? []).filter(l => (l.localDate ?? l.createdAt.slice(0, 10)) === dateStr);
       return { date: dateStr, dayNum: d, logs: dayLogs };
     });
   })();
@@ -765,8 +766,8 @@ export default function AttendancePage() {
                     <tbody className="divide-y divide-border">
                       {staffSummary.map(s => {
                         const fullDays = s.checkIns.filter(ci => {
-                          const ciDate = ci.createdAt.slice(0, 10);
-                          return s.checkOuts.some(co => co.createdAt.slice(0, 10) === ciDate);
+                          const ciDate = ci.localDate ?? ci.createdAt.slice(0, 10);
+                          return s.checkOuts.some(co => (co.localDate ?? co.createdAt.slice(0, 10)) === ciDate);
                         }).length;
                         const offsite = s.checkIns.filter(l => l.isOffsite).length;
                         const lastLog = [...s.checkIns, ...s.checkOuts].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];

@@ -34,7 +34,7 @@ export default function SettingsPage() {
 
   const { data: settings, isLoading } = useQuery<Settings>({
     queryKey: ["settings"],
-    queryFn: () => fetch(`${BASE}/api/settings`, { headers: authH() }).then(r => r.json()),
+    queryFn: () => fetch(`${BASE}/api/settings`, { headers: authH() }).then(r => { if (!r.ok) throw new Error("Lỗi tải cài đặt"); return r.json(); }),
   });
 
   useEffect(() => {
@@ -42,8 +42,11 @@ export default function SettingsPage() {
   }, [settings]);
 
   const saveMut = useMutation({
-    mutationFn: (body: Partial<Settings>) =>
-      fetch(`${BASE}/api/settings`, { method: "PUT", headers: authH(), body: JSON.stringify(body) }).then(r => r.json()),
+    mutationFn: async (body: Partial<Settings>) => {
+      const r = await fetch(`${BASE}/api/settings`, { method: "PUT", headers: authH(), body: JSON.stringify(body) });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error((d as { error?: string }).error || "Lưu cài đặt thất bại"); }
+      return r.json();
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["settings"] });
       setSaved(true);

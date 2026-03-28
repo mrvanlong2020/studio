@@ -176,11 +176,14 @@ router.post("/attendance/check-out", async (req, res) => {
     return res.status(400).json({ error: "Bạn đã check-out hôm nay rồi" });
   }
 
-  // Derive checkout method from the same-day check-in record
+  // Require same-day check-in before allowing check-out
   const checkInR = await pool.query(
     `SELECT method FROM attendance_logs WHERE staff_id = $1 AND type = 'check_in' AND created_at::date = $2::date LIMIT 1`,
     [callerId, today]
   );
+  if (checkInR.rows.length === 0) {
+    return res.status(400).json({ error: "Bạn chưa chấm vào hôm nay" });
+  }
   const checkoutMethod: "qr" | "offsite" | "manual" = (checkInR.rows[0] as { method: string } | undefined)?.method as "qr" | "offsite" | "manual" ?? "qr";
 
   const [log] = await db.insert(attendanceLogsTable).values({
