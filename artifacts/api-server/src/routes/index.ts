@@ -26,6 +26,8 @@ import photoshopJobsRouter from "./photoshop-jobs";
 import internalCommsRouter from "./internal-comms";
 import storageRouter from "./storage";
 import revenueRouter from "./revenue";
+import bookingExtrasRouter from "./booking-extras";
+import attendanceRouter from "./attendance";
 
 const router: IRouter = Router();
 
@@ -56,5 +58,7 @@ router.use(photoshopJobsRouter);
 router.use(internalCommsRouter);
 router.use(storageRouter);
 router.use(revenueRouter);
+router.use(bookingExtrasRouter);
+router.use(attendanceRouter);
 
 export default router;

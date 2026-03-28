@@ -6,7 +6,8 @@ import { Button, Input, Select, Textarea, Badge, Card, CardContent, Dialog, Dial
 import {
   Plus, Search, Phone, MapPin, Clock, Package2, ChevronRight, X, CheckCircle2,
   CreditCard, AlertCircle, FileText, Users, DollarSign, Receipt, ListChecks,
-  Trash2, Edit2, Printer, Download
+  Trash2, Edit2, Printer, Download, ShoppingCart, CalendarDays, History,
+  ArrowUpCircle
 } from "lucide-react";
 import { ServiceSearchBox, type ServiceOption } from "@/components/service-search-box";
 import { SurchargeEditor, type SurchargeItem } from "@/components/surcharge-editor";
@@ -71,9 +72,16 @@ export default function BookingsPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showPayForm, setShowPayForm] = useState(false);
-  const [activeTab, setActiveTab] = useState<"info" | "payment" | "expense" | "task">("info");
+  const [activeTab, setActiveTab] = useState<"info" | "payment" | "expense" | "task" | "items">("info");
   const [payForm, setPayForm] = useState({ amount: "", paymentMethod: "transfer", paymentType: "payment", notes: "" });
   const [previewImg, setPreviewImg] = useState<string | null>(null);
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [itemForm, setItemForm] = useState({ title: "", qty: "1", unitPrice: "", notes: "" });
+  const [upgradeForm, setUpgradeForm] = useState({ newPackageName: "", newPrice: "", notes: "" });
+  const [showReschedule, setShowReschedule] = useState(false);
+  const [rescheduleForm, setRescheduleForm] = useState({ newDate: "", newTime: "", reason: "" });
+  const token = localStorage.getItem("amazingStudioToken_v2");
 
   const { data: bookings = [], isLoading } = useQuery<SimpleBooking[]>({
     queryKey: ["bookings"],
@@ -109,6 +117,54 @@ export default function BookingsPage() {
   const deleteBooking = useMutation({
     mutationFn: (id: number) => fetch(`${BASE}/api/bookings/${id}`, { method: "DELETE" }),
     onSuccess: () => { setSelectedId(null); qc.invalidateQueries({ queryKey: ["bookings"] }); },
+  });
+
+  // ── Task #10: Booking items ──────────────────────────────────────────────
+  const authHeaders = { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  const fetchJsonAuth = (url: string, opts?: RequestInit) =>
+    fetch(`${BASE}${url}`, { headers: authHeaders, ...opts }).then(r => r.json());
+
+  type BookingItem = { id: number; type: string; title: string; qty: number; unitPrice: number; totalPrice: number; notes?: string; isActive: number; };
+  const { data: bookingItems = [] } = useQuery<BookingItem[]>({
+    queryKey: ["booking-items", selectedId],
+    queryFn: () => fetchJsonAuth(`/api/bookings/${selectedId}/items`),
+    enabled: !!selectedId && activeTab === "items",
+  });
+
+  const addItem = useMutation({
+    mutationFn: (data: Record<string, unknown>) => fetchJsonAuth(`/api/bookings/${selectedId}/items`, { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["booking-items", selectedId] }); setShowAddItem(false); setItemForm({ title: "", qty: "1", unitPrice: "", notes: "" }); },
+  });
+
+  const deleteItem = useMutation({
+    mutationFn: (itemId: number) => fetchJsonAuth(`/api/bookings/${selectedId}/items/${itemId}`, { method: "PUT", body: JSON.stringify({ isActive: 0 }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["booking-items", selectedId] }),
+  });
+
+  const upgradePackage = useMutation({
+    mutationFn: (data: Record<string, unknown>) => fetchJsonAuth(`/api/bookings/${selectedId}/upgrade`, { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["booking-items", selectedId] });
+      qc.invalidateQueries({ queryKey: ["booking", selectedId] });
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+      setShowUpgrade(false);
+      setUpgradeForm({ newPackageName: "", newPrice: "", notes: "" });
+    },
+  });
+
+  // ── Task #11: Reschedule ─────────────────────────────────────────────────
+  const reschedule = useMutation({
+    mutationFn: (data: Record<string, unknown>) => fetchJsonAuth(`/api/bookings/${selectedId}/reschedule`, { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["booking", selectedId] });
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+      setShowReschedule(false);
+      setRescheduleForm({ newDate: "", newTime: "", reason: "" });
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { message?: string })?.message || "Lỗi đổi lịch";
+      alert(msg);
+    },
   });
 
   const filtered = bookings.filter(b => {
@@ -273,14 +329,15 @@ export default function BookingsPage() {
 
                   {/* Tabs */}
                   <div className="flex border-b text-sm overflow-x-auto">
-                    {(["info", "payment", "expense", "task"] as const).map(tab => (
+                    {(["info", "items", "payment", "expense", "task"] as const).map(tab => (
                       <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
-                        className={`px-4 py-2.5 font-medium whitespace-nowrap border-b-2 transition-colors flex items-center gap-1.5
+                        className={`px-3 py-2.5 font-medium whitespace-nowrap border-b-2 transition-colors flex items-center gap-1.5
                           ${activeTab === tab ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
                       >
                         {tab === "info" && <><FileText className="w-3.5 h-3.5" />Thông tin</>}
+                        {tab === "items" && <><ShoppingCart className="w-3.5 h-3.5" />Hạng mục</>}
                         {tab === "payment" && <><CreditCard className="w-3.5 h-3.5" />Thu tiền{detail.payments.length > 0 && <span className="text-[10px] bg-primary/15 text-primary rounded-full px-1.5">{detail.payments.length}</span>}</>}
                         {tab === "expense" && <><Receipt className="w-3.5 h-3.5" />Chi phí</>}
                         {tab === "task" && <><ListChecks className="w-3.5 h-3.5" />Công việc{detail.tasks.length > 0 && <span className="text-[10px] bg-muted text-muted-foreground rounded-full px-1.5">{detail.tasks.length}</span>}</>}
@@ -369,10 +426,105 @@ export default function BookingsPage() {
                           </div>
                         )}
 
-                        <div className="flex gap-2 pt-2 border-t">
+                        <div className="flex gap-2 pt-2 border-t flex-wrap">
+                          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { setShowReschedule(true); setRescheduleForm({ newDate: detail.shootDate, newTime: detail.shootTime || "", reason: "" }); }}>
+                            <CalendarDays className="w-3.5 h-3.5" /> Đổi lịch
+                          </Button>
                           <Button variant="destructive" size="sm" className="gap-1.5" onClick={() => { if (confirm("Xóa đơn hàng này?")) deleteBooking.mutate(detail.id); }}>
                             <Trash2 className="w-3.5 h-3.5" /> Xóa đơn
                           </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ITEMS TAB */}
+                    {activeTab === "items" && (
+                      <div className="space-y-3">
+                        <div className="flex gap-2">
+                          <Button size="sm" className="gap-1.5 flex-1" onClick={() => setShowAddItem(true)}>
+                            <Plus className="w-3.5 h-3.5" /> Thêm hạng mục
+                          </Button>
+                          <Button size="sm" variant="outline" className="gap-1.5 flex-1" onClick={() => setShowUpgrade(true)}>
+                            <ArrowUpCircle className="w-3.5 h-3.5" /> Nâng gói
+                          </Button>
+                        </div>
+
+                        {showAddItem && (
+                          <div className="rounded-xl border bg-muted/20 p-3 space-y-2">
+                            <h4 className="font-semibold text-sm">Thêm hạng mục</h4>
+                            <Input placeholder="Tên hạng mục *" value={itemForm.title} onChange={e => setItemForm(f => ({ ...f, title: e.target.value }))} />
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-xs text-muted-foreground">Số lượng</label>
+                                <Input type="number" placeholder="1" value={itemForm.qty} onChange={e => setItemForm(f => ({ ...f, qty: e.target.value }))} />
+                              </div>
+                              <div>
+                                <label className="text-xs text-muted-foreground">Đơn giá (VNĐ)</label>
+                                <Input type="number" placeholder="0" value={itemForm.unitPrice} onChange={e => setItemForm(f => ({ ...f, unitPrice: e.target.value }))} />
+                              </div>
+                            </div>
+                            <Input placeholder="Ghi chú..." value={itemForm.notes} onChange={e => setItemForm(f => ({ ...f, notes: e.target.value }))} />
+                            <div className="flex gap-2">
+                              <Button size="sm" onClick={() => addItem.mutate({ title: itemForm.title, qty: itemForm.qty, unitPrice: itemForm.unitPrice, notes: itemForm.notes })} disabled={!itemForm.title || addItem.isPending}>
+                                {addItem.isPending ? "Đang lưu..." : "Lưu"}
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => setShowAddItem(false)}>Hủy</Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {showUpgrade && (
+                          <div className="rounded-xl border bg-blue-50 border-blue-200 p-3 space-y-2">
+                            <h4 className="font-semibold text-sm text-blue-900">Nâng gói dịch vụ</h4>
+                            <Input placeholder="Tên gói mới *" value={upgradeForm.newPackageName} onChange={e => setUpgradeForm(f => ({ ...f, newPackageName: e.target.value }))} />
+                            <Input type="number" placeholder="Giá gói mới (VNĐ) *" value={upgradeForm.newPrice} onChange={e => setUpgradeForm(f => ({ ...f, newPrice: e.target.value }))} />
+                            <Input placeholder="Ghi chú lý do nâng..." value={upgradeForm.notes} onChange={e => setUpgradeForm(f => ({ ...f, notes: e.target.value }))} />
+                            <div className="flex gap-2">
+                              <Button size="sm" onClick={() => upgradePackage.mutate({ newPackageName: upgradeForm.newPackageName, newPrice: parseFloat(upgradeForm.newPrice), notes: upgradeForm.notes })} disabled={!upgradeForm.newPackageName || !upgradeForm.newPrice || upgradePackage.isPending}>
+                                {upgradePackage.isPending ? "Đang lưu..." : "Xác nhận nâng gói"}
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => setShowUpgrade(false)}>Hủy</Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {bookingItems.filter(i => i.isActive).length === 0 ? (
+                          <div className="text-center py-6 text-muted-foreground text-sm">Chưa có hạng mục nào</div>
+                        ) : (
+                          <div className="space-y-2">
+                            {bookingItems.filter(i => i.isActive).map(item => (
+                              <div key={item.id} className="flex items-center justify-between p-3 rounded-xl border bg-card">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                      item.type === "base_package" ? "bg-blue-100 text-blue-700" :
+                                      item.type === "upgrade_delta" ? "bg-purple-100 text-purple-700" :
+                                      item.type === "discount" ? "bg-green-100 text-green-700" :
+                                      "bg-gray-100 text-gray-700"
+                                    }`}>
+                                      {item.type === "base_package" ? "Gói gốc" : item.type === "upgrade_delta" ? "Nâng gói" : item.type === "discount" ? "Giảm giá" : "Addon"}
+                                    </span>
+                                    <span className="font-medium text-sm">{item.title}</span>
+                                  </div>
+                                  {item.qty > 1 && <p className="text-xs text-muted-foreground mt-0.5 ml-0">x{item.qty} × {formatVND(item.unitPrice)}</p>}
+                                  {item.notes && <p className="text-xs text-muted-foreground">{item.notes}</p>}
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className={`font-bold text-sm ${item.totalPrice >= 0 ? "text-primary" : "text-green-600"}`}>{formatVND(item.totalPrice)}</span>
+                                  <button onClick={() => deleteItem.mutate(item.id)} className="p-1 text-muted-foreground hover:text-destructive rounded-lg transition-colors">
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="rounded-xl border p-3 bg-muted/20 text-sm">
+                          <div className="flex justify-between font-bold">
+                            <span>Tổng hạng mục</span>
+                            <span className="text-primary">{formatVND(bookingItems.filter(i => i.isActive).reduce((s, i) => s + i.totalPrice, 0))}</span>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -537,6 +689,37 @@ export default function BookingsPage() {
             onSuccess={() => { setShowCreateForm(false); qc.invalidateQueries({ queryKey: ["bookings"] }); }}
             onCancel={() => setShowCreateForm(false)}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Reschedule Dialog */}
+      <Dialog open={showReschedule} onOpenChange={setShowReschedule}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarDays className="w-5 h-5 text-primary" /> Đổi lịch chụp
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            <div>
+              <label className="text-sm font-medium">Ngày mới *</label>
+              <Input type="date" value={rescheduleForm.newDate} onChange={e => setRescheduleForm(f => ({ ...f, newDate: e.target.value }))} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Giờ mới</label>
+              <Input type="time" value={rescheduleForm.newTime} onChange={e => setRescheduleForm(f => ({ ...f, newTime: e.target.value }))} className="mt-1" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Lý do đổi lịch</label>
+              <Textarea rows={2} placeholder="Nhập lý do..." value={rescheduleForm.reason} onChange={e => setRescheduleForm(f => ({ ...f, reason: e.target.value }))} className="mt-1" />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button onClick={() => reschedule.mutate(rescheduleForm)} disabled={!rescheduleForm.newDate || reschedule.isPending} className="flex-1">
+                {reschedule.isPending ? "Đang lưu..." : "Xác nhận đổi lịch"}
+              </Button>
+              <Button variant="outline" onClick={() => setShowReschedule(false)}>Hủy</Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

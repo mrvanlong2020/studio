@@ -2,6 +2,7 @@ import { pgTable, serial, text, timestamp, integer, numeric, date } from "drizzl
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { bookingsTable } from "./bookings";
+import { staffTable } from "./tasks";
 
 export const expensesTable = pgTable("expenses", {
   id: serial("id").primaryKey(),
@@ -18,6 +19,13 @@ export const expensesTable = pgTable("expenses", {
   bankAccount: text("bank_account"),
   createdBy: text("created_by"),
   notes: text("notes"),
+  // Task #12: phân quyền chi tiền
+  status: text("status").notNull().default("approved"),          // submitted | approved | paid | rejected
+  createdByStaffId: integer("created_by_staff_id").references(() => staffTable.id, { onDelete: "set null" }),
+  approvedByStaffId: integer("approved_by_staff_id").references(() => staffTable.id, { onDelete: "set null" }),
+  paidByStaffId: integer("paid_by_staff_id").references(() => staffTable.id, { onDelete: "set null" }),
+  paidFrom: text("paid_from"),                                   // mom | owner | company
+  paidAt: timestamp("paid_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

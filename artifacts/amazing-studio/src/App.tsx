@@ -23,6 +23,7 @@ import ExpensesPage from "@/pages/expenses";
 import RevenuePage from "@/pages/revenue";
 import PhotoshopJobsPage from "@/pages/photoshop-jobs";
 import InternalCommsPage from "@/pages/internal-comms";
+import AttendancePage from "@/pages/attendance";
 import MyProfilePage from "@/pages/my-profile";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
@@ -69,7 +70,9 @@ function Router() {
         <Route path="/revenue" component={() => <AdminRoute component={RevenuePage} />} />
         <Route path="/contracts" component={() => <AdminRoute component={ContractsPage} />} />
         <Route path="/reports" component={() => <AdminRoute component={ReportsPage} />} />
+        <Route path="/my-profile" component={MyProfilePage} />
         <Route path="/photoshop-jobs" component={PhotoshopJobsPage} />
+        <Route path="/attendance" component={AttendancePage} />
         <Route path="/internal-comms" component={InternalCommsPage} />
         <Route component={NotFound} />
       </Switch>

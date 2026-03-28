@@ -55,6 +55,8 @@ type Expense = {
   createdBy: string | null;
   notes: string | null;
   createdAt: string;
+  status?: string | null;
+  createdByStaffId?: number | null;
 };
 
 type Stats = {
@@ -90,15 +92,19 @@ export default function ExpensesPage() {
   const [showCustomCat, setShowCustomCat] = useState(false);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [viewDetail, setViewDetail] = useState<Expense | null>(null);
+  const [viewMine, setViewMine] = useState(!effectiveIsAdmin);
   const receiptInputRef = useRef<HTMLInputElement>(null);
+  const token = localStorage.getItem("amazingStudioToken_v2");
+  const authHeaders = { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
 
   const { data: expenses = [], isLoading } = useQuery<Expense[]>({
-    queryKey: ["expenses", dateRange, filterCategory],
+    queryKey: ["expenses", dateRange, filterCategory, viewMine],
     queryFn: () => {
       const p = new URLSearchParams();
       if (dateRange) p.set("dateRange", dateRange);
       if (filterCategory) p.set("category", filterCategory);
-      return fetch(`${BASE}/api/expenses?${p}`).then(r => r.json());
+      if (viewMine) p.set("mine", "1");
+      return fetch(`${BASE}/api/expenses?${p}`, { headers: authHeaders }).then(r => r.json());
     },
     refetchInterval: 30000,
   });
@@ -113,7 +119,7 @@ export default function ExpensesPage() {
     mutationFn: (data: Record<string, unknown>) =>
       fetch(`${BASE}/api/expenses`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders,
         body: JSON.stringify(data),
       }).then(r => r.json()),
     onSuccess: () => {
@@ -138,11 +144,36 @@ export default function ExpensesPage() {
   });
 
   const deleteExpense = useMutation({
-    mutationFn: (id: number) => fetch(`${BASE}/api/expenses/${id}`, { method: "DELETE" }),
+    mutationFn: (id: number) => fetch(`${BASE}/api/expenses/${id}`, { method: "DELETE", headers: authHeaders }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["expenses"] });
       qc.invalidateQueries({ queryKey: ["expense-stats"] });
       setViewDetail(null);
+    },
+  });
+
+  const approveExpense = useMutation({
+    mutationFn: (id: number) => fetch(`${BASE}/api/expenses/${id}/approve`, { method: "PATCH", headers: authHeaders }).then(r => r.json()),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+      setViewDetail(prev => prev ? { ...prev, status: data.status } : null);
+    },
+  });
+
+  const rejectExpense = useMutation({
+    mutationFn: (id: number) => fetch(`${BASE}/api/expenses/${id}/reject`, { method: "PATCH", headers: authHeaders }).then(r => r.json()),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+      setViewDetail(prev => prev ? { ...prev, status: data.status } : null);
+    },
+  });
+
+  const payExpense = useMutation({
+    mutationFn: (id: number) => fetch(`${BASE}/api/expenses/${id}/pay`, { method: "PATCH", headers: authHeaders }).then(r => r.json()),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+      qc.invalidateQueries({ queryKey: ["expense-stats"] });
+      setViewDetail(prev => prev ? { ...prev, status: data.status } : null);
     },
   });
 
@@ -280,6 +311,12 @@ export default function ExpensesPage() {
           <option value="">Tất cả nhóm</option>
           {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
+
+        <button
+          onClick={() => setViewMine(m => !m)}
+          className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-colors border ${viewMine ? "bg-red-600 text-white border-red-600" : "bg-background border-border text-muted-foreground hover:text-foreground"}`}>
+          {viewMine ? "✓ Của tôi" : "Của tôi"}
+        </button>
       </div>
 
       {/* Expense list */}
@@ -314,6 +351,16 @@ export default function ExpensesPage() {
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${catColor(e.category)}`}>
                               {e.category}
                             </span>
+                            {e.status && e.status !== "approved" && (
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                e.status === "submitted" ? "bg-yellow-100 text-yellow-700" :
+                                e.status === "paid" ? "bg-blue-100 text-blue-700" :
+                                e.status === "rejected" ? "bg-red-100 text-red-700" :
+                                "bg-green-100 text-green-700"
+                              }`}>
+                                {e.status === "submitted" ? "⏳ Chờ duyệt" : e.status === "paid" ? "✓ Đã thanh toán" : e.status === "rejected" ? "✗ Từ chối" : "✓ Đã duyệt"}
+                              </span>
+                            )}
                             <span className="text-[10px] text-muted-foreground font-mono">{e.expenseCode}</span>
                             {e.createdBy && (
                               <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
@@ -598,8 +645,50 @@ export default function ExpensesPage() {
                   <img src={getImageSrc(viewDetail.receiptUrl) ?? undefined} alt="receipt" className="w-full object-cover max-h-48" />
                 </div>
               )}
+              {/* Status badge in detail */}
+              {viewDetail.status && (
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium ${
+                  viewDetail.status === "submitted" ? "bg-yellow-50 border border-yellow-200 text-yellow-800" :
+                  viewDetail.status === "approved" ? "bg-green-50 border border-green-200 text-green-800" :
+                  viewDetail.status === "paid" ? "bg-blue-50 border border-blue-200 text-blue-800" :
+                  "bg-red-50 border border-red-200 text-red-800"
+                }`}>
+                  {viewDetail.status === "submitted" ? "⏳ Đang chờ duyệt" :
+                   viewDetail.status === "approved" ? "✓ Đã duyệt" :
+                   viewDetail.status === "paid" ? "💰 Đã thanh toán" : "✗ Đã từ chối"}
+                </div>
+              )}
+
+              {effectiveIsAdmin && viewDetail.status === "submitted" && (
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => approveExpense.mutate(viewDetail.id)}
+                    disabled={approveExpense.isPending}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50">
+                    <CheckCircle2 className="w-4 h-4" /> Duyệt
+                  </button>
+                  <button
+                    onClick={() => rejectExpense.mutate(viewDetail.id)}
+                    disabled={rejectExpense.isPending}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-red-300 text-red-600 rounded-xl text-sm hover:bg-red-50 transition-colors disabled:opacity-50">
+                    <X className="w-4 h-4" /> Từ chối
+                  </button>
+                </div>
+              )}
+
+              {effectiveIsAdmin && viewDetail.status === "approved" && (
+                <div className="pt-1">
+                  <button
+                    onClick={() => payExpense.mutate(viewDetail.id)}
+                    disabled={payExpense.isPending}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50">
+                    <Banknote className="w-4 h-4" /> Xác nhận đã thanh toán
+                  </button>
+                </div>
+              )}
+
               {effectiveIsAdmin && (
-                <div className="flex gap-2 pt-2">
+                <div className="flex gap-2 pt-1">
                   <button onClick={() => openEdit(viewDetail)}
                     className="flex-1 flex items-center justify-center gap-2 py-2 border border-border rounded-xl text-sm hover:bg-muted transition-colors">
                     <Edit2 className="w-4 h-4" /> Sửa

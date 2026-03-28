@@ -2,6 +2,7 @@ import { pgTable, serial, text, timestamp, integer, numeric, date, jsonb, boolea
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
+import { staffTable } from "./tasks";
 
 export const bookingsTable = pgTable("bookings", {
   id: serial("id").primaryKey(),
@@ -23,14 +24,51 @@ export const bookingsTable = pgTable("bookings", {
   internalNotes: text("internal_notes"),
   notes: text("notes"),
   // Multi-service contract support
-  parentId: integer("parent_id"),               // null = root booking; set on child service bookings
-  serviceLabel: text("service_label"),           // e.g. "Chụp album", "Đám hỏi", "Ngày cưới"
-  isParentContract: boolean("is_parent_contract").notNull().default(false), // true = contract node, hidden from calendar
-  photoCount: integer("photo_count"),            // số tấm ảnh (dùng cho tính cast per_photo)
-  bannerUrl: text("banner_url"),                  // cover banner ảnh cho trang chi tiết show
+  parentId: integer("parent_id"),
+  serviceLabel: text("service_label"),
+  isParentContract: boolean("is_parent_contract").notNull().default(false),
+  photoCount: integer("photo_count"),
+  bannerUrl: text("banner_url"),
+  // Task #13: ảnh hậu kỳ
+  includedRetouchedPhotosSnapshot: integer("included_retouched_photos_snapshot").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ─── Task #10: Booking items (hạng mục & upsell) ──────────────────────────────
+// type: base_package | addon | manual | upgrade_delta | extra_retouched
+export const bookingItemsTable = pgTable("booking_items", {
+  id: serial("id").primaryKey(),
+  bookingId: integer("booking_id").notNull().references(() => bookingsTable.id, { onDelete: "cascade" }),
+  type: text("type").notNull().default("addon"),
+  title: text("title").notNull(),
+  qty: integer("qty").notNull().default(1),
+  unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull().default("0"),
+  totalPrice: numeric("total_price", { precision: 12, scale: 2 }).notNull().default("0"),
+  soldByStaffId: integer("sold_by_staff_id").references(() => staffTable.id, { onDelete: "set null" }),
+  isActive: integer("is_active").notNull().default(1),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ─── Task #11: Booking change log (lịch sử đổi lịch) ─────────────────────────
+export const bookingChangeLogTable = pgTable("booking_change_log", {
+  id: serial("id").primaryKey(),
+  bookingId: integer("booking_id").notNull().references(() => bookingsTable.id, { onDelete: "cascade" }),
+  fieldChanged: text("field_changed").notNull().default("schedule"),
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  reason: text("reason"),
+  changedById: integer("changed_by_id").references(() => staffTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const insertBookingSchema = createInsertSchema(bookingsTable).omit({ id: true, createdAt: true });
 export type InsertBooking = z.infer<typeof insertBookingSchema>;
 export type Booking = typeof bookingsTable.$inferSelect;
+
+export const insertBookingItemSchema = createInsertSchema(bookingItemsTable).omit({ id: true, createdAt: true });
+export type InsertBookingItem = z.infer<typeof insertBookingItemSchema>;
+export type BookingItem = typeof bookingItemsTable.$inferSelect;
+
+export const insertBookingChangeLogSchema = createInsertSchema(bookingChangeLogTable).omit({ id: true, createdAt: true });
+export type InsertBookingChangeLog = z.infer<typeof insertBookingChangeLogSchema>;

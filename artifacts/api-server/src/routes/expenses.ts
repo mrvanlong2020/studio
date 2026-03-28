@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import { expensesTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { verifyToken } from "./auth";
 
 const router: IRouter = Router();
 
@@ -23,9 +24,19 @@ router.get("/expenses", async (req, res) => {
   const category = req.query.category as string | undefined;
   const createdBy = req.query.createdBy as string | undefined;
   const dateRange = req.query.dateRange as string | undefined;
+  const statusFilter = req.query.status as string | undefined;
+  const mine = req.query.mine === "1" || req.query.mine === "true";
+
+  if (mine) {
+    const callerId = verifyToken(req.headers.authorization);
+    if (callerId) {
+      filtered = filtered.filter(e => e.createdByStaffId === callerId);
+    }
+  }
 
   if (category) filtered = filtered.filter(e => e.category === category);
   if (createdBy) filtered = filtered.filter(e => e.createdBy === createdBy);
+  if (statusFilter) filtered = filtered.filter(e => e.status === statusFilter);
   if (dateRange) {
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
@@ -75,8 +86,23 @@ router.get("/expenses/:id", async (req, res) => {
 });
 
 router.post("/expenses", async (req, res) => {
-  const { type, category, amount, description, bookingId, paymentMethod, expenseDate, receiptUrl, createdBy, notes, bankName, bankAccount } = req.body;
+  const callerId = verifyToken(req.headers.authorization);
+  const { type, category, amount, description, bookingId, paymentMethod, expenseDate, receiptUrl, createdBy, notes, bankName, bankAccount, status: bodyStatus } = req.body;
   const expenseCode = genCode();
+
+  // Nhân viên tự nộp → status = "submitted", admin tạo → "approved"
+  let status = "approved";
+  let createdByStaffId: number | null = null;
+  if (callerId) {
+    const callerR = await pool.query(`SELECT role, roles FROM staff WHERE id = $1`, [callerId]);
+    const caller = callerR.rows[0] as Record<string, unknown> | undefined;
+    const isAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
+    if (!isAdmin) {
+      status = bodyStatus || "submitted";
+      createdByStaffId = callerId;
+    }
+  }
+
   const [expense] = await db
     .insert(expensesTable)
     .values({
@@ -92,6 +118,8 @@ router.post("/expenses", async (req, res) => {
       bankName: bankName || null,
       bankAccount: bankAccount || null,
       createdBy: createdBy || null,
+      createdByStaffId,
+      status,
       notes: notes || null,
     })
     .returning();
@@ -117,6 +145,54 @@ router.put("/expenses/:id", async (req, res) => {
   const [expense] = await db.update(expensesTable).set(update).where(eq(expensesTable.id, id)).returning();
   if (!expense) return res.status(404).json({ error: "Không tìm thấy chi phí" });
   res.json(fmt(expense));
+});
+
+// ── Task #12: Approve / Reject ─────────────────────────────────────────────────
+router.patch("/expenses/:id/approve", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
+  const callerR = await pool.query(`SELECT role, roles FROM staff WHERE id = $1`, [callerId]);
+  const caller = callerR.rows[0] as Record<string, unknown> | undefined;
+  const isAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
+  if (!isAdmin) return res.status(403).json({ error: "Không có quyền duyệt chi phí" });
+
+  const id = parseInt(req.params.id);
+  const { action = "approve" } = req.body;
+
+  const [e] = await db.update(expensesTable)
+    .set({
+      status: action === "reject" ? "rejected" : "approved",
+      approvedByStaffId: action === "reject" ? null : callerId,
+    })
+    .where(eq(expensesTable.id, id))
+    .returning();
+  if (!e) return res.status(404).json({ error: "Không tìm thấy chi phí" });
+  res.json(fmt(e));
+});
+
+// ── Task #12: Mark as Paid ────────────────────────────────────────────────────
+router.patch("/expenses/:id/pay", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
+  const callerR = await pool.query(`SELECT role, roles FROM staff WHERE id = $1`, [callerId]);
+  const caller = callerR.rows[0] as Record<string, unknown> | undefined;
+  const isAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
+  if (!isAdmin) return res.status(403).json({ error: "Không có quyền xác nhận thanh toán" });
+
+  const id = parseInt(req.params.id);
+  const { paidFrom = "cash", paidAt } = req.body;
+
+  const [e] = await db.update(expensesTable)
+    .set({
+      status: "paid",
+      paidByStaffId: callerId,
+      paidFrom,
+      paidAt: paidAt || new Date().toISOString(),
+    })
+    .where(eq(expensesTable.id, id))
+    .returning();
+  if (!e) return res.status(404).json({ error: "Không tìm thấy chi phí" });
+  res.json(fmt(e));
 });
 
 router.delete("/expenses/:id", async (req, res) => {

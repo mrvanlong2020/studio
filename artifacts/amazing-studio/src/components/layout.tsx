@@ -7,7 +7,7 @@ import {
   Moon, LogOut, Bell, Wallet, UserPlus, Menu,
   ClipboardList, ScrollText, TrendingUp, LayoutList, UserCog,
   CreditCard, Film, MessageSquare, ChevronDown, Shield, Eye,
-  Camera, Palette, Layers, Banknote, Star, TrendingDown, User
+  Camera, Palette, Layers, Banknote, Star, TrendingDown, User, Timer
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useStaffAuth, type SimulateRole } from "@/contexts/StaffAuthContext";
@@ -27,6 +27,7 @@ const ALL_NAV_ITEMS = [
   { href: "/staff",           label: "Nhân sự",              icon: UserCog,         adminOnly: true  },
   { href: "/tasks",           label: "Giao việc",            icon: CheckSquare,     adminOnly: false },
   { href: "/photoshop-jobs",  label: "Tiến độ hậu kỳ",       icon: Film,            adminOnly: false },
+  { href: "/attendance",      label: "Chấm công",             icon: Timer,           adminOnly: false },
   { href: "/internal-comms",  label: "Trao đổi & Nhắc việc", icon: MessageSquare,   adminOnly: false },
   { href: "/contracts",       label: "Hóa đơn dịch vụ",      icon: ScrollText,      adminOnly: true  },
   { href: "/quotes",          label: "Báo giá",              icon: FileText,        adminOnly: true  },

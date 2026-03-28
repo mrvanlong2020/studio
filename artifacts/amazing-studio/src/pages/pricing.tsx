@@ -811,6 +811,7 @@ function PackageModal({
     description: pkg?.description ?? "",
     notes: pkg?.notes ?? "",
     isActive: pkg?.isActive ?? true,
+    includedRetouchedPhotos: (pkg as ServicePackage & { includedRetouchedPhotos?: number })?.includedRetouchedPhotos?.toString() ?? "0",
   });
   const [items, setItems] = useState<PackageItem[]>(
     pkg?.items.length ? pkg.items : []
@@ -836,6 +837,7 @@ function PackageModal({
         printCost: parseFloat(form.printCost) || 0,
         operatingCost: parseFloat(form.operatingCost) || 0,
         salePercent: parseFloat(form.salePercent) || 0,
+        includedRetouchedPhotos: parseInt(form.includedRetouchedPhotos) || 0,
         items: items.filter(it => it.name.trim()).map((it, i) => ({ ...it, sortOrder: i })),
       };
       const url = pkg ? `${BASE}/api/service-packages/${pkg.id}` : `${BASE}/api/service-packages`;
@@ -942,6 +944,18 @@ function PackageModal({
                 </div>
               );
             })()}
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1.5">📸 Số ảnh hậu kỳ bao gồm trong gói</label>
+            <Input
+              type="number"
+              value={form.includedRetouchedPhotos}
+              onChange={e => setForm(f => ({ ...f, includedRetouchedPhotos: e.target.value }))}
+              placeholder="0"
+              className="h-9 text-sm"
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">Số ảnh đã chỉnh màu/retouch giao cho khách. 0 = không giới hạn</p>
           </div>
 
           <div>

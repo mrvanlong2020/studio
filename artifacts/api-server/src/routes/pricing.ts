@@ -16,6 +16,7 @@ const fmtPkg = (p: {
   printCost?: string | null; operatingCost?: string | null; salePercent?: string | null;
   isActive: number; addons: string | null; products: string | null;
   serviceType?: string | null; photoCount?: number | null; includesMakeup?: number | null;
+  includedRetouchedPhotos?: number | null;
   [k: string]: unknown
 }) => {
   const printCost = parseFloat((p.printCost as string) ?? "0");
@@ -33,6 +34,7 @@ const fmtPkg = (p: {
     serviceType: p.serviceType ?? null,
     photoCount: p.photoCount ?? 1,
     includesMakeup: p.includesMakeup !== 0,
+    includedRetouchedPhotos: p.includedRetouchedPhotos ?? 0,
   };
 };
 
@@ -995,7 +997,7 @@ router.post("/service-packages", async (req, res) => {
     groupId, code, name, price,
     printCost, operatingCost, salePercent,
     description, notes, addons, products, isActive, sortOrder, items = [],
-    serviceType, photoCount, includesMakeup,
+    serviceType, photoCount, includesMakeup, includedRetouchedPhotos,
   } = req.body;
   const [pkg] = await db.insert(servicePackagesTable).values({
     groupId: groupId ? parseInt(groupId) : null,
@@ -1012,6 +1014,7 @@ router.post("/service-packages", async (req, res) => {
     serviceType: serviceType ?? null,
     photoCount: photoCount ? parseInt(photoCount) : 1,
     includesMakeup: includesMakeup === false || includesMakeup === 0 ? 0 : 1,
+    includedRetouchedPhotos: includedRetouchedPhotos ? parseInt(String(includedRetouchedPhotos)) : 0,
   }).returning();
 
   if (items.length > 0) {
@@ -1038,7 +1041,7 @@ router.put("/service-packages/:id", async (req, res) => {
     groupId, code, name, price,
     printCost, operatingCost, salePercent,
     description, notes, addons, products, isActive, sortOrder, items,
-    serviceType, photoCount, includesMakeup,
+    serviceType, photoCount, includesMakeup, includedRetouchedPhotos,
   } = req.body;
 
   const update: Record<string, unknown> = {};
@@ -1058,6 +1061,7 @@ router.put("/service-packages/:id", async (req, res) => {
   if (serviceType !== undefined) update.serviceType = serviceType ?? null;
   if (photoCount !== undefined) update.photoCount = photoCount ? parseInt(photoCount) : 1;
   if (includesMakeup !== undefined) update.includesMakeup = includesMakeup === false || includesMakeup === 0 ? 0 : 1;
+  if (includedRetouchedPhotos !== undefined) update.includedRetouchedPhotos = includedRetouchedPhotos ? parseInt(String(includedRetouchedPhotos)) : 0;
 
   const [pkg] = await db.update(servicePackagesTable).set(update)
     .where(eq(servicePackagesTable.id, id)).returning();
