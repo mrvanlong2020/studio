@@ -30,6 +30,9 @@ type PhotoshopJob = {
   isActive: boolean;
   createdAt: string;
   includedCount: number | null;
+  extraCount: number | null;
+  extraFeeUnitPrice: number;
+  extraFeeTotal: number;
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
@@ -371,7 +374,13 @@ export default function PhotoshopJobsPage() {
                         )}
                         {job.includedCount != null && job.includedCount > 0 && (
                           <span className="text-xs px-2 py-0.5 rounded-full border font-medium text-violet-600 bg-violet-50 border-violet-200 dark:bg-violet-950/30 dark:border-violet-800">
-                            🖼️ Ảnh hậu kỳ gói: {job.includedCount} ảnh
+                            🖼️ Gói gồm: {job.includedCount} ảnh hậu kỳ
+                          </span>
+                        )}
+                        {job.extraCount != null && job.extraCount > 0 && (
+                          <span className="text-xs px-2 py-0.5 rounded-full border font-medium text-orange-600 bg-orange-50 border-orange-200 dark:bg-orange-950/30 dark:border-orange-800">
+                            ⚠️ Vượt gói: {job.extraCount} ảnh
+                            {job.extraFeeTotal > 0 && ` · ${job.extraFeeTotal.toLocaleString("vi-VN")}đ`}
                           </span>
                         )}
                       </div>
