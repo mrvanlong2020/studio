@@ -123,6 +123,15 @@ const fmtStaff = (s: Record<string, unknown>) => ({
 });
 
 // ── /me: Hồ sơ cá nhân (nhân viên tự xem chính mình) ─────────────────────────
+router.get("/staff/me", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
+  const data = await buildProfileData(callerId);
+  if (!data) return res.status(404).json({ error: "Không tìm thấy hồ sơ" });
+  res.json(data);
+});
+
+// Alias kept for backward compat with existing frontend
 router.get("/staff/me/profile", async (req, res) => {
   const callerId = verifyToken(req.headers.authorization);
   if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
@@ -254,7 +263,10 @@ router.patch("/staff/me/password", async (req, res) => {
 
   const r = await pool.query(`SELECT password_hash FROM staff WHERE id = $1`, [callerId]);
   const existing = (r.rows[0] as Record<string, unknown>)?.password_hash as string | null;
-  if (existing && currentPassword) {
+
+  // Always require currentPassword when a hash exists — never bypass verification
+  if (existing) {
+    if (!currentPassword) return res.status(400).json({ error: "Vui lòng nhập mật khẩu hiện tại" });
     const bcrypt = await import("bcryptjs");
     const matches = await bcrypt.compare(currentPassword, existing);
     if (!matches) return res.status(401).json({ error: "Mật khẩu hiện tại không đúng" });
@@ -267,9 +279,20 @@ router.patch("/staff/me/password", async (req, res) => {
 });
 
 // ── Lấy toàn bộ dữ liệu hồ sơ nhân viên ──────────────────────────────────────
+// Row-level security: chỉ admin hoặc chính nhân viên đó được xem
 router.get("/staff/:id/profile", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
+
   const staffId = parseInt(req.params.id);
   if (isNaN(staffId)) return res.status(400).json({ error: "ID không hợp lệ" });
+
+  // Check if caller is admin or viewing their own profile
+  const callerR = await pool.query(`SELECT role FROM staff WHERE id = $1`, [callerId]);
+  const callerRole = (callerR.rows[0] as { role?: string })?.role;
+  if (callerRole !== "admin" && callerId !== staffId) {
+    return res.status(403).json({ error: "Không có quyền xem hồ sơ này" });
+  }
 
   const [member] = await db.select().from(staffTable).where(eq(staffTable.id, staffId));
   if (!member) return res.status(404).json({ error: "Không tìm thấy nhân viên" });
