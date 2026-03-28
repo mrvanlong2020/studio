@@ -5,7 +5,22 @@ import { eq, desc, inArray, and } from "drizzle-orm";
 
 const router = Router();
 
+// ── Helper: deactivate existing extra_retouched item for a booking ────────────
+async function clearExtraRetouchedItem(bookingId: number) {
+  const [existing] = await db
+    .select()
+    .from(bookingItemsTable)
+    .where(and(eq(bookingItemsTable.bookingId, bookingId), eq(bookingItemsTable.type, "extra_retouched")));
+  if (existing) {
+    await db
+      .update(bookingItemsTable)
+      .set({ qty: 0, totalPrice: "0", isActive: 0 })
+      .where(eq(bookingItemsTable.id, existing.id));
+  }
+}
+
 // ── Helper: sync extra_retouched booking_item after job update ────────────────
+// included = 0 means "unlimited" → no extra charges (early return)
 async function syncExtraRetouchedItem(bookingId: number, donePhotos: number) {
   const [booking] = await db
     .select({ snap: bookingsTable.includedRetouchedPhotosSnapshot })
@@ -14,6 +29,13 @@ async function syncExtraRetouchedItem(bookingId: number, donePhotos: number) {
   if (!booking) return;
 
   const included = booking.snap ?? 0;
+
+  // included = 0 means unlimited — never charge extras for this booking
+  if (included === 0) {
+    await clearExtraRetouchedItem(bookingId);
+    return;
+  }
+
   const extra = Math.max(0, donePhotos - included);
 
   // Find existing extra_retouched item for this booking
@@ -44,12 +66,7 @@ async function syncExtraRetouchedItem(bookingId: number, donePhotos: number) {
     }
   } else {
     // No extra — deactivate any existing item
-    if (existing) {
-      await db
-        .update(bookingItemsTable)
-        .set({ qty: 0, totalPrice: "0", isActive: 0 })
-        .where(eq(bookingItemsTable.id, existing.id));
-    }
+    await clearExtraRetouchedItem(bookingId);
   }
 }
 
@@ -95,7 +112,10 @@ router.get("/photoshop-jobs", async (req, res) => {
 
     const result = rows.map(r => {
       const included = r.bookingId != null ? (includedMap[r.bookingId] ?? null) : null;
-      const extraCount = included != null ? Math.max(0, (r.donePhotos ?? 0) - included) : null;
+      // included = null → not linked; included = 0 → unlimited (no extras); included > 0 → has limit
+      const extraCount = (included != null && included > 0)
+        ? Math.max(0, (r.donePhotos ?? 0) - included)
+        : null;
       const extraFee = r.bookingId != null ? (extraFeeMap[r.bookingId] ?? null) : null;
       return {
         ...r,
@@ -163,6 +183,14 @@ router.put("/photoshop-jobs/:id", async (req, res) => {
       internalDeadline, customerDeadline, status, progressPercent,
       totalPhotos, donePhotos, notes, isActive
     } = req.body;
+
+    // Capture old bookingId before update (for relink cleanup)
+    const [oldJob] = await db
+      .select({ bookingId: photoshopJobsTable.bookingId })
+      .from(photoshopJobsTable)
+      .where(eq(photoshopJobsTable.id, +req.params.id));
+    const oldBookingId = oldJob?.bookingId ?? null;
+
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (jobCode !== undefined) updates.jobCode = jobCode;
     if (bookingId !== undefined) updates.bookingId = bookingId;
@@ -184,9 +212,19 @@ router.put("/photoshop-jobs/:id", async (req, res) => {
     const [row] = await db.update(photoshopJobsTable).set(updates as never).where(eq(photoshopJobsTable.id, +req.params.id)).returning();
     if (!row) return res.status(404).json({ error: "Not found" });
 
+    const newBookingId = row.bookingId ?? null;
+    const bookingIdChanged = bookingId !== undefined && oldBookingId !== newBookingId;
+
+    // If bookingId changed, clear extra_retouched from the old booking
+    if (bookingIdChanged && oldBookingId != null) {
+      await clearExtraRetouchedItem(oldBookingId).catch(err =>
+        console.error("[photoshop-jobs] clearExtraRetouchedItem (old booking) failed:", err)
+      );
+    }
+
     // Sync extra_retouched booking_item when donePhotos or bookingId changes and job is linked to a booking
-    if ((donePhotos !== undefined || bookingId !== undefined) && row.bookingId) {
-      await syncExtraRetouchedItem(row.bookingId, row.donePhotos ?? 0).catch(err =>
+    if ((donePhotos !== undefined || bookingIdChanged) && newBookingId) {
+      await syncExtraRetouchedItem(newBookingId, row.donePhotos ?? 0).catch(err =>
         console.error("[photoshop-jobs] syncExtraRetouchedItem (PUT) failed:", err)
       );
     }
