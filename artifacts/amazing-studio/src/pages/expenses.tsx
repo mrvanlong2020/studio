@@ -93,6 +93,8 @@ export default function ExpensesPage() {
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [viewDetail, setViewDetail] = useState<Expense | null>(null);
   const [viewMine, setViewMine] = useState(!effectiveIsAdmin);
+  const [payDialog, setPayDialog] = useState<number | null>(null);
+  const [paidFromValue, setPaidFromValue] = useState<string>("company");
   const receiptInputRef = useRef<HTMLInputElement>(null);
   const token = localStorage.getItem("amazingStudioToken_v2");
   const authHeaders = { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
@@ -169,11 +171,17 @@ export default function ExpensesPage() {
   });
 
   const payExpense = useMutation({
-    mutationFn: (id: number) => fetch(`${BASE}/api/expenses/${id}/pay`, { method: "PATCH", headers: authHeaders }).then(r => r.json()),
+    mutationFn: ({ id, paidFrom }: { id: number; paidFrom: string }) =>
+      fetch(`${BASE}/api/expenses/${id}/pay`, {
+        method: "PATCH",
+        headers: authHeaders,
+        body: JSON.stringify({ paidFrom }),
+      }).then(r => r.json()),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["expenses"] });
       qc.invalidateQueries({ queryKey: ["expense-stats"] });
       setViewDetail(prev => prev ? { ...prev, status: data.status } : null);
+      setPayDialog(null);
     },
   });
 
@@ -271,7 +279,7 @@ export default function ExpensesPage() {
           <button onClick={openCreate}
             className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold text-sm transition-colors shadow-sm">
             <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Tạo phiếu chi</span>
+            <span className="hidden sm:inline">{effectiveIsAdmin ? "Tạo phiếu chi" : "Đề nghị chi"}</span>
             <span className="sm:hidden">Thêm</span>
           </button>
         </div>
@@ -312,11 +320,17 @@ export default function ExpensesPage() {
           {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
 
-        <button
-          onClick={() => setViewMine(m => !m)}
-          className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-colors border ${viewMine ? "bg-red-600 text-white border-red-600" : "bg-background border-border text-muted-foreground hover:text-foreground"}`}>
-          {viewMine ? "✓ Của tôi" : "Của tôi"}
-        </button>
+        {effectiveIsAdmin ? (
+          <button
+            onClick={() => setViewMine(m => !m)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-colors border ${viewMine ? "bg-red-600 text-white border-red-600" : "bg-background border-border text-muted-foreground hover:text-foreground"}`}>
+            {viewMine ? "✓ Của tôi" : "Của tôi"}
+          </button>
+        ) : (
+          <span className="px-3 py-1.5 rounded-xl text-xs font-medium bg-red-600 text-white border border-red-600">
+            ✓ Của tôi
+          </span>
+        )}
       </div>
 
       {/* Expense list */}
@@ -589,6 +603,45 @@ export default function ExpensesPage() {
         </div>
       )}
 
+      {/* Pay from dialog */}
+      {payDialog !== null && (
+        <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-background w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-base">Xác nhận thanh toán</h3>
+              <button onClick={() => setPayDialog(null)} className="p-1.5 rounded-xl hover:bg-muted"><X className="w-4 h-4" /></button>
+            </div>
+            <p className="text-sm text-muted-foreground">Chọn nguồn tiền thanh toán phiếu chi này:</p>
+            <div className="space-y-2">
+              {[
+                { value: "company", label: "🏢 Quỹ công ty" },
+                { value: "owner", label: "👤 Chủ studio (cá nhân)" },
+                { value: "mom", label: "👩 Mẹ / người nhà" },
+              ].map(opt => (
+                <button key={opt.value} type="button"
+                  onClick={() => setPaidFromValue(opt.value)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-medium transition-colors ${paidFromValue === opt.value ? "bg-blue-600 text-white border-blue-600" : "border-border hover:bg-muted"}`}>
+                  <span>{opt.label}</span>
+                  {paidFromValue === opt.value && <CheckCircle2 className="w-4 h-4 ml-auto" />}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => setPayDialog(null)}
+                className="flex-1 py-2.5 border border-border rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted transition-colors">
+                Hủy
+              </button>
+              <button
+                onClick={() => payExpense.mutate({ id: payDialog, paidFrom: paidFromValue })}
+                disabled={payExpense.isPending}
+                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-colors">
+                {payExpense.isPending ? "Đang lưu..." : "Xác nhận"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Detail drawer */}
       {viewDetail && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -679,9 +732,8 @@ export default function ExpensesPage() {
               {effectiveIsAdmin && viewDetail.status === "approved" && (
                 <div className="pt-1">
                   <button
-                    onClick={() => payExpense.mutate(viewDetail.id)}
-                    disabled={payExpense.isPending}
-                    className="w-full flex items-center justify-center gap-1.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50">
+                    onClick={() => { setPaidFromValue("company"); setPayDialog(viewDetail.id); }}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors">
                     <Banknote className="w-4 h-4" /> Xác nhận đã thanh toán
                   </button>
                 </div>

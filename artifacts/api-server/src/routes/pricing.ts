@@ -1,11 +1,24 @@
-import { Router, type IRouter } from "express";
-import { db } from "@workspace/db";
+import { Router, type IRouter, type Request, type Response } from "express";
+import { db, pool } from "@workspace/db";
 import {
   serviceGroupsTable, servicePackagesTable, packageItemsTable, surchargesTable
 } from "@workspace/db/schema";
 import { eq, asc } from "drizzle-orm";
+import { verifyToken } from "./auth";
 
 const router: IRouter = Router();
+
+async function requireAdmin(req: Request, res: Response): Promise<boolean> {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) { res.status(401).json({ error: "Chưa đăng nhập" }); return false; }
+  const r = await pool.query<{ role: string; roles: unknown }>(
+    "SELECT role, roles FROM staff WHERE id = $1", [callerId]
+  );
+  const c = r.rows[0];
+  const ok = c && (c.role === "admin" || (Array.isArray(c.roles) && (c.roles as string[]).includes("admin")));
+  if (!ok) { res.status(403).json({ error: "Chỉ admin mới được thực hiện thao tác này" }); return false; }
+  return true;
+}
 
 const fmtGroup = (g: { isActive: number; [k: string]: unknown }) => ({
   ...g, isActive: Boolean(g.isActive),
@@ -936,6 +949,7 @@ router.get("/service-groups", async (_req, res) => {
 });
 
 router.post("/service-groups", async (req, res) => {
+  if (!await requireAdmin(req, res)) return;
   const { name, description, sortOrder, isActive } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: "Tên nhóm không được để trống" });
 
@@ -953,6 +967,7 @@ router.post("/service-groups", async (req, res) => {
 });
 
 router.put("/service-groups/:id", async (req, res) => {
+  if (!await requireAdmin(req, res)) return;
   const id = parseInt(req.params.id);
   const { name, description, sortOrder, isActive } = req.body;
   const [g] = await db.update(serviceGroupsTable).set({
@@ -965,6 +980,7 @@ router.put("/service-groups/:id", async (req, res) => {
 });
 
 router.delete("/service-groups/:id", async (req, res) => {
+  if (!await requireAdmin(req, res)) return;
   const id = parseInt(req.params.id);
   await db.delete(serviceGroupsTable).where(eq(serviceGroupsTable.id, id));
   res.status(204).send();
@@ -993,6 +1009,7 @@ router.get("/service-packages/:id", async (req, res) => {
 });
 
 router.post("/service-packages", async (req, res) => {
+  if (!await requireAdmin(req, res)) return;
   const {
     groupId, code, name, price,
     printCost, operatingCost, salePercent,
@@ -1036,6 +1053,7 @@ router.post("/service-packages", async (req, res) => {
 });
 
 router.put("/service-packages/:id", async (req, res) => {
+  if (!await requireAdmin(req, res)) return;
   const id = parseInt(req.params.id);
   const {
     groupId, code, name, price,
@@ -1089,6 +1107,7 @@ router.put("/service-packages/:id", async (req, res) => {
 });
 
 router.delete("/service-packages/:id", async (req, res) => {
+  if (!await requireAdmin(req, res)) return;
   const id = parseInt(req.params.id);
   await db.delete(packageItemsTable).where(eq(packageItemsTable.packageId, id));
   await db.delete(servicePackagesTable).where(eq(servicePackagesTable.id, id));
@@ -1102,6 +1121,7 @@ router.get("/surcharges", async (_req, res) => {
 });
 
 router.post("/surcharges", async (req, res) => {
+  if (!await requireAdmin(req, res)) return;
   const { name, category, price, unit, description, isActive, sortOrder } = req.body;
   const [s] = await db.insert(surchargesTable).values({
     name, category, price: String(price ?? 0), unit: unit ?? "lần",
@@ -1111,6 +1131,7 @@ router.post("/surcharges", async (req, res) => {
 });
 
 router.put("/surcharges/:id", async (req, res) => {
+  if (!await requireAdmin(req, res)) return;
   const id = parseInt(req.params.id);
   const { name, category, price, unit, description, isActive, sortOrder } = req.body;
   const [s] = await db.update(surchargesTable).set({
@@ -1125,6 +1146,7 @@ router.put("/surcharges/:id", async (req, res) => {
 });
 
 router.delete("/surcharges/:id", async (req, res) => {
+  if (!await requireAdmin(req, res)) return;
   const id = parseInt(req.params.id);
   await db.delete(surchargesTable).where(eq(surchargesTable.id, id));
   res.status(204).send();

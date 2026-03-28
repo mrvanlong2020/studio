@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { formatVND } from "@/lib/utils";
 import { Button, Input, Badge } from "@/components/ui";
+import { useStaffAuth } from "@/contexts/StaffAuthContext";
 
 type GroupMeta = { Icon: React.ElementType; iconCls: string; bgCls: string; ringCls: string };
 const GROUP_META: Record<string, GroupMeta> = {
@@ -57,6 +58,9 @@ function formatVNDShort(n: number) {
 export default function PricingPage() {
   const qc = useQueryClient();
   const [, navigate] = useLocation();
+  const { effectiveIsAdmin } = useStaffAuth();
+  const token = localStorage.getItem("amazingStudioToken_v2");
+  const authHeaders = { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
   const [tab, setTab] = useState<"packages" | "surcharges" | "groups">("packages");
   const [search, setSearch] = useState("");
   const [filterGroup, setFilterGroup] = useState<number | null>(null);
@@ -141,12 +145,12 @@ export default function PricingPage() {
   }, [filteredPackages]);
 
   const deletePkg = useMutation({
-    mutationFn: (id: number) => fetch(`${BASE}/api/service-packages/${id}`, { method: "DELETE" }),
+    mutationFn: (id: number) => fetch(`${BASE}/api/service-packages/${id}`, { method: "DELETE", headers: authHeaders }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["service-packages"] }); setSelectedPkg(null); },
   });
   const togglePkgActive = useMutation({
     mutationFn: (pkg: ServicePackage) => fetch(`${BASE}/api/service-packages/${pkg.id}`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+      method: "PUT", headers: authHeaders,
       body: JSON.stringify({ isActive: !pkg.isActive }),
     }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["service-packages"] }),
@@ -155,7 +159,7 @@ export default function PricingPage() {
     mutationFn: (payload: { id: number; [key: string]: unknown }) => {
       const { id, ...data } = payload;
       return fetch(`${BASE}/api/service-packages/${id}`, {
-        method: "PUT", headers: { "Content-Type": "application/json" },
+        method: "PUT", headers: authHeaders,
         body: JSON.stringify(data),
       }).then(r => r.json());
     },
@@ -166,18 +170,18 @@ export default function PricingPage() {
     },
   });
   const deleteSurcharge = useMutation({
-    mutationFn: (id: number) => fetch(`${BASE}/api/surcharges/${id}`, { method: "DELETE" }),
+    mutationFn: (id: number) => fetch(`${BASE}/api/surcharges/${id}`, { method: "DELETE", headers: authHeaders }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["surcharges"] }),
   });
   const toggleSurchargeActive = useMutation({
     mutationFn: (s: Surcharge) => fetch(`${BASE}/api/surcharges/${s.id}`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+      method: "PUT", headers: authHeaders,
       body: JSON.stringify({ isActive: !s.isActive }),
     }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["surcharges"] }),
   });
   const deleteGroup = useMutation({
-    mutationFn: (id: number) => fetch(`${BASE}/api/service-groups/${id}`, { method: "DELETE" }),
+    mutationFn: (id: number) => fetch(`${BASE}/api/service-groups/${id}`, { method: "DELETE", headers: authHeaders }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["service-groups"] }),
   });
 
@@ -202,18 +206,23 @@ export default function PricingPage() {
               <h1 className="text-2xl font-bold tracking-tight">Danh mục bảng giá</h1>
               <p className="text-sm text-muted-foreground mt-0.5">Quản lý gói dịch vụ, phụ phí và nhóm dịch vụ</p>
             </div>
-            <div className="flex gap-2">
-              {tab === "packages" && (
+            <div className="flex items-center gap-2">
+              {!effectiveIsAdmin && (
+                <Badge variant="outline" className="text-xs text-muted-foreground border-muted-foreground/40 px-2 py-1">
+                  Chỉ xem
+                </Badge>
+              )}
+              {effectiveIsAdmin && tab === "packages" && (
                 <Button onClick={() => { setEditingPkg(null); setShowPkgModal(true); }} className="gap-1.5 text-sm">
                   <Plus className="w-4 h-4" /> Tạo gói mới
                 </Button>
               )}
-              {tab === "surcharges" && (
+              {effectiveIsAdmin && tab === "surcharges" && (
                 <Button onClick={() => { setEditingSurcharge(null); setShowSurchargeModal(true); }} className="gap-1.5 text-sm">
                   <Plus className="w-4 h-4" /> Thêm phụ phí
                 </Button>
               )}
-              {tab === "groups" && (
+              {effectiveIsAdmin && tab === "groups" && (
                 <Button onClick={() => { setEditingGroup(null); setShowGroupModal(true); }} className="gap-1.5 text-sm">
                   <Plus className="w-4 h-4" /> Thêm nhóm
                 </Button>
@@ -425,27 +434,29 @@ export default function PricingPage() {
                             <p className="font-bold text-primary text-sm">+{formatVND(s.price)}</p>
                             <p className="text-xs text-muted-foreground">/ {s.unit}</p>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => toggleSurchargeActive.mutate(s)}
-                              className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
-                              title={s.isActive ? "Ẩn" : "Hiện"}
-                            >
-                              {s.isActive ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                            </button>
-                            <button
-                              onClick={() => { setEditingSurcharge(s); setShowSurchargeModal(true); }}
-                              className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => { if (confirm("Xoá phụ phí này?")) deleteSurcharge.mutate(s.id); }}
-                              className="p-1.5 rounded-lg hover:bg-destructive/10 transition-colors text-destructive/70 hover:text-destructive"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
+                          {effectiveIsAdmin && (
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => toggleSurchargeActive.mutate(s)}
+                                className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+                                title={s.isActive ? "Ẩn" : "Hiện"}
+                              >
+                                {s.isActive ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                              </button>
+                              <button
+                                onClick={() => { setEditingSurcharge(s); setShowSurchargeModal(true); }}
+                                className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => { if (confirm("Xoá phụ phí này?")) deleteSurcharge.mutate(s.id); }}
+                                className="p-1.5 rounded-lg hover:bg-destructive/10 transition-colors text-destructive/70 hover:text-destructive"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -479,20 +490,22 @@ export default function PricingPage() {
                       {g.description && <p className="text-sm text-muted-foreground truncate">{g.description}</p>}
                       <p className="text-xs text-muted-foreground mt-0.5">{count} gói dịch vụ · thứ tự {g.sortOrder}</p>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => { setEditingGroup(g); setShowGroupModal(true); }}
-                        className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => { if (confirm("Xoá nhóm này? Các gói trong nhóm sẽ không bị xoá.")) deleteGroup.mutate(g.id); }}
-                        className="p-2 rounded-lg hover:bg-destructive/10 transition-colors text-destructive/70 hover:text-destructive"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+                    {effectiveIsAdmin && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => { setEditingGroup(g); setShowGroupModal(true); }}
+                          className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => { if (confirm("Xoá nhóm này? Các gói trong nhóm sẽ không bị xoá.")) deleteGroup.mutate(g.id); }}
+                          className="p-2 rounded-lg hover:bg-destructive/10 transition-colors text-destructive/70 hover:text-destructive"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -510,18 +523,22 @@ export default function PricingPage() {
               <p className="text-xs text-muted-foreground">{selectedPkg.code} · {groups.find(g => g.id === selectedPkg.groupId)?.name}</p>
             </div>
             <div className="flex items-center gap-1">
-              <button
-                onClick={() => { setEditingPkg(selectedPkg); setShowPkgModal(true); }}
-                className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
-              >
-                <Edit2 className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => { if (confirm("Xoá gói này?")) deletePkg.mutate(selectedPkg.id); }}
-                className="p-2 rounded-lg hover:bg-destructive/10 transition-colors text-destructive/70 hover:text-destructive"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              {effectiveIsAdmin && (
+                <>
+                  <button
+                    onClick={() => { setEditingPkg(selectedPkg); setShowPkgModal(true); }}
+                    className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => { if (confirm("Xoá gói này?")) deletePkg.mutate(selectedPkg.id); }}
+                    className="p-2 rounded-lg hover:bg-destructive/10 transition-colors text-destructive/70 hover:text-destructive"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </>
+              )}
               <button onClick={() => setSelectedPkg(null)} className="p-2 rounded-lg hover:bg-muted transition-colors">
                 <X className="w-4 h-4" />
               </button>
@@ -564,12 +581,12 @@ export default function PricingPage() {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Mô tả</p>
-                {inlineEdit !== "description" ? (
+                {effectiveIsAdmin && inlineEdit !== "description" ? (
                   <button onClick={() => { setDraftDesc(selectedPkg.description ?? ""); setInlineEdit("description"); }}
                     className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-primary" title="Sửa mô tả">
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
-                ) : (
+                ) : inlineEdit === "description" ? (
                   <div className="flex gap-1">
                     <button onClick={() => updatePkgInline.mutate({ id: selectedPkg.id, description: draftDesc })}
                       disabled={updatePkgInline.isPending}
@@ -581,7 +598,7 @@ export default function PricingPage() {
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                )}
+                ) : null}
               </div>
               {inlineEdit === "description" ? (
                 <textarea
@@ -603,12 +620,12 @@ export default function PricingPage() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Chi tiết hạng mục</p>
-                {inlineEdit !== "items" ? (
+                {effectiveIsAdmin && inlineEdit !== "items" ? (
                   <button onClick={() => { setDraftItems(selectedPkg.items?.map(i => ({ ...i })) ?? []); setInlineEdit("items"); }}
                     className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-primary" title="Sửa hạng mục">
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
-                ) : (
+                ) : inlineEdit === "items" ? (
                   <div className="flex gap-1">
                     <button
                       onClick={() => updatePkgInline.mutate({ id: selectedPkg.id, items: draftItems.map((it, i) => ({ ...it, sortOrder: i + 1 })) })}
@@ -619,7 +636,7 @@ export default function PricingPage() {
                     <button onClick={() => setInlineEdit(null)}
                       className="px-2 py-1 rounded hover:bg-muted text-muted-foreground text-xs transition-colors">Hủy</button>
                   </div>
-                )}
+                ) : null}
               </div>
 
               {inlineEdit === "items" ? (
@@ -689,12 +706,12 @@ export default function PricingPage() {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">Ghi chú</p>
-                {inlineEdit !== "notes" ? (
+                {effectiveIsAdmin && inlineEdit !== "notes" ? (
                   <button onClick={() => { setDraftNotes(selectedPkg.notes ?? ""); setInlineEdit("notes"); }}
                     className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-primary" title="Sửa ghi chú">
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
-                ) : (
+                ) : inlineEdit === "notes" ? (
                   <div className="flex gap-1">
                     <button onClick={() => updatePkgInline.mutate({ id: selectedPkg.id, notes: draftNotes })}
                       disabled={updatePkgInline.isPending}
@@ -706,7 +723,7 @@ export default function PricingPage() {
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                )}
+                ) : null}
               </div>
               {inlineEdit === "notes" ? (
                 <textarea
@@ -741,20 +758,22 @@ export default function PricingPage() {
             >
               <FileText className="w-4 h-4" /> Tạo báo giá từ gói này
             </Button>
-            <button
-              onClick={() => togglePkgActive.mutate(selectedPkg)}
-              className={`w-full text-sm font-medium py-2 px-4 rounded-xl transition-colors border ${
-                selectedPkg.isActive
-                  ? "border-muted text-muted-foreground hover:bg-muted/50"
-                  : "border-emerald-200 text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
-              }`}
-            >
-              {selectedPkg.isActive ? (
-                <span className="flex items-center justify-center gap-2"><EyeOff className="w-4 h-4" /> Ẩn gói này</span>
-              ) : (
-                <span className="flex items-center justify-center gap-2"><Eye className="w-4 h-4" /> Hiển thị gói này</span>
-              )}
-            </button>
+            {effectiveIsAdmin && (
+              <button
+                onClick={() => togglePkgActive.mutate(selectedPkg)}
+                className={`w-full text-sm font-medium py-2 px-4 rounded-xl transition-colors border ${
+                  selectedPkg.isActive
+                    ? "border-muted text-muted-foreground hover:bg-muted/50"
+                    : "border-emerald-200 text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
+                }`}
+              >
+                {selectedPkg.isActive ? (
+                  <span className="flex items-center justify-center gap-2"><EyeOff className="w-4 h-4" /> Ẩn gói này</span>
+                ) : (
+                  <span className="flex items-center justify-center gap-2"><Eye className="w-4 h-4" /> Hiển thị gói này</span>
+                )}
+              </button>
+            )}
           </div>
         </div>
       )}
