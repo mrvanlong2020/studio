@@ -53,6 +53,7 @@ type MyAttendance = {
   earnedBonus: number;
   penalty: number;
   net: number;
+  checkInTo?: string;
 };
 
 type LateRule = {
@@ -591,6 +592,58 @@ export default function AttendancePage() {
                 </div>
               </div>
             </div>
+
+            {/* Per-day attendance table */}
+            {(myAtt?.totalDays ?? 0) > 0 && (
+              <div className="rounded-2xl border border-border bg-card overflow-hidden">
+                <div className="px-4 py-2.5 border-b font-semibold text-sm flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-primary" /> Chi tiết từng ngày
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/40">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold">Ngày</th>
+                        <th className="px-3 py-2 text-left font-semibold">Giờ vào</th>
+                        <th className="px-3 py-2 text-left font-semibold">Giờ ra</th>
+                        <th className="px-3 py-2 text-center font-semibold">Đúng giờ</th>
+                        <th className="px-3 py-2 text-right font-semibold">Thưởng/Phạt</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {daysInMonth.filter(d => d.logs.some(l => l.type === "check_in")).map(({ date, logs }) => {
+                        const ci = logs.find(l => l.type === "check_in");
+                        const co = logs.find(l => l.type === "check_out");
+                        const checkInTo = myAtt?.checkInTo ?? "09:00";
+                        const isOnTime = ci?.localTime ? ci.localTime <= checkInTo : true;
+                        const dayBp = (myAtt?.bonusPenalty ?? []).filter(bp => bp.date === date);
+                        const netBp = dayBp.reduce((s, bp) => s + (bp.type === "bonus" ? bp.amount : -bp.amount), 0);
+                        const [, mm, dd] = date.split("-");
+                        return (
+                          <tr key={date} className="hover:bg-muted/20 transition-colors">
+                            <td className="px-3 py-2 font-medium">{dd}/{mm}</td>
+                            <td className="px-3 py-2 font-mono">{ci?.localTime ?? "—"}</td>
+                            <td className="px-3 py-2 font-mono text-muted-foreground">{co?.localTime ?? "—"}</td>
+                            <td className="px-3 py-2 text-center">
+                              {isOnTime
+                                ? <span className="text-green-600 font-bold">✓</span>
+                                : <span className="text-red-500 text-[10px]">{ci?.localTime}</span>}
+                            </td>
+                            <td className="px-3 py-2 text-right font-semibold">
+                              {dayBp.length > 0 ? (
+                                <span className={netBp >= 0 ? "text-green-600" : "text-red-600"}>
+                                  {netBp >= 0 ? "+" : ""}{vnd(Math.abs(netBp))}
+                                </span>
+                              ) : <span className="text-muted-foreground">—</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {/* Bonuses */}
             {(myAtt?.bonusPenalty?.length ?? 0) > 0 && (

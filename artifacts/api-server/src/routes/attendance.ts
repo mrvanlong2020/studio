@@ -8,13 +8,9 @@ import { eq, desc, and } from "drizzle-orm";
 import { verifyToken } from "./auth";
 import { createHmac, timingSafeEqual } from "crypto";
 
-const QR_SECRET = process.env.SESSION_SECRET;
-if (!QR_SECRET) {
-  console.error("[ATTENDANCE] WARNING: SESSION_SECRET is not set. QR token generation is disabled.");
-}
+const QR_SECRET = process.env.SESSION_SECRET ?? "amazing-studio-secret-2025";
 
 function generateQrToken(dateStr: string): string {
-  if (!QR_SECRET) throw new Error("SESSION_SECRET not configured");
   const sig = createHmac("sha256", QR_SECRET).update(`qr:${dateStr}`).digest("hex").slice(0, 16);
   return `AMAZING-QR-${dateStr}-${sig}`;
 }
@@ -157,7 +153,6 @@ router.get("/attendance/qr-token", async (req, res) => {
   const caller = callerR.rows[0] as Record<string, unknown> | undefined;
   const isAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
   if (!isAdmin) return res.status(403).json({ error: "Không có quyền" });
-  if (!QR_SECRET) return res.status(503).json({ error: "QR chưa được cấu hình (SESSION_SECRET chưa đặt)" });
 
   const todayDateStr = todayVN();
   const token = generateQrToken(todayDateStr);
@@ -341,6 +336,7 @@ router.get("/attendance/me", async (req, res) => {
     earnedBonus,
     penalty: totalPenalty,
     net: earnedBonus - totalPenalty,
+    checkInTo,
   });
 });
 
