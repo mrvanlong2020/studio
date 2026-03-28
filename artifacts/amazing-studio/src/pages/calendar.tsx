@@ -1324,6 +1324,73 @@ function formatShootDate(dateStr: string): string {
   try { const d = parseISO(dateStr); return isNaN(d.getTime()) ? dateStr : format(d, "dd/MM/yyyy"); } catch { return dateStr; }
 }
 
+async function exportContractAsImages(htmlContent: string, customerName: string) {
+  try {
+    // Load html2canvas từ CDN
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+    
+    await new Promise<void>((resolve, reject) => {
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Không thể tải html2canvas"));
+      document.head.appendChild(script);
+    });
+
+    // Tạo container tạm thời
+    const container = document.createElement("div");
+    container.style.position = "fixed";
+    container.style.left = "-10000px";
+    container.style.width = "820px";
+    container.style.background = "#fff";
+    container.innerHTML = htmlContent;
+    document.body.appendChild(container);
+
+    // Đợi ảnh load
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    const html2canvas = (window as any).html2canvas;
+    if (!html2canvas) throw new Error("html2canvas không tải được");
+
+    // Tính số page (mỗi page ~1200px)
+    const pageHeight = 1200;
+    const totalHeight = container.scrollHeight;
+    const pageCount = Math.ceil(totalHeight / pageHeight);
+
+    // Export từng page
+    for (let i = 0; i < pageCount; i++) {
+      const pageDiv = document.createElement("div");
+      pageDiv.style.position = "fixed";
+      pageDiv.style.left = "-10000px";
+      pageDiv.style.width = "820px";
+      pageDiv.style.height = pageHeight + "px";
+      pageDiv.style.overflow = "hidden";
+      pageDiv.style.background = "#fff";
+
+      const cloned = container.cloneNode(true) as HTMLElement;
+      cloned.style.marginTop = `-${i * pageHeight}px`;
+      cloned.style.width = "820px";
+      pageDiv.appendChild(cloned);
+      document.body.appendChild(pageDiv);
+
+      const canvas = await html2canvas(pageDiv, { scale: 2, useCORS: true, logging: false });
+      const link = document.createElement("a");
+      link.href = canvas.toDataURL("image/jpeg", 0.95);
+      link.download = `hop-dong-${customerName}-trang-${i + 1}.jpg`;
+      link.click();
+
+      document.body.removeChild(pageDiv);
+      
+      // Delay giữa export
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    document.body.removeChild(container);
+  } catch (err) {
+    console.error("Export error:", err);
+    alert(`Lỗi xuất ảnh: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 function generateContractHTML(booking: Booking, siblings: Booking[], allPackages: DetailPackage[]): string {
   const today = new Date();
   const todayStr = format(today, "dd/MM/yyyy");
@@ -1332,8 +1399,8 @@ function generateContractHTML(booking: Booking, siblings: Booking[], allPackages
   const allServices = siblings.length > 0 ? siblings : [booking];
   const isMulti = allServices.length > 1;
 
-  const totalAmount = allServices.reduce((s, b) => s + (b.totalAmount || 0), 0);
-  const paidAmount  = allServices.reduce((s, b) => s + (b.paidAmount || 0), 0);
+  const totalAmount = allServices.reduce((s, b) => s + (parseFloat(String(b.totalAmount ?? 0)) || 0), 0);
+  const paidAmount  = allServices.reduce((s, b) => s + (parseFloat(String(b.paidAmount ?? 0)) || 0), 0);
   const remainingAmount = Math.max(0, totalAmount - paidAmount);
 
   // ── Lịch chụp section ─────────────────────────────────────────────────────
@@ -1761,6 +1828,16 @@ function ShowDetailPanel({
           title="Xuất hợp đồng PDF"
         >
           <FileText className="w-4 h-4" />
+        </button>
+        <button
+          onClick={async () => {
+            const html = generateContractHTML(booking, siblings, allPackages);
+            await exportContractAsImages(html, booking.customerName || "hop-dong");
+          }}
+          className="p-1.5 rounded-lg text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors flex-shrink-0"
+          title="Xuất ảnh JPG"
+        >
+          <Camera className="w-4 h-4" />
         </button>
         {isAdmin && (
           <>
