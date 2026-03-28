@@ -342,20 +342,13 @@ export default function AttendancePage() {
   // ── QR scanned ─────────────────────────────────────────────────────────────
   async function handleQrScan(data: string) {
     setShowQr(false);
-    // Extract code from URL if QR encodes a full URL
-    let qrPayload = data;
-    try {
-      const url = new URL(data);
-      const code = url.searchParams.get("code");
-      if (code) qrPayload = code;
-    } catch {}
     setGeoLoading(true);
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
         navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 12000, enableHighAccuracy: true })
       );
       const { latitude: lat, longitude: lng } = pos.coords;
-      if (qrAction === "checkin") await checkin.mutateAsync({ lat, lng, qrPayload });
+      if (qrAction === "checkin") await checkin.mutateAsync({ lat, lng });
       else await checkout.mutateAsync({ lat, lng });
     } catch (e: unknown) {
       setGeoErr((e as Error)?.message ?? "Lỗi khi lấy GPS sau khi quét QR");

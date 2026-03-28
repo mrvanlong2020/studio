@@ -8,43 +8,14 @@ import { eq, desc, and } from "drizzle-orm";
 import { verifyToken } from "./auth";
 import { createHmac, timingSafeEqual, randomBytes } from "crypto";
 
-const QR_SECRET = process.env.SESSION_SECRET || randomBytes(32).toString("hex");
 const DOMAIN = process.env.REPLIT_DEV_DOMAIN || "localhost:8080";
 
-function generateQrCode(dateStr: string): string {
-  const sig = createHmac("sha256", QR_SECRET).update(`qr:${dateStr}`).digest("hex").slice(0, 16);
-  return `AMAZING-QR-${dateStr}-${sig}`;
-}
-
-function generateQrUrl(dateStr: string): string {
-  const code = generateQrCode(dateStr);
-  return `https://${DOMAIN}/attendance/check-in?code=${code}`;
+function getStaticQrUrl(): string {
+  return `https://${DOMAIN}/attendance/check-in`;
 }
 
 function todayVN(): string {
   return new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
-}
-
-function extractQrCode(payload: string): string {
-  try {
-    const url = new URL(payload);
-    const code = url.searchParams.get("code");
-    if (code) return code;
-  } catch {}
-  return payload;
-}
-
-function verifyQrToken(payload: string): boolean {
-  if (!QR_SECRET) return false;
-  const code = extractQrCode(payload);
-  const match = code.match(/^AMAZING-QR-(\d{4}-\d{2}-\d{2})-([0-9a-f]{16})$/);
-  if (!match) return false;
-  const [, dateStr, providedSig] = match;
-  if (dateStr !== todayVN()) return false;
-  const expectedSig = createHmac("sha256", QR_SECRET).update(`qr:${dateStr}`).digest("hex").slice(0, 16);
-  try {
-    return timingSafeEqual(Buffer.from(providedSig), Buffer.from(expectedSig));
-  } catch { return false; }
 }
 
 const router: IRouter = Router();
@@ -66,15 +37,7 @@ router.post("/attendance/check-in", async (req, res) => {
   const callerId = verifyToken(req.headers.authorization);
   if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
 
-  const { lat, lng, accuracyM, qrPayload, bookingId } = req.body;
-
-  let qrVerified = false;
-  if (qrPayload) {
-    qrVerified = verifyQrToken(qrPayload);
-    if (!qrVerified) {
-      return res.status(400).json({ error: "Mã QR không hợp lệ hoặc đã hết hạn. Vui lòng quét lại mã QR hôm nay." });
-    }
-  }
+  const { lat, lng, accuracyM, bookingId } = req.body;
 
   const settingsR = await pool.query(`SELECT key, value FROM settings WHERE key IN ('studio_lat', 'studio_lng', 'attendance_radius_m')`);
   const settingsMap: Record<string, string> = {};
@@ -94,13 +57,6 @@ router.post("/attendance/check-in", async (req, res) => {
     const inGeofence = distanceM <= radiusM;
 
     if (inGeofence) {
-      if (!qrVerified) {
-        return res.status(400).json({
-          error: "Bạn đang ở trong studio. Vui lòng quét mã QR để chấm công.",
-          distanceM: Math.round(distanceM),
-          requiresQr: true,
-        });
-      }
       method = "qr";
     } else {
       const today = todayVN();
@@ -130,7 +86,7 @@ router.post("/attendance/check-in", async (req, res) => {
       }
     }
   } else {
-    return res.status(400).json({ error: "Vui lòng cấp quyền GPS để chấm công. QR + GPS đều cần thiết." });
+    return res.status(400).json({ error: "Vui lòng cấp quyền GPS để chấm công." });
   }
 
   const today = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
@@ -165,9 +121,8 @@ router.get("/attendance/qr-token", async (req, res) => {
   const isAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
   if (!isAdmin) return res.status(403).json({ error: "Không có quyền" });
 
-  const todayDateStr = todayVN();
-  const url = generateQrUrl(todayDateStr);
-  res.json({ url, date: todayDateStr });
+  const url = getStaticQrUrl();
+  res.json({ url });
 });
 
 // ── Check Out ─────────────────────────────────────────────────────────────────
