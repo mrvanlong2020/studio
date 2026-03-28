@@ -47,7 +47,7 @@ router.get("/services", async (_req, res) => {
   const ids = services.map(s => s.id);
   const splitsMap = await fetchSplitsMap(ids);
   res.json(services.map(s => ({ ...fmtService(s), splits: splitsMap[s.id] || [] })));
-  } catch (e) { res.status(500).json({ error: String(e) }); }
+  } catch (e) { res.status(500).json({ error: "Lỗi hệ thống" }); }
 });
 
 // ─── GET /services/:id ─────────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ router.get("/services/:id", async (req, res) => {
   if (!service) return res.status(404).json({ error: "Service not found" });
   const splitsMap = await fetchSplitsMap([id]);
   res.json({ ...fmtService(service), splits: splitsMap[id] || [] });
-  } catch (e) { res.status(500).json({ error: String(e) }); }
+  } catch (e) { res.status(500).json({ error: "Lỗi hệ thống" }); }
 });
 
 // ─── POST /services ────────────────────────────────────────────────────────────
@@ -94,7 +94,7 @@ router.post("/services", async (req, res) => {
 
   const splitsMap = await fetchSplitsMap([service.id]);
   res.status(201).json({ ...fmtService(service), splits: splitsMap[service.id] || [] });
-  } catch (e) { res.status(500).json({ error: String(e) }); }
+  } catch (e) { res.status(500).json({ error: "Lỗi hệ thống" }); }
 });
 
 // ─── PUT /services/:id ─────────────────────────────────────────────────────────
@@ -138,7 +138,7 @@ router.put("/services/:id", async (req, res) => {
 
   const splitsMap = await fetchSplitsMap([id]);
   res.json({ ...fmtService(service), splits: splitsMap[id] || [] });
-  } catch (e) { res.status(500).json({ error: String(e) }); }
+  } catch (e) { res.status(500).json({ error: "Lỗi hệ thống" }); }
 });
 
 // ─── DELETE /services/:id ──────────────────────────────────────────────────────
@@ -148,7 +148,7 @@ router.delete("/services/:id", async (req, res) => {
   if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
   await db.delete(servicesTable).where(eq(servicesTable.id, id));
   res.status(204).send();
-  } catch (e) { res.status(500).json({ error: String(e) }); }
+  } catch (e) { res.status(500).json({ error: "Lỗi hệ thống" }); }
 });
 
 // ─── GET /service-splits?serviceId=X ──────────────────────────────────────────
@@ -159,7 +159,7 @@ router.get("/service-splits", async (req, res) => {
   if (!serviceId) return res.json([]);
   const splits = await db.select().from(serviceJobSplitsTable).where(eq(serviceJobSplitsTable.serviceId, serviceId));
   res.json(splits.map(fmtSplit));
-  } catch (e) { res.status(500).json({ error: String(e) }); }
+  } catch (e) { res.status(500).json({ error: "Lỗi hệ thống" }); }
 });
 
 export { ROLES };

@@ -23,6 +23,12 @@ import { SurchargeEditor, type SurchargeItem } from "@/components/surcharge-edit
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+function authFetch(url: string, opts: RequestInit = {}): Promise<Response> {
+  const token = localStorage.getItem("amazingStudioToken_v2");
+  const headers = { ...(opts.headers as Record<string, string> ?? {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  return fetch(url, { ...opts, headers });
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Booking = {
   id: number; orderCode: string; customerId: number; customerName: string;
@@ -743,7 +749,7 @@ function ShowFormPanel({
   const addSubDraft = () =>
     setSubDrafts(p => [...p, { id: genId(), serviceLabel: "", shootDate: shootDate, shootTime: "08:00", items: [emptyOrderLine()], photoId: null, photoName: "", photoTask: "", makeupId: null, makeupName: "", makeupTask: "", notes: "" }]);
 
-  const { data: allStaff = [] } = useQuery<Staff[]>({ queryKey: ["staff"], queryFn: () => { const t = localStorage.getItem("amazingStudioToken_v2"); return fetch(`${BASE}/api/staff`, { headers: t ? { Authorization: `Bearer ${t}` } : {} }).then(r => r.ok ? r.json() : []); } });
+  const { data: allStaff = [] } = useQuery<Staff[]>({ queryKey: ["staff"], queryFn: () => authFetch(`${BASE}/api/staff`).then(r => r.ok ? r.json() : []) });
   const { data: services = [] } = useQuery<Service[]>({ queryKey: ["services"], queryFn: () => fetch(`${BASE}/api/services`).then(r => r.json()) });
   const { data: pricingPackages = [] } = useQuery<{
     id: number; name: string; price: number;
@@ -818,9 +824,7 @@ function ShowFormPanel({
       // ── 1. Tạo / tìm khách hàng ──
       let cid = customerId;
       if (!cid) {
-        const token = localStorage.getItem("amazingStudioToken_v2");
-        const authHeaders = { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
-        const foundRaw = await fetch(`${BASE}/api/customers?search=${encodeURIComponent(phone)}`, { headers: authHeaders }).then(r => r.ok ? r.json() : []).catch(() => []);
+        const foundRaw = await authFetch(`${BASE}/api/customers?search=${encodeURIComponent(phone)}`, { headers: { "Content-Type": "application/json" } }).then(r => r.ok ? r.json() : []).catch(() => []);
         const found: Customer[] = Array.isArray(foundRaw) ? foundRaw : [];
         const existing = found.find(c => c.phone === phone);
         if (existing) {
@@ -1636,7 +1640,7 @@ function ShowDetailPanel({
   const qc = useQueryClient();
   const { data: allStaff = [] } = useQuery<Staff[]>({
     queryKey: ["staff"],
-    queryFn: () => { const t = localStorage.getItem("amazingStudioToken_v2"); return fetch(`${BASE}/api/staff`, { headers: t ? { Authorization: `Bearer ${t}` } : {} }).then(r => r.ok ? r.json() : []); },
+    queryFn: () => authFetch(`${BASE}/api/staff`).then(r => r.ok ? r.json() : []),
     staleTime: 60_000,
   });
   const { data: allPackages = [] } = useQuery<DetailPackage[]>({
@@ -1664,8 +1668,6 @@ function ShowDetailPanel({
   const [rescheduleError, setRescheduleError] = useState<string | null>(null);
   const [rescheduleConflicts, setRescheduleConflicts] = useState<{ customerName: string; date: string; time: string; staffNames?: string }[]>([]);
   const [rescheduling, setRescheduling] = useState(false);
-  const token = localStorage.getItem("amazingStudioToken_v2");
-
   const st = STATUS[booking.status as keyof typeof STATUS] ?? STATUS.pending;
 
   // Parse assignedStaff — might be object or array
@@ -2208,12 +2210,9 @@ function ShowDetailPanel({
                   setRescheduleConflicts([]);
                   setRescheduling(true);
                   try {
-                    const res = await fetch(`${BASE}/api/bookings/${booking.id}/reschedule`, {
+                    const res = await authFetch(`${BASE}/api/bookings/${booking.id}/reschedule`, {
                       method: "PATCH",
-                      headers: {
-                        "Content-Type": "application/json",
-                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                      },
+                      headers: { "Content-Type": "application/json" },
                       body: JSON.stringify(rescheduleForm),
                     });
                     const data = await res.json();
