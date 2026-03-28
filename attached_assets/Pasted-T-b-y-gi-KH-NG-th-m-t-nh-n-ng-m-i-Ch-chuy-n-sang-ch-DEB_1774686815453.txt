@@ -1,0 +1,85 @@
+Từ bây giờ KHÔNG thêm tính năng mới. Chỉ chuyển sang chế độ DEBUG và FIX LỖI toàn hệ thống trên code hiện tại của Amazing Studio.
+
+MỤC TIÊU:
+- Tự quét lỗi frontend + backend + API + DB
+- Tự chạy test các luồng chính
+- Lỗi ở đâu sửa ở đó
+- Không sửa lan man
+- Không refactor lớn
+- Không tạo project mới
+- Không đổi cấu trúc monorepo hiện tại
+
+QUY TẮC LÀM VIỆC:
+1. Chỉ sửa lỗi để hệ thống chạy ổn định lại.
+2. Mỗi lần sửa xong phải chạy lại kiểm tra.
+3. Không thêm module mới, không thêm tính năng mới nếu không bắt buộc để fix lỗi.
+4. Không được dừng sau khi chỉ sửa 1 lỗi. Phải tiếp tục quét các lỗi liên quan.
+5. Nếu lỗi frontend do dữ liệu API sai kiểu, phải sửa tận gốc ở backend hoặc chỗ mapping dữ liệu.
+6. Nếu lỗi API trả HTML hoặc dữ liệu sai shape, phải chuẩn hóa lại để frontend luôn nhận đúng JSON.
+7. Nếu có biến có thể là undefined/null/không phải array thì phải thêm guard an toàn.
+
+VIỆC CẦN LÀM NGAY:
+A. Rà soát và sửa toàn bộ lỗi runtime frontend, đặc biệt các lỗi kiểu:
+- xxx.filter is not a function
+- cannot read property of undefined
+- map/filter/find trên dữ liệu không phải mảng
+- form submit bị crash
+- modal mở ra lỗi trắng / lỗi đỏ
+- response HTML bị render vào UI
+
+B. Rà soát backend:
+- route nào đang trả sai JSON
+- route nào có thể throw error không được catch
+- lỗi create/update nhân viên
+- lỗi create booking / create order / create payment
+- lỗi upload avatar/storage nếu có
+
+C. Kiểm tra dữ liệu trả về từ API:
+- staff list phải luôn là array
+- customers list phải luôn là array
+- bookings list phải luôn là array
+- payments list phải luôn là array
+- nếu API trả object bọc data thì frontend phải đọc đúng shape
+- thống nhất format response để frontend không bị undefined
+
+D. Test lại các luồng chính sau khi fix:
+1. Đăng nhập
+2. Mở dashboard
+3. Mở nhân sự
+4. Thêm nhân viên
+5. Sửa nhân viên
+6. Mở khách hàng
+7. Tạo khách hàng
+8. Mở đơn hàng / show
+9. Tạo show mới
+10. Mở lịch
+11. Mở thu tiền
+12. Mở bảng giá
+13. Mở kho váy
+
+E. Với mỗi lỗi tìm được:
+- nói rõ file nào lỗi
+- nguyên nhân ngắn gọn
+- sửa trực tiếp
+- chạy lại kiểm tra
+
+F. Đặc biệt sửa lỗi hiện tại:
+- allStaff.filter is not a function
+=> đảm bảo allStaff luôn là array trước khi filter
+=> kiểm tra lại dữ liệu lấy từ API staff
+=> nếu cần dùng Array.isArray(allStaff) ? allStaff : []
+
+YÊU CẦU THỰC HIỆN:
+- Bắt đầu bằng cách liệt kê ngắn gọn các file nghi ngờ cần kiểm tra
+- Sau đó sửa lỗi theo thứ tự ưu tiên:
+  1. lỗi crash toàn trang
+  2. lỗi không tạo được dữ liệu
+  3. lỗi hiển thị sai
+- Sau mỗi nhóm sửa, tự chạy lại app và tiếp tục tìm lỗi tiếp
+- Chỉ kết thúc khi các trang chính không còn crash runtime
+
+ĐẦU RA CUỐI CÙNG PHẢI CÓ:
+1. danh sách lỗi đã sửa
+2. file đã sửa
+3. lỗi nào còn tồn đọng
+4. việc gì cần test tay thêm
