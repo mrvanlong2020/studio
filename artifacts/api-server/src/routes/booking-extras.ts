@@ -154,7 +154,12 @@ router.patch("/bookings/:id/reschedule", async (req, res) => {
     if (Array.isArray(assigned)) {
       isAssigned = assigned.map(Number).includes(callerId);
     } else if (assigned && typeof assigned === "object") {
-      isAssigned = Object.values(assigned).map(Number).includes(callerId);
+      // Chỉ lấy các key thực sự là nhân viên (bỏ *Task và các meta key không phải số)
+      const staffIdValues = Object.entries(assigned)
+        .filter(([k]) => !k.endsWith("Task"))
+        .map(([, v]) => Number(v))
+        .filter(n => Number.isInteger(n) && n > 0);
+      isAssigned = staffIdValues.includes(callerId);
     }
     if (!isAssigned) return res.status(403).json({ error: "Bạn không có quyền đổi lịch buổi này" });
   }
