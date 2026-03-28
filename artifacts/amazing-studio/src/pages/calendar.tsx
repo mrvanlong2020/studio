@@ -1659,7 +1659,7 @@ function ShowDetailPanel({
   const [showReschedule, setShowReschedule] = useState(false);
   const [rescheduleForm, setRescheduleForm] = useState({ newDate: booking.shootDate, newTime: booking.shootTime || "", reason: "" });
   const [rescheduleError, setRescheduleError] = useState<string | null>(null);
-  const [rescheduleConflicts, setRescheduleConflicts] = useState<{ customerName: string; date: string; time: string }[]>([]);
+  const [rescheduleConflicts, setRescheduleConflicts] = useState<{ customerName: string; date: string; time: string; staffNames?: string }[]>([]);
   const [rescheduling, setRescheduling] = useState(false);
   const token = localStorage.getItem("amazingStudioToken_v2");
 
@@ -1736,7 +1736,7 @@ function ShowDetailPanel({
           {isAdmin ? <ShieldCheck className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
           {isAdmin ? "Admin" : "Nhân viên"}
         </div>
-        {["confirmed", "in_progress", "pending"].includes(booking.status) && (
+        {booking.status === "confirmed" && (
           <button
             onClick={() => {
               setShowReschedule(true);
@@ -2172,10 +2172,10 @@ function ShowDetailPanel({
               />
             </div>
             <div>
-              <label className="text-sm font-medium">Lý do đổi lịch</label>
+              <label className="text-sm font-medium">Lý do đổi lịch *</label>
               <textarea
                 rows={2}
-                placeholder="Nhập lý do..."
+                placeholder="Nhập lý do đổi lịch (bắt buộc)..."
                 className="w-full mt-1 px-3 py-2 border border-input rounded-lg bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary/20 resize-none"
                 value={rescheduleForm.reason}
                 onChange={e => setRescheduleForm(f => ({ ...f, reason: e.target.value }))}
@@ -2190,6 +2190,7 @@ function ShowDetailPanel({
                 {rescheduleConflicts.map((c, i) => (
                   <p key={i} className="text-orange-700 text-xs">
                     • {c.customerName} — {c.date}{c.time ? " " + c.time.slice(0, 5) : ""}
+                    {c.staffNames ? ` (${c.staffNames})` : ""}
                   </p>
                 ))}
               </div>
@@ -2197,8 +2198,9 @@ function ShowDetailPanel({
             <div className="flex gap-2 pt-1">
               <Button
                 className="flex-1"
-                disabled={!rescheduleForm.newDate || rescheduling}
+                disabled={!rescheduleForm.newDate || !rescheduleForm.reason.trim() || rescheduling}
                 onClick={async () => {
+                  if (!rescheduleForm.reason.trim()) { setRescheduleError("Vui lòng nhập lý do đổi lịch"); return; }
                   setRescheduleError(null);
                   setRescheduleConflicts([]);
                   setRescheduling(true);

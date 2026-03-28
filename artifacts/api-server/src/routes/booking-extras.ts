@@ -125,6 +125,9 @@ router.post("/bookings/:id/upgrade", async (req, res) => {
 });
 
 // ── Task #11: Reschedule ────────────────────────────────────────────────────────
+// Phân quyền: admin đổi tất cả; staff chỉ đổi khi được assigned vào buổi đó.
+// Kiểm tra xung đột nhân viên được phân công trước khi cập nhật.
+// Ghi log booking_change_log với old/new date+time và lý do.
 
 router.patch("/bookings/:id/reschedule", async (req, res) => {
   const callerId = verifyToken(req.headers.authorization);
@@ -135,11 +138,12 @@ router.patch("/bookings/:id/reschedule", async (req, res) => {
 
   const { newDate, newTime, reason } = req.body;
   if (!newDate) return res.status(400).json({ error: "Vui lòng chọn ngày mới" });
+  if (!reason?.trim()) return res.status(400).json({ error: "Vui lòng nhập lý do đổi lịch" });
 
   const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId));
   if (!booking) return res.status(404).json({ error: "Không tìm thấy booking" });
 
-  // Kiểm tra quyền: admin hoặc assigned staff
+  // Phân quyền: admin hoặc nhân viên được assigned vào buổi đó
   const callerR = await pool.query(`SELECT role, roles FROM staff WHERE id = $1`, [callerId]);
   const caller = callerR.rows[0] as Record<string, unknown> | undefined;
   const isAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
@@ -155,82 +159,98 @@ router.patch("/bookings/:id/reschedule", async (req, res) => {
     if (!isAssigned) return res.status(403).json({ error: "Bạn không có quyền đổi lịch buổi này" });
   }
 
-  // Kiểm tra xung đột lịch (nhân viên khác đã có buổi cùng ngày?)
+  // Kiểm tra xung đột lịch: nhân viên được phân công đã có buổi khác cùng ngày?
   if (booking.assignedStaff) {
     const assigned = booking.assignedStaff as Record<string, unknown> | number[];
     let staffIds: number[] = [];
     if (Array.isArray(assigned)) {
       staffIds = assigned.map(Number).filter(Boolean);
     } else if (typeof assigned === "object") {
-      staffIds = Object.values(assigned).map(Number).filter(Boolean);
+      // Bỏ qua các key không phải số (vd: saleTask, photoTask...)
+      staffIds = Object.entries(assigned)
+        .filter(([k]) => !k.endsWith("Task"))
+        .map(([, v]) => Number(v))
+        .filter(Boolean);
     }
 
     if (staffIds.length > 0) {
+      // Lấy tên nhân viên được phân công để hiển thị trong lỗi xung đột
+      const staffNamesR = await pool.query(
+        `SELECT id, name FROM staff WHERE id = ANY($1::int[])`,
+        [staffIds],
+      );
+      const staffNames: Record<number, string> = {};
+      for (const s of staffNamesR.rows as { id: number; name: string }[]) {
+        staffNames[s.id] = s.name;
+      }
+
+      // Tìm buổi chụp khác cùng ngày có chung nhân viên được phân công
       const conflictR = await pool.query(`
         SELECT b.id, b.shoot_date, b.shoot_time, c.name as customer_name,
-          s.name as staff_name
-        FROM bookings b
-        LEFT JOIN customers c ON c.id = b.customer_id
-        CROSS JOIN LATERAL (
-          SELECT name FROM staff
-          WHERE id = ANY($2::int[])
-            AND id != $3
-          LIMIT 1
-        ) s
-        WHERE b.shoot_date = $1
-          AND b.id != $4
-          AND b.status NOT IN ('cancelled', 'huy')
-          AND (b.assigned_staff @> ANY(ARRAY[$5::jsonb]))
-        LIMIT 3
-      `, [newDate, staffIds, bookingId, bookingId, staffIds.map(id => JSON.stringify(id))]);
-
-      // Simple conflict check by day only (without staff intersection complexity)
-      const simpleConflictR = await pool.query(`
-        SELECT b.id, b.shoot_date, b.shoot_time, c.name as customer_name
+          (
+            SELECT string_agg(s.name, ', ')
+            FROM staff s
+            WHERE s.id = ANY($3::int[])
+              AND (
+                b.assigned_staff @> to_jsonb(s.id)
+                OR (b.assigned_staff->>'photo')::int = s.id
+                OR (b.assigned_staff->>'photographer')::int = s.id
+                OR (b.assigned_staff->>'makeup')::int = s.id
+                OR (b.assigned_staff->>'sale')::int = s.id
+                OR (b.assigned_staff->>'photoshop')::int = s.id
+              )
+          ) as conflicting_staff_names
         FROM bookings b
         LEFT JOIN customers c ON c.id = b.customer_id
         WHERE b.shoot_date = $1
           AND b.id != $2
           AND b.status NOT IN ('cancelled', 'huy')
           AND (
-            SELECT COUNT(*) FROM staff WHERE id = ANY($3::int[])
+            SELECT COUNT(*) FROM staff s2
+            WHERE s2.id = ANY($3::int[])
               AND (
-                b.assigned_staff @> to_jsonb(id)
-                OR (b.assigned_staff->>'photo')::int = id
-                OR (b.assigned_staff->>'photographer')::int = id
-                OR (b.assigned_staff->>'makeup')::int = id
-                OR (b.assigned_staff->>'sale')::int = id
-                OR (b.assigned_staff->>'photoshop')::int = id
+                b.assigned_staff @> to_jsonb(s2.id)
+                OR (b.assigned_staff->>'photo')::int = s2.id
+                OR (b.assigned_staff->>'photographer')::int = s2.id
+                OR (b.assigned_staff->>'makeup')::int = s2.id
+                OR (b.assigned_staff->>'sale')::int = s2.id
+                OR (b.assigned_staff->>'photoshop')::int = s2.id
               )
           ) > 0
         LIMIT 3
       `, [newDate, bookingId, staffIds]);
 
-      if (simpleConflictR.rows.length > 0) {
-        const conflicts = simpleConflictR.rows as { customer_name: string; shoot_date: string; shoot_time: string }[];
+      if (conflictR.rows.length > 0) {
+        const conflicts = conflictR.rows as {
+          customer_name: string;
+          shoot_date: string;
+          shoot_time: string;
+          conflicting_staff_names: string | null;
+        }[];
         return res.status(409).json({
-          error: "Xung đột lịch",
+          error: "Xung đột lịch với nhân viên được phân công",
           conflicts: conflicts.map(c => ({
             customerName: c.customer_name,
             date: c.shoot_date,
             time: c.shoot_time,
+            staffNames: c.conflicting_staff_names || "",
           })),
         });
       }
     }
   }
 
-  // Ghi log lịch sử
+  // Ghi log lịch sử đổi lịch vào booking_change_log
   await db.insert(bookingChangeLogTable).values({
     bookingId,
     fieldChanged: "schedule",
     oldValue: `${booking.shootDate}${booking.shootTime ? " " + booking.shootTime : ""}`,
     newValue: `${newDate}${newTime ? " " + newTime : ""}`,
-    reason: reason || null,
+    reason: reason.trim(),
     changedById: callerId,
   });
 
-  // Cập nhật booking
+  // Cập nhật shoot_date và shoot_time trên booking
   const [updated] = await db.update(bookingsTable)
     .set({ shootDate: newDate, shootTime: newTime || booking.shootTime })
     .where(eq(bookingsTable.id, bookingId))
