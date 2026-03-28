@@ -459,7 +459,8 @@ router.get("/attendance/adjustments", async (req, res) => {
   const caller = callerR.rows[0] as Record<string, unknown> | undefined;
   const callerIsAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
 
-  const requestedStaffId = req.query.staffId ? parseInt(String(req.query.staffId)) : callerId;
+  const parsedStaffId = req.query.staffId ? parseInt(String(req.query.staffId)) : NaN;
+  const requestedStaffId = (!isNaN(parsedStaffId) && parsedStaffId > 0) ? parsedStaffId : callerId;
   // Non-admins can only see their own adjustments
   const staffId = callerIsAdmin ? requestedStaffId : callerId;
   const month = String(req.query.month || todayVN().slice(0, 7));
