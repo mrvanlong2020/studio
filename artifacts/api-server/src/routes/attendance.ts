@@ -157,6 +157,7 @@ router.get("/attendance/qr-token", async (req, res) => {
   const caller = callerR.rows[0] as Record<string, unknown> | undefined;
   const isAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
   if (!isAdmin) return res.status(403).json({ error: "Không có quyền" });
+  if (!QR_SECRET) return res.status(503).json({ error: "QR chưa được cấu hình (SESSION_SECRET chưa đặt)" });
 
   const todayDateStr = todayVN();
   const token = generateQrToken(todayDateStr);

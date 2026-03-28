@@ -471,8 +471,8 @@ export default function AttendancePage() {
                   {hasCheckedIn ? "✓ Đã chấm vào" : "Chấm vào (QR)"}
                 </button>
                 <button
-                  onClick={() => { setQrAction("checkout"); setShowQr(true); }}
-                  disabled={!hasCheckedIn || hasCheckedOut || geoLoading}
+                  onClick={() => doGPS("checkout")}
+                  disabled={!hasCheckedIn || hasCheckedOut || geoLoading || checkout.isPending}
                   className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all font-semibold text-sm ${
                     hasCheckedOut
                       ? "border-green-300 bg-green-50 text-green-700 opacity-60 cursor-default"
