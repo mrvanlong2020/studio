@@ -222,7 +222,7 @@ export default function AttendancePage() {
   });
 
   // Static QR URL - không phụ thuộc API
-  const staticQrUrl = `${window.location.origin}${BASE}/attendance/check-in`;
+  const staticQrUrl = `/attendance/check-in`;
 
   const { data: adminAdjustments = [] } = useQuery<{ id: number; type: string; amount: number; reason: string | null; date: string }[]>({
     queryKey: ["attendance-adjustments-admin", adjViewStaffId, month],
@@ -230,24 +230,27 @@ export default function AttendancePage() {
     enabled: effectiveIsAdmin && !!adjViewStaffId,
   });
 
-  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [qrImageUrl, setQrImageUrl] = useState<string | null>(null);
   const [qrDownloading, setQrDownloading] = useState(false);
 
   // Render QR từ static URL
   useEffect(() => {
-    if (!qrCanvasRef.current) return;
-    QRCode.toCanvas(qrCanvasRef.current, staticQrUrl, {
-      width: 200, margin: 2, color: { dark: "#1e1b4b", light: "#ffffff" },
-    }).catch(() => {});
+    QRCode.toDataURL(staticQrUrl, {
+      width: 200,
+      margin: 2,
+      color: { dark: "#1e1b4b", light: "#ffffff" },
+      errorCorrectionLevel: "H",
+      type: "image/png",
+    }).then(url => setQrImageUrl(url))
+      .catch(err => console.error("QR generation error:", err));
   }, [staticQrUrl]);
 
   const handleDownloadQr = async () => {
-    if (!qrCanvasRef.current) return;
+    if (!qrImageUrl) return;
     setQrDownloading(true);
     try {
-      const canvas = qrCanvasRef.current;
       const link = document.createElement("a");
-      link.href = canvas.toDataURL("image/png");
+      link.href = qrImageUrl;
       link.download = `amazing-studio-qr-${new Date().toISOString().slice(0, 10)}.png`;
       link.click();
     } finally {
@@ -783,7 +786,8 @@ export default function AttendancePage() {
                 <span className="font-semibold text-sm">Mã QR chấm công</span>
               </div>
               <div className="p-4 flex flex-col items-center gap-3">
-                <canvas ref={qrCanvasRef} className="rounded-xl shadow-md" />
+                {qrImageUrl && <img src={qrImageUrl} alt="QR Code" className="rounded-xl shadow-md w-48 h-48" />}
+                {!qrImageUrl && <div className="w-48 h-48 bg-muted rounded-xl animate-pulse" />}
                 <p className="text-xs text-muted-foreground text-center max-w-xs">
                   Nhân viên quét mã này để chấm công.
                 </p>
