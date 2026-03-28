@@ -7,8 +7,12 @@ import { Plus, TrendingUp, TrendingDown, DollarSign, Briefcase, Receipt, Users, 
 import { Link } from "wouter";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+const getAuthHeaders = (): Record<string, string> => {
+  const token = localStorage.getItem("amazingStudioToken_v2");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 const fetchJson = (url: string, opts?: RequestInit) =>
-  fetch(`${BASE}${url}`, { headers: { "Content-Type": "application/json" }, ...opts }).then(r => r.json());
+  fetch(`${BASE}${url}`, { headers: { "Content-Type": "application/json", ...getAuthHeaders() }, ...opts }).then(r => r.json());
 
 const EXPENSE_CAT: Record<string, string> = {
   salary: "Lương nhân viên", equipment: "Thiết bị", transport: "Đi lại",

@@ -19,8 +19,18 @@ import { compressStaffAvatar } from "@/components/StaffAvatar";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-const fetchJson = (url: string, opts?: RequestInit) =>
-  fetch(`${BASE}${url}`, opts).then(r => { if (!r.ok) throw new Error("Lỗi"); return r.json(); });
+const getAuthHeaders = (): Record<string, string> => {
+  const token = localStorage.getItem("amazingStudioToken_v2");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+const fetchJson = (url: string, opts?: RequestInit) => {
+  const merged: RequestInit = {
+    ...opts,
+    headers: { ...getAuthHeaders(), ...(opts?.headers as Record<string, string> || {}) },
+  };
+  return fetch(`${BASE}${url}`, merged).then(r => { if (!r.ok) throw new Error("Lỗi"); return r.json(); });
+};
 
 const fmtVND = (v: number) =>
   new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(v);

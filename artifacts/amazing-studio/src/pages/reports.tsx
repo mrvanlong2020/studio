@@ -7,7 +7,11 @@ import {
 } from "recharts";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-const fetchJson = (url: string) => fetch(`${BASE}${url}`).then(r => r.json());
+const getAuthHeaders = (): Record<string, string> => {
+  const token = localStorage.getItem("amazingStudioToken_v2");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+const fetchJson = (url: string) => fetch(`${BASE}${url}`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : []);
 
 const COLORS = ["#e11d48", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6"];
 

@@ -37,6 +37,7 @@ const bookingFields = {
 };
 
 router.get("/bookings", async (req, res) => {
+  try {
   const status = req.query.status as string | undefined;
   const customerId = req.query.customerId ? parseInt(req.query.customerId as string) : undefined;
   const parentId = req.query.parentId ? parseInt(req.query.parentId as string) : undefined;
@@ -93,9 +94,14 @@ router.get("/bookings", async (req, res) => {
   });
 
   res.json(bookings);
+  } catch (err) {
+    console.error("GET /bookings error:", err);
+    res.status(500).json({ error: "Lỗi hệ thống" });
+  }
 });
 
 router.post("/bookings", async (req, res) => {
+  try {
   const {
     customerId, shootDate, shootTime, serviceCategory, packageType, location,
     totalAmount, depositAmount, discountAmount, items, surcharges, notes, internalNotes,
@@ -252,9 +258,14 @@ router.post("/bookings", async (req, res) => {
     discountAmount: parseFloat(booking.discountAmount ?? "0"),
     remainingAmount: Math.max(0, parseFloat(booking.totalAmount) - parseFloat(booking.paidAmount)),
   });
+  } catch (err) {
+    console.error("POST /bookings error:", err);
+    res.status(500).json({ error: "Lỗi hệ thống khi tạo đơn hàng" });
+  }
 });
 
 router.get("/bookings/:id", async (req, res) => {
+  try {
   const id = parseInt(req.params.id);
   const [row] = await db
     .select(bookingFields)
@@ -349,9 +360,14 @@ router.get("/bookings/:id", async (req, res) => {
     parentContract,
     children,
   });
+  } catch (err) {
+    console.error("GET /bookings/:id error:", err);
+    res.status(500).json({ error: "Lỗi hệ thống" });
+  }
 });
 
 router.put("/bookings/:id", async (req, res) => {
+  try {
   const id = parseInt(req.params.id);
   const {
     shootDate, shootTime, serviceCategory, packageType, location, status,
@@ -410,9 +426,14 @@ router.put("/bookings/:id", async (req, res) => {
     discountAmount: parseFloat(booking.discountAmount ?? "0"),
     remainingAmount: Math.max(0, parseFloat(booking.totalAmount) - paidAmount),
   });
+  } catch (err) {
+    console.error("PUT /bookings/:id error:", err);
+    res.status(500).json({ error: "Lỗi hệ thống khi cập nhật đơn hàng" });
+  }
 });
 
 router.delete("/bookings/:id", async (req, res) => {
+  try {
   const id = parseInt(req.params.id);
 
   // Check if this is a parent contract — cascade delete children first
@@ -431,6 +452,10 @@ router.delete("/bookings/:id", async (req, res) => {
   await db.delete(paymentsTable).where(eq(paymentsTable.bookingId, id));
   await db.delete(bookingsTable).where(eq(bookingsTable.id, id));
   res.status(204).send();
+  } catch (err) {
+    console.error("DELETE /bookings/:id error:", err);
+    res.status(500).json({ error: "Lỗi hệ thống khi xóa đơn hàng" });
+  }
 });
 
 export default router;

@@ -7,6 +7,7 @@ const router: IRouter = Router();
 
 // GET /payments — danh sách phiếu thu (lọc theo bookingId hoặc rentalId)
 router.get("/payments", async (req, res) => {
+  try {
   const bookingId = req.query.bookingId ? parseInt(req.query.bookingId as string) : undefined;
   const rentalId  = req.query.rentalId  ? parseInt(req.query.rentalId  as string) : undefined;
 
@@ -16,6 +17,10 @@ router.get("/payments", async (req, res) => {
 
   const payments = await query.orderBy(desc(paymentsTable.paidAt));
   res.json(payments.map(p => ({ ...p, amount: parseFloat(p.amount) })));
+  } catch (err) {
+    console.error("GET /payments error:", err);
+    res.status(500).json({ error: "Lỗi hệ thống" });
+  }
 });
 
 function fmtBookingRow(row: any) {
@@ -222,6 +227,7 @@ router.get("/payments/search", async (req, res) => {
 
 // POST /payments — tạo phiếu thu mới
 router.post("/payments", async (req, res) => {
+  try {
   const {
     bookingId, rentalId, amount, paymentMethod, paymentType,
     collectorName, bankName, proofImageUrl, paidDate, notes, paidAt,
@@ -255,6 +261,10 @@ router.post("/payments", async (req, res) => {
   }
 
   res.status(201).json({ ...payment, amount: parseFloat(payment.amount) });
+  } catch (err) {
+    console.error("POST /payments error:", err);
+    res.status(500).json({ error: "Lỗi hệ thống khi tạo phiếu thu" });
+  }
 });
 
 // POST /payments/sync-deposits — đồng bộ tiền cọc cũ thành phiếu thu
@@ -335,6 +345,7 @@ router.post("/payments/sync-deposits", async (_req, res) => {
 
 // DELETE /payments/:id
 router.delete("/payments/:id", async (req, res) => {
+  try {
   const id = parseInt(req.params.id);
   const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id));
   await db.delete(paymentsTable).where(eq(paymentsTable.id, id));
@@ -348,6 +359,10 @@ router.delete("/payments/:id", async (req, res) => {
       .where(eq(bookingsTable.id, payment.bookingId));
   }
   res.status(204).send();
+  } catch (err) {
+    console.error("DELETE /payments/:id error:", err);
+    res.status(500).json({ error: "Lỗi hệ thống khi xóa phiếu thu" });
+  }
 });
 
 export default router;

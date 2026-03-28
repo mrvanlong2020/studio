@@ -743,7 +743,7 @@ function ShowFormPanel({
   const addSubDraft = () =>
     setSubDrafts(p => [...p, { id: genId(), serviceLabel: "", shootDate: shootDate, shootTime: "08:00", items: [emptyOrderLine()], photoId: null, photoName: "", photoTask: "", makeupId: null, makeupName: "", makeupTask: "", notes: "" }]);
 
-  const { data: allStaff = [] } = useQuery<Staff[]>({ queryKey: ["staff"], queryFn: () => fetch(`${BASE}/api/staff`).then(r => r.json()) });
+  const { data: allStaff = [] } = useQuery<Staff[]>({ queryKey: ["staff"], queryFn: () => { const t = localStorage.getItem("amazingStudioToken_v2"); return fetch(`${BASE}/api/staff`, { headers: t ? { Authorization: `Bearer ${t}` } : {} }).then(r => r.ok ? r.json() : []); } });
   const { data: services = [] } = useQuery<Service[]>({ queryKey: ["services"], queryFn: () => fetch(`${BASE}/api/services`).then(r => r.json()) });
   const { data: pricingPackages = [] } = useQuery<{
     id: number; name: string; price: number;
@@ -1633,7 +1633,7 @@ function ShowDetailPanel({
   const qc = useQueryClient();
   const { data: allStaff = [] } = useQuery<Staff[]>({
     queryKey: ["staff"],
-    queryFn: () => fetch(`${BASE}/api/staff`).then(r => r.json()),
+    queryFn: () => { const t = localStorage.getItem("amazingStudioToken_v2"); return fetch(`${BASE}/api/staff`, { headers: t ? { Authorization: `Bearer ${t}` } : {} }).then(r => r.ok ? r.json() : []); },
     staleTime: 60_000,
   });
   const { data: allPackages = [] } = useQuery<DetailPackage[]>({
