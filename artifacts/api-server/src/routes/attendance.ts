@@ -135,10 +135,22 @@ router.get("/attendance/me", async (req, res) => {
   const month = String(req.query.month || new Date().toISOString().slice(0, 7));
 
   const logsR = await pool.query(
-    `SELECT * FROM attendance_logs WHERE staff_id = $1 AND to_char(created_at, 'YYYY-MM') = $2 ORDER BY created_at`,
+    `SELECT id, staff_id, type, method, lat, lng, is_offsite, note, created_at
+     FROM attendance_logs WHERE staff_id = $1 AND to_char(created_at, 'YYYY-MM') = $2 ORDER BY created_at`,
     [callerId, month]
   );
-  const logs = logsR.rows as Record<string, unknown>[];
+  // Return camelCase for frontend
+  const logs = (logsR.rows as Record<string, unknown>[]).map(l => ({
+    id: l.id,
+    staffId: l.staff_id,
+    type: l.type,
+    method: l.method,
+    lat: l.lat,
+    lng: l.lng,
+    isOffsite: Boolean(l.is_offsite),
+    note: l.note,
+    createdAt: String(l.created_at ?? ""),
+  }));
 
   const checkIns = logs.filter(l => l.type === "check_in");
   const checkOuts = logs.filter(l => l.type === "check_out");
@@ -147,43 +159,58 @@ router.get("/attendance/me", async (req, res) => {
   const checkInTo = rule?.checkInTo ?? "09:00";
 
   let onTimeCount = 0;
-  const days = checkIns.map(ci => {
-    const dateStr = String(ci.created_at ?? "").slice(0, 10);
-    const timeStr = String(ci.created_at ?? "").slice(11, 16);
-    const isOnTime = timeStr <= checkInTo;
-    if (isOnTime) onTimeCount++;
-    const co = checkOuts.find(x => String(x.created_at ?? "").slice(0, 10) === dateStr);
-    return {
-      date: dateStr,
-      checkIn: timeStr,
-      checkOut: co ? String(co.created_at ?? "").slice(11, 16) : null,
-      method: ci.method,
-      isOnTime,
-    };
+  checkIns.forEach(ci => {
+    const timeStr = ci.createdAt.slice(11, 16);
+    if (timeStr <= checkInTo) onTimeCount++;
   });
 
   const adjustmentsR = await pool.query(
-    `SELECT * FROM attendance_adjustments WHERE staff_id = $1 AND to_char(date, 'YYYY-MM') = $2`,
+    `SELECT id, staff_id, date, type, amount, reason, created_by, created_at
+     FROM attendance_adjustments WHERE staff_id = $1 AND to_char(date, 'YYYY-MM') = $2`,
     [callerId, month]
   );
-  const adjustments = adjustmentsR.rows as { type: string; amount: string }[];
-  const bonusAdj = adjustments.filter(a => a.type === "bonus").reduce((s, a) => s + parseFloat(a.amount), 0);
-  const penaltyAdj = adjustments.filter(a => a.type === "penalty").reduce((s, a) => s + parseFloat(a.amount), 0);
+  const adjRows = (adjustmentsR.rows as Record<string, unknown>[]).map(a => ({
+    id: a.id,
+    staffId: a.staff_id,
+    date: a.date,
+    type: a.type,
+    amount: parseFloat(String(a.amount ?? "0")),
+    reason: a.reason,
+    createdAt: String(a.created_at ?? ""),
+  }));
+
+  const bonusAdj = adjRows.filter(a => a.type === "bonus").reduce((s, a) => s + a.amount, 0);
+  const penaltyAdj = adjRows.filter(a => a.type === "penalty").reduce((s, a) => s + a.amount, 0);
 
   const weeklyBonus = parseFloat(String(rule?.weeklyOnTimeBonus ?? "50000"));
   const weeksOnTime = Math.floor(onTimeCount / 5);
+
+  // Build bonusPenalty array: one entry per week's bonus earned
+  const bonusPenalty: { type: string; amount: number; description: string; date: string }[] = [];
+  const [y, m] = month.split("-").map(Number);
+  for (let w = 0; w < weeksOnTime; w++) {
+    const weekEnd = new Date(y, m - 1, (w + 1) * 7);
+    bonusPenalty.push({
+      type: "bonus",
+      amount: weeklyBonus,
+      description: `Bonus đúng giờ tuần ${w + 1}`,
+      date: weekEnd.toISOString().slice(0, 10),
+    });
+  }
+
   const earnedBonus = weeksOnTime * weeklyBonus + bonusAdj;
 
   res.json({
     month,
+    logs,
+    bonusPenalty,
+    adjustments: adjRows,
     totalDays: checkIns.length,
     onTimeCount,
     onTimeRate: checkIns.length > 0 ? Math.round((onTimeCount / checkIns.length) * 100) : 0,
     earnedBonus,
     penalty: penaltyAdj,
     net: earnedBonus - penaltyAdj,
-    days,
-    adjustments: adjustmentsR.rows,
   });
 });
 
@@ -208,15 +235,23 @@ router.get("/attendance/admin", async (req, res) => {
 
 // ── Quy tắc chấm công ────────────────────────────────────────────────────────
 router.get("/attendance/rules", async (req, res) => {
-  const rules = await db.select().from(attendanceRulesTable).orderBy(attendanceRulesTable.id);
+  const [activeRule] = await db.select().from(attendanceRulesTable).where(eq(attendanceRulesTable.isActive, 1));
   const late = await db.select().from(attendanceLateRulesTable).orderBy(attendanceLateRulesTable.minutesLateMin);
-  const fmtRules = rules.map(r => ({
-    ...r, weeklyOnTimeBonus: parseFloat(String(r.weeklyOnTimeBonus)),
-  }));
   const fmtLate = late.map(l => ({
     ...l, penaltyAmount: l.penaltyAmount ? parseFloat(String(l.penaltyAmount)) : null,
   }));
-  res.json({ rules: fmtRules, lateRules: fmtLate });
+  // Map backend field names to frontend-expected contract
+  const rule = activeRule ? {
+    id: activeRule.id,
+    name: activeRule.name,
+    checkinStartTime: activeRule.checkInFrom ?? "07:30",
+    checkinEndTime: activeRule.checkInTo ?? "09:00",
+    workStartTime: "08:00",
+    checkoutTime: "17:30",
+    weeklyBonusAmount: parseFloat(String(activeRule.weeklyOnTimeBonus ?? "50000")),
+    isActive: activeRule.isActive,
+  } : null;
+  res.json({ rule, lateRules: fmtLate });
 });
 
 router.put("/attendance/rules", async (req, res) => {

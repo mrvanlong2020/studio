@@ -170,6 +170,24 @@ router.patch("/expenses/:id/approve", async (req, res) => {
   res.json(fmt(e));
 });
 
+// ── Task #12: Reject expense ──────────────────────────────────────────────────
+router.patch("/expenses/:id/reject", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
+  const callerR = await pool.query(`SELECT role, roles FROM staff WHERE id = $1`, [callerId]);
+  const caller = callerR.rows[0] as Record<string, unknown> | undefined;
+  const isAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
+  if (!isAdmin) return res.status(403).json({ error: "Không có quyền từ chối chi phí" });
+
+  const id = parseInt(req.params.id);
+  const [e] = await db.update(expensesTable)
+    .set({ status: "rejected", approvedByStaffId: null })
+    .where(eq(expensesTable.id, id))
+    .returning();
+  if (!e) return res.status(404).json({ error: "Không tìm thấy chi phí" });
+  res.json(fmt(e));
+});
+
 // ── Task #12: Mark as Paid ────────────────────────────────────────────────────
 router.patch("/expenses/:id/pay", async (req, res) => {
   const callerId = verifyToken(req.headers.authorization);

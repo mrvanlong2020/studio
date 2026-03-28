@@ -17,6 +17,8 @@ const fmtItem = (i: Record<string, unknown>) => ({
 // ── Task #10: Booking Items ─────────────────────────────────────────────────────
 
 router.get("/bookings/:id/items", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
   const bookingId = parseInt(req.params.id);
   if (isNaN(bookingId)) return res.status(400).json({ error: "ID không hợp lệ" });
   const items = await db.select().from(bookingItemsTable)
@@ -26,6 +28,8 @@ router.get("/bookings/:id/items", async (req, res) => {
 });
 
 router.post("/bookings/:id/items", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
   const bookingId = parseInt(req.params.id);
   if (isNaN(bookingId)) return res.status(400).json({ error: "ID không hợp lệ" });
   const { type = "addon", title, qty = 1, unitPrice = 0, soldByStaffId, notes } = req.body;
@@ -44,6 +48,8 @@ router.post("/bookings/:id/items", async (req, res) => {
 });
 
 router.put("/bookings/:id/items/:itemId", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
   const itemId = parseInt(req.params.itemId);
   const { title, qty, unitPrice, soldByStaffId, notes, isActive } = req.body;
   const update: Record<string, unknown> = {};
@@ -65,6 +71,8 @@ router.put("/bookings/:id/items/:itemId", async (req, res) => {
 
 // Nâng gói (upgrade): tạo upgrade_delta, deactivate old base_package, cập nhật total_amount
 router.post("/bookings/:id/upgrade", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
   const bookingId = parseInt(req.params.id);
   if (isNaN(bookingId)) return res.status(400).json({ error: "ID không hợp lệ" });
 
@@ -233,6 +241,8 @@ router.patch("/bookings/:id/reschedule", async (req, res) => {
 
 // Lấy lịch sử đổi lịch
 router.get("/bookings/:id/change-log", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
   const bookingId = parseInt(req.params.id);
   const logs = await db.select().from(bookingChangeLogTable)
     .where(eq(bookingChangeLogTable.bookingId, bookingId))
