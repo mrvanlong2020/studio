@@ -7,6 +7,20 @@ const router: IRouter = Router();
 async function ensureAuthColumns() {
   await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS password_hash TEXT`).catch(() => {});
   await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS username TEXT`).catch(() => {});
+
+  // Seed admin user if staff table is empty
+  const countR = await pool.query(`SELECT COUNT(*) as cnt FROM staff`);
+  const cnt = parseInt((countR.rows[0] as { cnt: string }).cnt, 10);
+  if (cnt === 0) {
+    const adminHash = await bcrypt.hash("123456", 10);
+    await pool.query(
+      `INSERT INTO staff (name, role, roles, phone, username, password_hash, is_active)
+       VALUES ('Admin', 'admin', '["admin"]', '0392817079', 'tranchi', $1, 1)`,
+      [adminHash]
+    );
+    console.log("[startup] Admin user seeded: username=tranchi");
+  }
+
   const r = await pool.query(`SELECT id, phone, password_hash FROM staff WHERE is_active = 1`);
   const updates: Promise<void>[] = [];
   for (const row of r.rows as { id: number; phone: string; password_hash: string | null }[]) {
