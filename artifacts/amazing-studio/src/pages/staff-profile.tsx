@@ -203,7 +203,9 @@ export default function StaffProfilePage() {
   const [notesForm, setNotesForm] = useState<Partial<InternalNotes>>({});
   const [jobDetailId, setJobDetailId] = useState<number | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState("");
   const [coverUploading, setCoverUploading] = useState(false);
+  const [coverError, setCoverError] = useState("");
   const [castSheet, setCastSheet] = useState(false);
   const [castNewRole, setCastNewRole] = useState("photographer");
   const [castPkgEdits, setCastPkgEdits] = useState<Record<number, string>>({}); // packageId → amount string
@@ -302,13 +304,28 @@ export default function StaffProfilePage() {
 
   const handleAvatarUpload = async (base64: string) => {
     setAvatarUploading(true);
+    setAvatarError("");
     try {
+      if (!base64.startsWith("data:image")) {
+        setAvatarError("Định dạng ảnh không hợp lệ");
+        setAvatarUploading(false);
+        return;
+      }
+      if (base64.length > 2097152) {
+        setAvatarError("Ảnh quá lớn (>2MB)");
+        setAvatarUploading(false);
+        return;
+      }
       await fetchJson(`/api/staff/${staffId}`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ avatar: base64 }),
       });
       qc.invalidateQueries({ queryKey: ["staff-profile", staffId] });
       qc.invalidateQueries({ queryKey: ["staff"] });
+    } catch (err: unknown) {
+      const msg = (err as Error)?.message || "Lỗi upload ảnh đại diện";
+      setAvatarError(msg);
+      console.error("Avatar upload error:", err);
     } finally {
       setAvatarUploading(false);
     }
@@ -330,13 +347,28 @@ export default function StaffProfilePage() {
 
   const handleCoverUpload = async (base64: string) => {
     setCoverUploading(true);
+    setCoverError("");
     try {
+      if (!base64.startsWith("data:image")) {
+        setCoverError("Định dạng ảnh không hợp lệ");
+        setCoverUploading(false);
+        return;
+      }
+      if (base64.length > 2097152) {
+        setCoverError("Ảnh quá lớn (>2MB)");
+        setCoverUploading(false);
+        return;
+      }
       await fetchJson(`/api/staff/${staffId}`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ coverImageUrl: base64 }),
       });
       qc.invalidateQueries({ queryKey: ["staff-profile", staffId] });
       qc.invalidateQueries({ queryKey: ["staff"] });
+    } catch (err: unknown) {
+      const msg = (err as Error)?.message || "Lỗi upload ảnh bìa";
+      setCoverError(msg);
+      console.error("Cover upload error:", err);
     } finally {
       setCoverUploading(false);
     }
@@ -346,14 +378,27 @@ export default function StaffProfilePage() {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
+    setCoverError("");
+    if (!file.type.startsWith("image/")) {
+      setCoverError("Vui lòng chọn file ảnh");
+      return;
+    }
+    if (file.size > 2097152) {
+      setCoverError("Ảnh quá lớn (>2MB)");
+      return;
+    }
     try {
       const reader = new FileReader();
+      reader.onerror = () => {
+        setCoverError("Lỗi đọc file");
+      };
       reader.onload = async (evt) => {
         const base64 = evt.target?.result as string;
         await handleCoverUpload(base64);
       };
       reader.readAsDataURL(file);
     } catch (err) {
+      setCoverError("Lỗi upload ảnh bìa");
       console.error("Cover upload error:", err);
     }
   };
@@ -441,10 +486,21 @@ export default function StaffProfilePage() {
     if (!file) return;
     e.target.value = "";
     setProfileMenuOpen(false);
+    setAvatarError("");
+    if (!file.type.startsWith("image/")) {
+      setAvatarError("Vui lòng chọn file ảnh");
+      return;
+    }
+    if (file.size > 2097152) {
+      setAvatarError("Ảnh quá lớn (>2MB)");
+      return;
+    }
     try {
       const compressed = await compressStaffAvatar(file);
       await handleAvatarUpload(compressed);
-    } catch (err) {
+    } catch (err: unknown) {
+      const msg = (err as Error)?.message || "Lỗi xử lý ảnh";
+      setAvatarError(msg);
       console.error("Avatar compress error:", err);
     }
   };
@@ -498,7 +554,7 @@ export default function StaffProfilePage() {
         >
           <div
             className={cn(
-              "h-24 sm:h-28 rounded-t-2xl bg-gradient-to-br opacity-90 overflow-hidden relative",
+              "h-[280px] sm:h-[320px] rounded-t-2xl bg-gradient-to-br overflow-hidden relative",
               COVER_GRADIENT[rolesDisplay[0]] ?? "from-primary/60 via-primary/30 to-primary/10"
             )}
           >
@@ -510,16 +566,21 @@ export default function StaffProfilePage() {
               />
             )}
             
+            {/* Gradient overlay for text contrast */}
+            {coverImageUrl && (
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/10" />
+            )}
+            
             {/* Uploading overlay */}
             {coverUploading && (
-              <div className="absolute inset-0 bg-black/45 flex items-center justify-center">
+              <div className="absolute inset-0 bg-black/45 flex items-center justify-center z-20">
                 <div className="w-6 h-6 border-[3px] border-white border-t-transparent rounded-full animate-spin" />
               </div>
             )}
             
             {/* Hover edit overlay */}
             {!coverUploading && canEdit && (
-              <div className="absolute inset-0 bg-black/0 hover:bg-black/25 transition-colors flex items-center justify-center group">
+              <div className="absolute inset-0 bg-black/0 hover:bg-black/25 transition-colors flex items-center justify-center group z-10">
                 <Camera size={24} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
             )}
@@ -531,7 +592,7 @@ export default function StaffProfilePage() {
           <div className="flex items-start gap-3 sm:gap-5">
 
             {/* ── Avatar column ─────────────────────────────────────────── */}
-            <div className="relative flex-shrink-0 -mt-14 sm:-mt-16">
+            <div className="relative flex-shrink-0 -mt-20 sm:-mt-24">
               {/* Circle */}
               <button
                 type="button"
@@ -545,9 +606,9 @@ export default function StaffProfilePage() {
               >
                 <div
                   className={cn(
-                    "w-32 h-32 sm:w-40 sm:h-40 rounded-full overflow-hidden",
-                    "ring-[3px] ring-white shadow-[0_8px_32px_rgba(0,0,0,0.20)]",
-                    "border-2 border-primary/20",
+                    "w-40 h-40 sm:w-48 sm:h-48 rounded-full overflow-hidden",
+                    "ring-[4px] ring-white shadow-[0_12px_48px_rgba(0,0,0,0.25)]",
+                    "border-4 border-white",
                     `bg-gradient-to-br ${AVATAR_GRADIENT[rolesDisplay[0]] ?? "from-slate-400 to-gray-500"}`
                   )}
                 >
@@ -650,6 +711,14 @@ export default function StaffProfilePage() {
 
             {/* ── Info column ───────────────────────────────────────────── */}
             <div className="flex-1 min-w-0 pt-3 sm:pt-4">
+              {/* Error messages */}
+              {(avatarError || coverError) && (
+                <div className="mb-3 p-2.5 bg-red-50 border border-red-200 rounded-lg">
+                  {avatarError && <p className="text-xs text-red-700 font-medium">{avatarError}</p>}
+                  {coverError && <p className="text-xs text-red-700 font-medium">{coverError}</p>}
+                </div>
+              )}
+              
               {/* Name + status badge */}
               <div className="flex items-start justify-between gap-2">
                 <h1 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight">{staff.name}</h1>
