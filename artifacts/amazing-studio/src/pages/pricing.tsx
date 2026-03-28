@@ -849,6 +849,9 @@ function PackageModal({
     setSaving(true);
     setError("");
     try {
+      const tok = localStorage.getItem("amazingStudioToken_v2");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (tok) headers["Authorization"] = `Bearer ${tok}`;
       const body = {
         ...form,
         groupId: form.groupId ? parseInt(form.groupId) : null,
@@ -862,7 +865,7 @@ function PackageModal({
       const url = pkg ? `${BASE}/api/service-packages/${pkg.id}` : `${BASE}/api/service-packages`;
       const resp = await fetch(url, {
         method: pkg ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(body),
       });
       if (!resp.ok) throw new Error("Lỗi lưu gói");
@@ -1089,10 +1092,13 @@ function SurchargeModal({ surcharge, onClose, onSaved }: {
     if (!form.name.trim()) { setError("Vui lòng nhập tên phụ phí"); return; }
     setSaving(true); setError("");
     try {
+      const tok = localStorage.getItem("amazingStudioToken_v2");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (tok) headers["Authorization"] = `Bearer ${tok}`;
       const url = surcharge ? `${BASE}/api/surcharges/${surcharge.id}` : `${BASE}/api/surcharges`;
       const resp = await fetch(url, {
         method: surcharge ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ ...form, price: parseFloat(form.price) || 0 }),
       });
       if (!resp.ok) throw new Error("Lỗi lưu phụ phí");
@@ -1166,10 +1172,13 @@ function GroupModal({ group, onClose, onSaved }: {
     if (!form.name.trim()) { setError("Vui lòng nhập tên nhóm"); return; }
     setSaving(true); setError("");
     try {
+      const tok = localStorage.getItem("amazingStudioToken_v2");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (tok) headers["Authorization"] = `Bearer ${tok}`;
       const url = group ? `${BASE}/api/service-groups/${group.id}` : `${BASE}/api/service-groups`;
       const resp = await fetch(url, {
         method: group ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ ...form, sortOrder: parseInt(form.sortOrder) || 0 }),
       });
       if (resp.status === 409) {

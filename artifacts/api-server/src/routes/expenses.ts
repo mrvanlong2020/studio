@@ -90,7 +90,7 @@ router.post("/expenses", async (req, res) => {
   const { type, category, amount, description, bookingId, paymentMethod, expenseDate, receiptUrl, createdBy, notes, bankName, bankAccount, status: bodyStatus } = req.body;
   const expenseCode = genCode();
 
-  // Nhân viên tự nộp → status = "submitted", admin tạo → "approved"
+  // Nhân viên tự nộp → status LUÔN = "submitted" (bỏ qua bodyStatus), admin tạo → "approved"
   let status = "approved";
   let createdByStaffId: number | null = null;
   if (callerId) {
@@ -98,7 +98,7 @@ router.post("/expenses", async (req, res) => {
     const caller = callerR.rows[0] as Record<string, unknown> | undefined;
     const isAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
     if (!isAdmin) {
-      status = bodyStatus || "submitted";
+      status = "submitted";
       createdByStaffId = callerId;
     }
   }
