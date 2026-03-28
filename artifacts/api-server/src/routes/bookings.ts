@@ -32,6 +32,7 @@ const bookingFields = {
   serviceLabel: bookingsTable.serviceLabel,
   isParentContract: bookingsTable.isParentContract,
   photoCount: bookingsTable.photoCount,
+  includedRetouchedPhotosSnapshot: bookingsTable.includedRetouchedPhotosSnapshot,
   createdAt: bookingsTable.createdAt,
 };
 
@@ -98,7 +99,7 @@ router.post("/bookings", async (req, res) => {
   const {
     customerId, shootDate, shootTime, serviceCategory, packageType, location,
     totalAmount, depositAmount, discountAmount, items, surcharges, notes, internalNotes,
-    assignedStaff, parentId, serviceLabel, isParentContract,
+    assignedStaff, parentId, serviceLabel, isParentContract, includedRetouchedPhotosSnapshot,
     // Deposit payment fields
     depositPaymentMethod, depositCollector,
     // Multi-service contract support
@@ -222,6 +223,7 @@ router.post("/bookings", async (req, res) => {
       parentId: parentId || null,
       serviceLabel: serviceLabel || null,
       isParentContract: isParentContract || false,
+      includedRetouchedPhotosSnapshot: includedRetouchedPhotosSnapshot != null ? parseInt(String(includedRetouchedPhotosSnapshot)) : 0,
       status: "pending",
     })
     .returning();
@@ -354,7 +356,7 @@ router.put("/bookings/:id", async (req, res) => {
   const {
     shootDate, shootTime, serviceCategory, packageType, location, status,
     totalAmount, depositAmount, discountAmount, items, surcharges, notes, internalNotes,
-    assignedStaff, parentId, serviceLabel, isParentContract, photoCount,
+    assignedStaff, parentId, serviceLabel, isParentContract, photoCount, includedRetouchedPhotosSnapshot,
   } = req.body;
 
   const updateData: Record<string, unknown> = {};
@@ -376,6 +378,7 @@ router.put("/bookings/:id", async (req, res) => {
   if (serviceLabel !== undefined) updateData.serviceLabel = serviceLabel;
   if (isParentContract !== undefined) updateData.isParentContract = isParentContract;
   if (photoCount !== undefined) updateData.photoCount = photoCount !== null ? parseInt(String(photoCount)) : null;
+  if (includedRetouchedPhotosSnapshot !== undefined) updateData.includedRetouchedPhotosSnapshot = parseInt(String(includedRetouchedPhotosSnapshot)) || 0;
 
   if (Object.keys(updateData).length > 0) {
     const payments = await db.select().from(paymentsTable).where(eq(paymentsTable.bookingId, id));

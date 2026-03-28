@@ -904,6 +904,7 @@ function CreateBookingForm({ customers, onSuccess, onCancel }: {
           depositAmount: parseFloat(form.depositAmount || "0"),
           discountAmount: parseFloat(form.discountAmount || "0"),
           surcharges: cleanedSurcharges,
+          includedRetouchedPhotosSnapshot: selectedService?.includedRetouchedPhotos ?? 0,
         }),
       });
       onSuccess();

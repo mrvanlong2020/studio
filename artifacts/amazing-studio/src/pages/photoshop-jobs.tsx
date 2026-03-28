@@ -29,6 +29,7 @@ type PhotoshopJob = {
   notes: string;
   isActive: boolean;
   createdAt: string;
+  includedCount: number | null;
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
@@ -366,6 +367,11 @@ export default function PhotoshopJobsPage() {
                         {job.customerDeadline && (
                           <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${dlInfo.cls || "text-muted-foreground border-border"}`}>
                             👤 Khách: {formatDate(job.customerDeadline)} {dlInfo.label && `(${dlInfo.label})`}
+                          </span>
+                        )}
+                        {job.includedCount != null && job.includedCount > 0 && (
+                          <span className="text-xs px-2 py-0.5 rounded-full border font-medium text-violet-600 bg-violet-50 border-violet-200 dark:bg-violet-950/30 dark:border-violet-800">
+                            🖼️ Ảnh hậu kỳ gói: {job.includedCount} ảnh
                           </span>
                         )}
                       </div>

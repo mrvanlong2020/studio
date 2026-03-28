@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { photoshopJobsTable } from "@workspace/db/schema";
-import { eq, desc, ilike, or } from "drizzle-orm";
+import { photoshopJobsTable, bookingsTable } from "@workspace/db/schema";
+import { eq, desc, ilike, or, inArray } from "drizzle-orm";
 
 const router = Router();
 
@@ -18,7 +18,21 @@ router.get("/photoshop-jobs", async (req, res) => {
         (r.assignedStaffName ?? "").toLowerCase().includes(q)
       );
     }
-    res.json(rows);
+    // Join includedRetouchedPhotosSnapshot from linked bookings
+    const bookingIds = rows.map(r => r.bookingId).filter((id): id is number => id != null);
+    let includedMap: Record<number, number> = {};
+    if (bookingIds.length > 0) {
+      const bRows = await db
+        .select({ id: bookingsTable.id, snap: bookingsTable.includedRetouchedPhotosSnapshot })
+        .from(bookingsTable)
+        .where(inArray(bookingsTable.id, bookingIds));
+      includedMap = Object.fromEntries(bRows.map(b => [b.id, b.snap ?? 0]));
+    }
+    const result = rows.map(r => ({
+      ...r,
+      includedCount: r.bookingId != null ? (includedMap[r.bookingId] ?? null) : null,
+    }));
+    res.json(result);
   } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 

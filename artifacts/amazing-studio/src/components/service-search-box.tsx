@@ -29,6 +29,7 @@ export type ServiceOption = {
   serviceType?: string | null;
   includesMakeup?: boolean;
   photoCount?: number | null;
+  includedRetouchedPhotos?: number | null;
   printCost?: number;
   operatingCost?: number;
   salePercent?: number;
@@ -159,6 +160,7 @@ export function ServiceSearchBox({
     serviceType: p.serviceType ?? null,
     includesMakeup: p.includesMakeup !== false && p.includesMakeup !== 0,
     photoCount: p.photoCount ?? null,
+    includedRetouchedPhotos: p.includedRetouchedPhotos ?? 0,
     printCost: parseFloat(p.printCost) || 0,
     operatingCost: parseFloat(p.operatingCost) || 0,
     salePercent: parseFloat(p.salePercent) || 0,
