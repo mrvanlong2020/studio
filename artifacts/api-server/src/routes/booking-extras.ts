@@ -182,6 +182,7 @@ router.patch("/bookings/:id/reschedule", async (req, res) => {
       // Tìm buổi chụp khác cùng ngày/giờ có chung nhân viên được phân công.
       // Nếu newTime được cung cấp: conflict khi trùng ngày VÀ (trùng giờ hoặc giờ bên kia NULL).
       // Nếu không có newTime: conflict khi trùng ngày.
+      // Dùng jsonb_each để duyệt toàn bộ các key gán nhân viên (bỏ *Task và giá trị không phải số).
       const conflictR = await pool.query(`
         SELECT b.id, b.shoot_date, b.shoot_time, c.name AS customer_name,
           (
@@ -189,12 +190,15 @@ router.patch("/bookings/:id/reschedule", async (req, res) => {
             FROM staff s
             WHERE s.id = ANY($3::int[])
               AND (
-                b.assigned_staff @> to_jsonb(s.id)
-                OR (b.assigned_staff->>'photo')::int      = s.id
-                OR (b.assigned_staff->>'photographer')::int = s.id
-                OR (b.assigned_staff->>'makeup')::int     = s.id
-                OR (b.assigned_staff->>'sale')::int       = s.id
-                OR (b.assigned_staff->>'photoshop')::int  = s.id
+                (jsonb_typeof(b.assigned_staff) = 'array'
+                  AND b.assigned_staff @> to_jsonb(s.id))
+                OR (jsonb_typeof(b.assigned_staff) = 'object'
+                  AND EXISTS (
+                    SELECT 1 FROM jsonb_each(b.assigned_staff) kv
+                    WHERE kv.key NOT LIKE '%Task'
+                      AND kv.value::text ~ '^[0-9]+$'
+                      AND (kv.value::text)::int = s.id
+                  ))
               )
           ) AS conflicting_staff_names
         FROM bookings b
@@ -208,19 +212,22 @@ router.patch("/bookings/:id/reschedule", async (req, res) => {
             OR b.shoot_time = $4::text
           )
           AND (
-            SELECT COUNT(*) FROM staff s2
-            WHERE s2.id = ANY($3::int[])
-              AND (
-                b.assigned_staff @> to_jsonb(s2.id)
-                OR (b.assigned_staff->>'photo')::int      = s2.id
-                OR (b.assigned_staff->>'photographer')::int = s2.id
-                OR (b.assigned_staff->>'makeup')::int     = s2.id
-                OR (b.assigned_staff->>'sale')::int       = s2.id
-                OR (b.assigned_staff->>'photoshop')::int  = s2.id
-              )
-          ) > 0
+            (jsonb_typeof(b.assigned_staff) = 'array'
+              AND EXISTS (
+                SELECT 1 FROM jsonb_array_elements(b.assigned_staff) elem
+                WHERE elem::text ~ '^[0-9]+$'
+                  AND elem::text::int = ANY($3::int[])
+              ))
+            OR (jsonb_typeof(b.assigned_staff) = 'object'
+              AND EXISTS (
+                SELECT 1 FROM jsonb_each(b.assigned_staff) kv
+                WHERE kv.key NOT LIKE '%Task'
+                  AND kv.value::text ~ '^[0-9]+$'
+                  AND (kv.value::text)::int = ANY($3::int[])
+              ))
+          )
         LIMIT 3
-      `, [newDate, bookingId, staffIds, newTime || null]);
+      `, [newDate, bookingId, staffIds, newTime !== undefined ? (newTime || null) : null]);
 
       if (conflictR.rows.length > 0) {
         const conflicts = conflictR.rows as {
@@ -252,9 +259,12 @@ router.patch("/bookings/:id/reschedule", async (req, res) => {
     changedById: callerId,
   });
 
-  // Cập nhật shoot_date và shoot_time trên booking
+  // Cập nhật shoot_date và shoot_time:
+  // - newTime là chuỗi có giá trị => dùng newTime
+  // - newTime là "" hoặc null/undefined => giữ nguyên giờ cũ (không xóa)
+  const resolvedTime = newTime !== undefined && newTime !== "" ? newTime : (booking.shootTime ?? null);
   const [updated] = await db.update(bookingsTable)
-    .set({ shootDate: newDate, shootTime: newTime || booking.shootTime })
+    .set({ shootDate: newDate, shootTime: resolvedTime })
     .where(eq(bookingsTable.id, bookingId))
     .returning();
 
