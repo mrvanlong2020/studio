@@ -1385,7 +1385,7 @@ function generateContractHTML(booking: Booking, siblings: Booking[], allPackages
   const isMulti = allServices.length > 1;
 
   const totalAmount = allServices.reduce((s, b) => s + (parseFloat(String(b.totalAmount ?? 0)) || 0), 0);
-  const paidAmount  = allServices.reduce((s, b) => s + (parseFloat(String(b.depositAmount ?? 0)) || 0), 0);
+  const paidAmount  = parseFloat(String(booking.depositAmount ?? 0)) || 0;
   const remainingAmount = Math.max(0, totalAmount - paidAmount);
 
   // ── Lịch chụp section ─────────────────────────────────────────────────────
