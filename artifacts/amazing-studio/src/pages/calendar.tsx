@@ -15,7 +15,7 @@ import {
   ChevronLeft, ChevronRight, Calendar, Clock, Phone, Package2, Sun, Moon,
   AlertCircle, Plus, X, Check, Camera, User, Sparkles,
   ChevronDown, Trash2, Save, MapPin, CreditCard, ArrowLeft,
-  Pencil, ShieldCheck, Eye, FileText,
+  Pencil, ShieldCheck, Eye, FileText, CalendarDays,
 } from "lucide-react";
 import { Button, Input } from "@/components/ui";
 import { ServiceSearchBox } from "@/components/service-search-box";
@@ -1656,6 +1656,13 @@ function ShowDetailPanel({
   const [deleting, setDeleting] = useState(false);
   const [previewImg, setPreviewImg] = useState<string | null>(null);
 
+  const [showReschedule, setShowReschedule] = useState(false);
+  const [rescheduleForm, setRescheduleForm] = useState({ newDate: booking.shootDate, newTime: booking.shootTime || "", reason: "" });
+  const [rescheduleError, setRescheduleError] = useState<string | null>(null);
+  const [rescheduleConflicts, setRescheduleConflicts] = useState<{ customerName: string; date: string; time: string }[]>([]);
+  const [rescheduling, setRescheduling] = useState(false);
+  const token = localStorage.getItem("amazingStudioToken_v2");
+
   const st = STATUS[booking.status as keyof typeof STATUS] ?? STATUS.pending;
 
   // Parse assignedStaff — might be object or array
@@ -1729,6 +1736,20 @@ function ShowDetailPanel({
           {isAdmin ? <ShieldCheck className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
           {isAdmin ? "Admin" : "Nhân viên"}
         </div>
+        {["confirmed", "in_progress", "pending"].includes(booking.status) && (
+          <button
+            onClick={() => {
+              setShowReschedule(true);
+              setRescheduleForm({ newDate: booking.shootDate, newTime: booking.shootTime || "", reason: "" });
+              setRescheduleError(null);
+              setRescheduleConflicts([]);
+            }}
+            className="p-1.5 rounded-lg text-sky-500 hover:text-sky-700 hover:bg-sky-50 dark:hover:bg-sky-950/30 transition-colors flex-shrink-0"
+            title="Đổi lịch chụp"
+          >
+            <CalendarDays className="w-4 h-4" />
+          </button>
+        )}
         <button
           onClick={handlePrintContract}
           className="p-1.5 rounded-lg text-violet-500 hover:text-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950/30 transition-colors flex-shrink-0"
@@ -2115,6 +2136,106 @@ function ShowDetailPanel({
           >
             <X className="w-5 h-5" />
           </button>
+        </div>
+      )}
+
+      {/* Đổi lịch Modal */}
+      {showReschedule && (
+        <div
+          className="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center p-4"
+          onClick={() => setShowReschedule(false)}
+        >
+          <div
+            className="bg-background rounded-2xl shadow-2xl p-5 w-full max-w-sm space-y-3"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <CalendarDays className="w-5 h-5 text-primary" />
+              <h3 className="font-bold text-base">Đổi lịch chụp</h3>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Ngày mới *</label>
+              <input
+                type="date"
+                className="w-full mt-1 h-9 px-3 border border-input rounded-lg bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary/20"
+                value={rescheduleForm.newDate}
+                onChange={e => setRescheduleForm(f => ({ ...f, newDate: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Giờ mới</label>
+              <input
+                type="time"
+                className="w-full mt-1 h-9 px-3 border border-input rounded-lg bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary/20"
+                value={rescheduleForm.newTime}
+                onChange={e => setRescheduleForm(f => ({ ...f, newTime: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Lý do đổi lịch</label>
+              <textarea
+                rows={2}
+                placeholder="Nhập lý do..."
+                className="w-full mt-1 px-3 py-2 border border-input rounded-lg bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary/20 resize-none"
+                value={rescheduleForm.reason}
+                onChange={e => setRescheduleForm(f => ({ ...f, reason: e.target.value }))}
+              />
+            </div>
+            {rescheduleError && (
+              <div className="rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm px-3 py-2">{rescheduleError}</div>
+            )}
+            {rescheduleConflicts.length > 0 && (
+              <div className="rounded-lg bg-orange-50 border border-orange-200 text-sm px-3 py-2 space-y-1">
+                <p className="font-semibold text-orange-800">⚠️ Xung đột lịch:</p>
+                {rescheduleConflicts.map((c, i) => (
+                  <p key={i} className="text-orange-700 text-xs">
+                    • {c.customerName} — {c.date}{c.time ? " " + c.time.slice(0, 5) : ""}
+                  </p>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2 pt-1">
+              <Button
+                className="flex-1"
+                disabled={!rescheduleForm.newDate || rescheduling}
+                onClick={async () => {
+                  setRescheduleError(null);
+                  setRescheduleConflicts([]);
+                  setRescheduling(true);
+                  try {
+                    const res = await fetch(`${BASE}/api/bookings/${booking.id}/reschedule`, {
+                      method: "PATCH",
+                      headers: {
+                        "Content-Type": "application/json",
+                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                      },
+                      body: JSON.stringify(rescheduleForm),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) {
+                      if (res.status === 409 && data.conflicts) {
+                        setRescheduleConflicts(data.conflicts);
+                        setRescheduleError(data.error || "Xung đột lịch với nhân viên đã phân công");
+                      } else {
+                        setRescheduleError(data.error || "Lỗi đổi lịch");
+                      }
+                    } else {
+                      qc.invalidateQueries({ queryKey: ["bookings"] });
+                      qc.invalidateQueries({ queryKey: ["booking-full", booking.id] });
+                      setShowReschedule(false);
+                    }
+                  } catch {
+                    setRescheduleError("Lỗi kết nối, vui lòng thử lại");
+                  } finally {
+                    setRescheduling(false);
+                  }
+                }}
+              >
+                {rescheduling ? "Đang lưu..." : "Xác nhận đổi lịch"}
+              </Button>
+              <Button variant="outline" onClick={() => setShowReschedule(false)}>Hủy</Button>
+            </div>
+          </div>
         </div>
       )}
     </div>
