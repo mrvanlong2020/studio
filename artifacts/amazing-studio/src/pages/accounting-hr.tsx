@@ -13,6 +13,8 @@ const getAuthHeaders = (): Record<string, string> => {
 };
 const fetchJson = (url: string, opts?: RequestInit) =>
   fetch(`${BASE}${url}`, { ...opts, headers: { "Content-Type": "application/json", ...getAuthHeaders(), ...(opts?.headers as Record<string, string> ?? {}) } }).then(r => r.json());
+const fetchArray = (url: string) =>
+  fetchJson(url).then((d: unknown) => Array.isArray(d) ? d : []).catch(() => []);
 
 const EXPENSE_CAT: Record<string, string> = {
   salary: "Lương nhân viên", equipment: "Thiết bị", transport: "Đi lại",
@@ -38,12 +40,12 @@ export default function AccountingHrPage() {
 
   const { data: expenses = [] } = useQuery<any[]>({
     queryKey: ["expenses"],
-    queryFn: () => fetchJson("/api/expenses"),
+    queryFn: () => fetchArray("/api/expenses"),
   });
 
   const { data: payrolls = [] } = useQuery<any[]>({
     queryKey: ["payrolls"],
-    queryFn: () => fetchJson("/api/payrolls"),
+    queryFn: () => fetchArray("/api/payrolls"),
   });
 
   // Expense form

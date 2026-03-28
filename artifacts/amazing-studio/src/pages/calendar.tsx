@@ -749,16 +749,16 @@ function ShowFormPanel({
   const addSubDraft = () =>
     setSubDrafts(p => [...p, { id: genId(), serviceLabel: "", shootDate: shootDate, shootTime: "08:00", items: [emptyOrderLine()], photoId: null, photoName: "", photoTask: "", makeupId: null, makeupName: "", makeupTask: "", notes: "" }]);
 
-  const { data: allStaff = [] } = useQuery<Staff[]>({ queryKey: ["staff"], queryFn: () => authFetch(`${BASE}/api/staff`).then(r => r.ok ? r.json() : []) });
-  const { data: services = [] } = useQuery<Service[]>({ queryKey: ["services"], queryFn: () => authFetch(`${BASE}/api/services`).then(r => r.json()) });
+  const { data: allStaff = [] } = useQuery<Staff[]>({ queryKey: ["staff"], queryFn: () => authFetch(`${BASE}/api/staff`).then(r => r.ok ? r.json() : []).then((d: unknown) => Array.isArray(d) ? d : []) });
+  const { data: services = [] } = useQuery<Service[]>({ queryKey: ["services"], queryFn: () => authFetch(`${BASE}/api/services`).then(r => r.ok ? r.json() : []).then((d: unknown) => Array.isArray(d) ? d : []) });
   const { data: pricingPackages = [] } = useQuery<{
     id: number; name: string; price: number;
     printCost: number; operatingCost: number; salePercent: number;
     items?: PkgItem[]; addons?: Addon[]; products?: string[]; description?: string | null; notes?: string | null;
     serviceType?: string | null; photoCount?: number | null; includesMakeup?: boolean;
-  }[]>({ queryKey: ["service-packages"], queryFn: () => authFetch(`${BASE}/api/service-packages`).then(r => r.json()) });
-  const { data: allStaffRates = [] } = useQuery<StaffRate[]>({ queryKey: ["staff-rates"], queryFn: () => authFetch(`${BASE}/api/staff-rates`).then(r => r.json()) });
-  const { data: allCastRates = [] } = useQuery<CastRatePkg[]>({ queryKey: ["staff-cast-all"], queryFn: () => authFetch(`${BASE}/api/staff-cast`).then(r => r.json()), staleTime: 60_000 });
+  }[]>({ queryKey: ["service-packages"], queryFn: () => authFetch(`${BASE}/api/service-packages`).then(r => r.ok ? r.json() : []).then((d: unknown) => Array.isArray(d) ? d : []) });
+  const { data: allStaffRates = [] } = useQuery<StaffRate[]>({ queryKey: ["staff-rates"], queryFn: () => authFetch(`${BASE}/api/staff-rates`).then(r => r.ok ? r.json() : []).then((d: unknown) => Array.isArray(d) ? d : []) });
+  const { data: allCastRates = [] } = useQuery<CastRatePkg[]>({ queryKey: ["staff-cast-all"], queryFn: () => authFetch(`${BASE}/api/staff-cast`).then(r => r.ok ? r.json() : []).then((d: unknown) => Array.isArray(d) ? d : []), staleTime: 60_000 });
 
   // Support both old single-role and new multi-role staff
   const hasRole = (s: Staff, role: string) => s.roles?.includes(role) || s.role === role;
@@ -1640,12 +1640,12 @@ function ShowDetailPanel({
   const qc = useQueryClient();
   const { data: allStaff = [] } = useQuery<Staff[]>({
     queryKey: ["staff"],
-    queryFn: () => authFetch(`${BASE}/api/staff`).then(r => r.ok ? r.json() : []),
+    queryFn: () => authFetch(`${BASE}/api/staff`).then(r => r.ok ? r.json() : []).then((d: unknown) => Array.isArray(d) ? d : []),
     staleTime: 60_000,
   });
   const { data: allPackages = [] } = useQuery<DetailPackage[]>({
     queryKey: ["service-packages"],
-    queryFn: () => authFetch(`${BASE}/api/service-packages`).then(r => r.json()),
+    queryFn: () => authFetch(`${BASE}/api/service-packages`).then(r => r.ok ? r.json() : []).then((d: unknown) => Array.isArray(d) ? d : []),
     staleTime: 60_000,
   });
 
