@@ -8,14 +8,19 @@ import { eq, desc, and } from "drizzle-orm";
 import { verifyToken } from "./auth";
 import { createHmac, timingSafeEqual } from "crypto";
 
-const QR_SECRET = process.env.SESSION_SECRET ?? "amazing-studio-secret-2025";
+const QR_SECRET = process.env.SESSION_SECRET;
+if (!QR_SECRET) {
+  console.error("[ATTENDANCE] WARNING: SESSION_SECRET is not set. QR token generation is disabled.");
+}
 
 function generateQrToken(dateStr: string): string {
+  if (!QR_SECRET) throw new Error("SESSION_SECRET not configured");
   const sig = createHmac("sha256", QR_SECRET).update(`qr:${dateStr}`).digest("hex").slice(0, 16);
   return `AMAZING-QR-${dateStr}-${sig}`;
 }
 
 function verifyQrToken(payload: string): boolean {
+  if (!QR_SECRET) return false;
   const match = payload.match(/^AMAZING-QR-(\d{4}-\d{2}-\d{2})-([0-9a-f]{16})$/);
   if (!match) return false;
   const [, dateStr, providedSig] = match;
@@ -113,10 +118,8 @@ router.post("/attendance/check-in", async (req, res) => {
       }
     }
   } else {
-    // No GPS provided: QR is required (no way to verify location)
-    if (!qrVerified) {
-      return res.status(400).json({ error: "Vui lòng quét mã QR hoặc cấp phép vị trí GPS để chấm công." });
-    }
+    // No GPS provided — GPS location is always required for self-service check-in
+    return res.status(400).json({ error: "Vui lòng cấp quyền GPS để chấm công. QR + GPS đều cần thiết." });
   }
 
   // Kiểm tra đã check-in hôm nay chưa
@@ -173,10 +176,17 @@ router.post("/attendance/check-out", async (req, res) => {
     return res.status(400).json({ error: "Bạn đã check-out hôm nay rồi" });
   }
 
+  // Derive checkout method from the same-day check-in record
+  const checkInR = await pool.query(
+    `SELECT method FROM attendance_logs WHERE staff_id = $1 AND type = 'check_in' AND created_at::date = $2::date LIMIT 1`,
+    [callerId, today]
+  );
+  const checkoutMethod: "qr" | "offsite" | "manual" = (checkInR.rows[0] as { method: string } | undefined)?.method as "qr" | "offsite" | "manual" ?? "qr";
+
   const [log] = await db.insert(attendanceLogsTable).values({
     staffId: callerId,
     type: "check_out",
-    method: "qr",
+    method: checkoutMethod,
     lat: lat !== undefined ? String(lat) : null,
     lng: lng !== undefined ? String(lng) : null,
     accuracyM: accuracyM !== undefined ? String(accuracyM) : null,
