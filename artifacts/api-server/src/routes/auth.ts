@@ -35,7 +35,7 @@ ensureAuthColumns().catch(console.error);
 
 const JWT_SECRET = process.env.SESSION_SECRET ?? "amazing-studio-secret-2025";
 
-function verifyToken(header: string | undefined): number | null {
+export function verifyToken(header: string | undefined): number | null {
   if (!header?.startsWith("Bearer ")) return null;
   try {
     const token = header.slice(7);

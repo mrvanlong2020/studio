@@ -23,6 +23,7 @@ import ExpensesPage from "@/pages/expenses";
 import RevenuePage from "@/pages/revenue";
 import PhotoshopJobsPage from "@/pages/photoshop-jobs";
 import InternalCommsPage from "@/pages/internal-comms";
+import MyProfilePage from "@/pages/my-profile";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
 import { StaffAuthProvider, useStaffAuth } from "@/contexts/StaffAuthContext";

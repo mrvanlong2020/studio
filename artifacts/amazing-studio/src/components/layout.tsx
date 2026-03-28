@@ -7,14 +7,16 @@ import {
   Moon, LogOut, Bell, Wallet, UserPlus, Menu,
   ClipboardList, ScrollText, TrendingUp, LayoutList, UserCog,
   CreditCard, Film, MessageSquare, ChevronDown, Shield, Eye,
-  Camera, Palette, Layers, Banknote, Star, TrendingDown
+  Camera, Palette, Layers, Banknote, Star, TrendingDown, User
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useStaffAuth, type SimulateRole } from "@/contexts/StaffAuthContext";
+import StaffAvatar from "./StaffAvatar";
 
 // ─── Navigation Items ──────────────────────────────────────────────────────────
 const ALL_NAV_ITEMS = [
   { href: "/",                label: "Tổng quan",           icon: LayoutDashboard, adminOnly: true  },
+  { href: "/my-profile",      label: "Hồ sơ của tôi",       icon: User,            adminOnly: false },
   { href: "/calendar",        label: "Lịch chụp",            icon: CalendarDays,    adminOnly: false },
   { href: "/customers",       label: "Khách hàng",           icon: Users,           adminOnly: false },
   { href: "/bookings",        label: "Đơn hàng",             icon: ClipboardList,   adminOnly: false },
@@ -121,11 +123,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <button
             onClick={() => setShowRoleMenu(v => !v)}
             className="w-full flex items-center gap-3 p-3 rounded-xl bg-accent/50 border border-accent/20 hover:bg-accent/80 transition-colors group">
-            <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
-              {simulateRole
-                ? (() => { const r = SIMULATE_ROLES.find(x => x.key === simulateRole); return r ? <r.icon className={cn("w-4 h-4", r.color)} /> : "NV"; })()
-                : viewMode === "admin" ? <Shield className="w-4 h-4 text-emerald-600" /> : <Eye className="w-4 h-4 text-blue-600" />
-              }
+            <div className="flex-shrink-0">
+              {viewer ? (
+                <StaffAvatar
+                  name={viewer.name ?? "?"}
+                  avatar={(viewer as Record<string, unknown>).avatar as string | undefined}
+                  role={viewer.role ?? "assistant"}
+                  status="active"
+                  size="md"
+                />
+              ) : (
+                <div className="h-11 w-11 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
+                  {simulateRole
+                    ? (() => { const r = SIMULATE_ROLES.find(x => x.key === simulateRole); return r ? <r.icon className={cn("w-5 h-5", r.color)} /> : "NV"; })()
+                    : viewMode === "admin" ? <Shield className="w-5 h-5 text-emerald-600" /> : <Eye className="w-5 h-5 text-blue-600" />
+                  }
+                </div>
+              )}
             </div>
             <div className="flex-1 min-w-0 text-left">
               <p className="text-xs font-semibold text-sidebar-foreground truncate">{viewer?.name ?? modeLabel}</p>

@@ -684,7 +684,7 @@ function StaffCard({ staff, earnings, onEdit, onEditPrice, onSetPassword, isAdmi
             role={String(roles[0] || "assistant")}
             status={String(staff.status || "active")}
             isActive={Boolean(staff.isActive)}
-            size="md"
+            size="lg"
           />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
@@ -1082,7 +1082,7 @@ export default function StaffPage() {
               avatar={(vs as Record<string, unknown> | undefined)?.avatar as string | undefined}
               role={viewer.role}
               status="active"
-              size="sm"
+              size="md"
             />
           );
         })() : (
@@ -1254,7 +1254,7 @@ export default function StaffPage() {
                     role={String(s.role || "assistant")}
                     status={String(s.status || "active")}
                     isActive={Boolean(s.isActive)}
-                    size="sm"
+                    size="md"
                   />
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm truncate">{String(s.name)}</p>
