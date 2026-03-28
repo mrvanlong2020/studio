@@ -116,7 +116,7 @@ router.put("/staff/:id", async (req, res) => {
     return res.status(403).json({ error: "Không có quyền chỉnh sửa hồ sơ này" });
   }
 
-  const { name, phone, role, roles, email, salary, baseSalaryAmount, joinDate, isActive, status, staffType, notes, salaryNotes, avatar, banner } = req.body;
+  const { name, phone, role, roles, email, salary, baseSalaryAmount, joinDate, isActive, status, staffType, notes, salaryNotes, avatar, banner, coverImageUrl } = req.body;
   const update: Record<string, unknown> = {};
 
   if (name !== undefined) update.name = name;
@@ -124,6 +124,7 @@ router.put("/staff/:id", async (req, res) => {
   if (email !== undefined) update.email = email || null;
   if (avatar !== undefined) update.avatar = avatar || null;
   if (banner !== undefined) update.banner = banner || null;
+  if (coverImageUrl !== undefined) update.coverImageUrl = coverImageUrl || null;
 
   // Admin-only fields
   if (isAdmin) {
