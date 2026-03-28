@@ -135,11 +135,11 @@ router.get("/attendance/me", async (req, res) => {
   const month = String(req.query.month || new Date().toISOString().slice(0, 7));
 
   const logsR = await pool.query(
-    `SELECT id, staff_id, type, method, lat, lng, is_offsite, note, created_at
+    `SELECT id, staff_id, type, method, lat, lng, notes, created_at
      FROM attendance_logs WHERE staff_id = $1 AND to_char(created_at, 'YYYY-MM') = $2 ORDER BY created_at`,
     [callerId, month]
   );
-  // Return camelCase for frontend
+  // Return camelCase for frontend; isOffsite derived from method="offsite"
   const logs = (logsR.rows as Record<string, unknown>[]).map(l => ({
     id: l.id,
     staffId: l.staff_id,
@@ -147,8 +147,8 @@ router.get("/attendance/me", async (req, res) => {
     method: l.method,
     lat: l.lat,
     lng: l.lng,
-    isOffsite: Boolean(l.is_offsite),
-    note: l.note,
+    isOffsite: l.method === "offsite",
+    notes: l.notes,
     createdAt: String(l.created_at ?? ""),
   }));
 
