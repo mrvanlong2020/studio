@@ -1,0 +1,78 @@
+Chỉ sửa đúng phần BẢNG GIÁ THEO CHỨC VỤ trong module nhân sự. Không scan toàn bộ project. Không đụng module khác. Xong thì dừng.
+
+Mục tiêu:
+Bảng giá theo chức vụ chính là CHI PHÍ SẢN XUẤT của từng vai trò theo từng loại job/gói chụp.
+
+Yêu cầu sửa:
+
+1. Mỗi chức vụ phải có 1 bảng giá riêng.
+Ví dụ:
+- Quản lý
+- Nhiếp ảnh
+- Trang điểm
+- Kinh doanh
+- Chỉnh sửa
+- Hỗ trợ
+- Marketing
+- Quay phim
+- Các chức vụ mới do admin tự tạo
+
+2. Trong mỗi bảng giá chức vụ, phải tự sinh ra các ô giá theo DANH SÁCH LOẠI JOB/GÓI GỐC hiện có.
+Ví dụ các dòng:
+- Chụp cổng
+- Chụp album
+- Chụp tiệc truyền thống
+- Chụp tiệc phóng sự
+- Chụp beauty
+- Chụp nàng thơ
+- Chụp gia đình
+- Chụp em bé
+- Chụp ngoại cảnh
+- Mặc định
+
+3. Logic đúng:
+- Chức vụ nào cũng phải có cùng cấu trúc ô giá theo từng loại job
+- Không chỉ riêng Nhiếp ảnh
+- Hỗ trợ, Makeup, Quay phim, Marketing, Kinh doanh, Chỉnh sửa... cũng phải có các ô tương tự
+- Để trống nếu vai trò đó không có giá cho job đó
+
+4. Đây là chi phí sản xuất nội bộ:
+- Khi vai trò đó tham gia vào job/gói chụp thì hệ thống sẽ lấy giá tương ứng
+- Nếu ô giá để trống thì hiểu là không tính tiền
+
+5. Ví dụ:
+- Hỗ trợ chụp cổng = nhập tay
+- Hỗ trợ chụp album = nhập tay
+- Hỗ trợ chụp tiệc truyền thống = nhập tay
+- Hỗ trợ chụp tiệc phóng sự = nhập tay
+- Quay phim chụp cổng = nhập tay
+- Quay phim chụp album = nhập tay
+- ...
+=> tất cả chức vụ đều có bảng ô trống giống nhau theo loại job
+
+6. Không hardcode chỉ một vài dòng riêng cho từng vai trò nữa.
+- Phải lấy danh sách loại job/gói gốc làm nguồn để sinh bảng giá cho mọi chức vụ
+
+7. UI:
+- Mỗi chức vụ là 1 block riêng
+- Có thể expand/collapse
+- Mỗi dòng gồm:
+  + tên loại job
+  + ô nhập tiền
+- Nếu chưa có giá thì để trống
+
+8. Không sửa phần tính lương ở bước này.
+- Chỉ sửa đúng phần cấu trúc bảng giá theo chức vụ
+- Sau này phần tạo show sẽ lấy giá từ đây
+
+Trước khi code:
+- chỉ ra file đang render bảng giá theo chức vụ
+- chỉ ra nguồn danh sách loại job/gói gốc đang lấy từ đâu
+
+Sau khi sửa:
+- báo file đã sửa
+- xác nhận:
+  + mọi chức vụ đều có bảng giá theo từng loại job
+  + ô giá được để trống nếu chưa nhập
+  + cấu trúc giống nhau cho tất cả chức vụ
+- xong thì dừng

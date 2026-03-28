@@ -43,69 +43,34 @@ const ROLES = [
   { key: "marketing",    label: "Marketing",  icon: "📣" },
 ];
 
-// ─── Per-role task templates ───────────────────────────────────────────────────
+// ─── Base job types (same for all roles) ───────────────────────────────────────
+export const BASE_TASKS: Array<{ key: string; label: string }> = [
+  { key: "chup_cong",              label: "Chụp cổng" },
+  { key: "chup_album",             label: "Chụp album" },
+  { key: "chup_tiec_truyen_thong", label: "Chụp tiệc truyền thống" },
+  { key: "chup_tiec_phong_su",     label: "Chụp tiệc phóng sự" },
+  { key: "chup_beauty",            label: "Chụp beauty" },
+  { key: "chup_nang_tho",          label: "Chụp nàng thơ" },
+  { key: "chup_gia_dinh",          label: "Chụp gia đình" },
+  { key: "chup_em_be",             label: "Chụp em bé" },
+  { key: "chup_ngoai_canh",        label: "Chụp ngoại cảnh" },
+  { key: "chup_prewedding",        label: "Chụp prewedding" },
+  { key: "chup_concept",           label: "Chụp concept" },
+  { key: "chup_san_pham",          label: "Chụp sản phẩm" },
+  { key: "ho_tro_chup",            label: "Hỗ trợ chụp / phụ chụp" },
+  { key: "mac_dinh",               label: "Mặc định" },
+];
+
+// Legacy: kept for backward compatibility if needed
 export const ROLE_TASKS: Record<string, Array<{ key: string; label: string }>> = {
-  photographer: [
-    { key: "chup_cong",              label: "Chụp cổng" },
-    { key: "chup_album",             label: "Chụp album" },
-    { key: "chup_tiec_truyen_thong", label: "Chụp tiệc truyền thống" },
-    { key: "chup_tiec_phong_su",     label: "Chụp tiệc phóng sự" },
-    { key: "chup_beauty",            label: "Chụp beauty" },
-    { key: "chup_nang_tho",          label: "Chụp nàng thơ" },
-    { key: "chup_gia_dinh",          label: "Chụp gia đình" },
-    { key: "chup_em_be",             label: "Chụp em bé" },
-    { key: "chup_ngoai_canh",        label: "Chụp ngoại cảnh" },
-    { key: "chup_prewedding",        label: "Chụp prewedding" },
-    { key: "chup_concept",           label: "Chụp concept" },
-    { key: "chup_san_pham",          label: "Chụp sản phẩm" },
-    { key: "ho_tro_chup",            label: "Hỗ trợ chụp / phụ chụp" },
-    { key: "mac_dinh",               label: "Mặc định" },
-  ],
-  makeup: [
-    { key: "makeup_chup_cong",   label: "Makeup chụp cổng" },
-    { key: "makeup_chup_album",  label: "Makeup chụp album" },
-    { key: "makeup_chup_tiec",   label: "Makeup chụp tiệc" },
-    { key: "makeup_nang_tho",    label: "Makeup nàng thơ" },
-    { key: "makeup_beauty",      label: "Makeup beauty" },
-    { key: "makeup_ngoai_canh",  label: "Makeup ngoại cảnh" },
-    { key: "makeup_co_dau",      label: "Makeup cô dâu ngày cưới" },
-    { key: "makeup_me",          label: "Makeup mẹ / người thân" },
-    { key: "makeup_phu",         label: "Makeup phụ" },
-    { key: "mac_dinh",           label: "Mặc định" },
-  ],
-  sale: [
-    { key: "sale_chup_cong",   label: "Sale chụp cổng" },
-    { key: "sale_chup_album",  label: "Sale chụp album" },
-    { key: "sale_chup_tiec",   label: "Sale chụp tiệc" },
-    { key: "sale_beauty",      label: "Sale beauty" },
-    { key: "sale_prewedding",  label: "Sale prewedding" },
-    { key: "sale_combo_cuoi",  label: "Sale combo cưới" },
-    { key: "sale_tron_goi",    label: "Sale trọn gói" },
-    { key: "sale_phat_sinh",   label: "Sale phát sinh" },
-    { key: "mac_dinh",         label: "Mặc định" },
-  ],
-  photoshop: [
-    { key: "chinh_album",    label: "Chỉnh album" },
-    { key: "chinh_anh_le",   label: "Chỉnh ảnh lẻ" },
-    { key: "chinh_anh_beauty", label: "Chỉnh ảnh beauty" },
-    { key: "chinh_anh_cuoi", label: "Chỉnh ảnh cưới" },
-    { key: "blend_mau",      label: "Blend màu" },
-    { key: "retouch_da",     label: "Retouch da" },
-    { key: "thiet_ke_album", label: "Thiết kế album" },
-    { key: "xuat_file",      label: "Xuất file / hoàn thiện file" },
-    { key: "mac_dinh",       label: "Mặc định" },
-  ],
-  marketing: [
-    { key: "viet_bai",          label: "Viết bài" },
-    { key: "dang_bai",          label: "Đăng bài" },
-    { key: "thiet_ke_bai_dang", label: "Thiết kế bài đăng" },
-    { key: "chay_quang_cao",    label: "Chạy quảng cáo" },
-    { key: "quay_video",        label: "Quay video" },
-    { key: "dung_video",        label: "Dựng video" },
-    { key: "livestream",        label: "Livestream" },
-    { key: "ho_tro_content",    label: "Hỗ trợ content" },
-    { key: "mac_dinh",          label: "Mặc định" },
-  ],
+  photographer: BASE_TASKS,
+  makeup: BASE_TASKS,
+  sale: BASE_TASKS,
+  photoshop: BASE_TASKS,
+  marketing: BASE_TASKS,
+  assistant: BASE_TASKS,
+  videographer: BASE_TASKS,
+  admin: BASE_TASKS,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -137,7 +102,7 @@ interface PriceBlockProps {
 function PriceBlock({ role, prices, onChange }: PriceBlockProps) {
   const [open, setOpen] = useState(true);
   const roleDef = ROLES.find(r => r.key === role);
-  const tasks = ROLE_TASKS[role] || [];
+  const tasks = BASE_TASKS; // Use unified BASE_TASKS for all roles
   const isSale = role === "sale";
 
   return (
@@ -341,7 +306,7 @@ function StaffFormSheet({ open, onClose, editStaff }: StaffFormSheetProps) {
       // Bulk-save all price entries for all selected roles
       const rates: Array<{ role: string; taskKey: string; taskName: string; rate: number | null; rateType: string }> = [];
       for (const role of selectedRoles) {
-        for (const task of (ROLE_TASKS[role] || [])) {
+        for (const task of BASE_TASKS) {
           const entry = rolePrices[role]?.[task.key];
           rates.push({
             role,
@@ -650,7 +615,7 @@ function PriceEditDialog({ staff, onClose }: PriceEditDialogProps) {
     try {
       const rates: Array<{ role: string; taskKey: string; taskName: string; rate: number | null; rateType: string }> = [];
       for (const role of roles) {
-        for (const task of (ROLE_TASKS[role] || [])) {
+        for (const task of BASE_TASKS) {
           const entry = rolePrices[role]?.[task.key];
           rates.push({
             role, taskKey: task.key, taskName: task.label,
