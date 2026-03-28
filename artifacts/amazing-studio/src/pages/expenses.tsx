@@ -365,7 +365,7 @@ export default function ExpensesPage() {
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${catColor(e.category)}`}>
                               {e.category}
                             </span>
-                            {e.status && e.status !== "approved" && (
+                            {e.status && (
                               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                                 e.status === "submitted" ? "bg-yellow-100 text-yellow-700" :
                                 e.status === "paid" ? "bg-blue-100 text-blue-700" :

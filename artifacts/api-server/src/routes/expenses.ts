@@ -240,13 +240,15 @@ router.patch("/expenses/:id/pay", async (req, res) => {
   if (!isAdmin) return res.status(403).json({ error: "Không có quyền xác nhận thanh toán" });
 
   const id = parseInt(req.params.id);
-  const { paidFrom = "cash", paidAt } = req.body;
+  const { paidFrom, paidAt } = req.body;
+  const PAID_FROM_ALLOWED = ["company", "owner", "mom"];
+  const resolvedPaidFrom = PAID_FROM_ALLOWED.includes(paidFrom) ? paidFrom : "company";
 
   const [e] = await db.update(expensesTable)
     .set({
       status: "paid",
       paidByStaffId: callerId,
-      paidFrom,
+      paidFrom: resolvedPaidFrom,
       paidAt: paidAt || new Date().toISOString(),
     })
     .where(eq(expensesTable.id, id))
