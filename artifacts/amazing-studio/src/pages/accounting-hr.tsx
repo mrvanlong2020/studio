@@ -12,7 +12,7 @@ const getAuthHeaders = (): Record<string, string> => {
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 const fetchJson = (url: string, opts?: RequestInit) =>
-  fetch(`${BASE}${url}`, { headers: { "Content-Type": "application/json", ...getAuthHeaders() }, ...opts }).then(r => r.json());
+  fetch(`${BASE}${url}`, { ...opts, headers: { "Content-Type": "application/json", ...getAuthHeaders(), ...(opts?.headers as Record<string, string> ?? {}) } }).then(r => r.json());
 
 const EXPENSE_CAT: Record<string, string> = {
   salary: "Lương nhân viên", equipment: "Thiết bị", transport: "Đi lại",
