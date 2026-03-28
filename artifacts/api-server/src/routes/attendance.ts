@@ -6,6 +6,26 @@ import {
 } from "@workspace/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { verifyToken } from "./auth";
+import { createHmac, timingSafeEqual } from "crypto";
+
+const QR_SECRET = process.env.SESSION_SECRET ?? "amazing-studio-secret-2025";
+
+function generateQrToken(dateStr: string): string {
+  const sig = createHmac("sha256", QR_SECRET).update(`qr:${dateStr}`).digest("hex").slice(0, 16);
+  return `AMAZING-QR-${dateStr}-${sig}`;
+}
+
+function verifyQrToken(payload: string): boolean {
+  const match = payload.match(/^AMAZING-QR-(\d{4}-\d{2}-\d{2})-([0-9a-f]{16})$/);
+  if (!match) return false;
+  const [, dateStr, providedSig] = match;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  if (dateStr !== todayStr) return false;
+  const expectedSig = createHmac("sha256", QR_SECRET).update(`qr:${dateStr}`).digest("hex").slice(0, 16);
+  try {
+    return timingSafeEqual(Buffer.from(providedSig), Buffer.from(expectedSig));
+  } catch { return false; }
+}
 
 const router: IRouter = Router();
 
@@ -28,12 +48,10 @@ router.post("/attendance/check-in", async (req, res) => {
 
   const { lat, lng, accuracyM, qrPayload, bookingId } = req.body;
 
-  // Validate QR token if provided
+  // Validate QR token if provided (HMAC-signed daily token)
   let qrVerified = false;
   if (qrPayload) {
-    const todayDateStr = new Date().toISOString().slice(0, 10);
-    const expectedToken = `AMAZING-QR-${todayDateStr}`;
-    qrVerified = qrPayload === expectedToken;
+    qrVerified = verifyQrToken(qrPayload);
     if (!qrVerified) {
       return res.status(400).json({ error: "Mã QR không hợp lệ hoặc đã hết hạn. Vui lòng quét lại mã QR hôm nay." });
     }
@@ -135,7 +153,7 @@ router.get("/attendance/qr-token", async (req, res) => {
   if (!isAdmin) return res.status(403).json({ error: "Không có quyền" });
 
   const todayDateStr = new Date().toISOString().slice(0, 10);
-  const token = `AMAZING-QR-${todayDateStr}`;
+  const token = generateQrToken(todayDateStr);
   res.json({ token, date: todayDateStr });
 });
 
@@ -189,19 +207,67 @@ router.get("/attendance/me", async (req, res) => {
     lng: l.lng,
     isOffsite: l.method === "offsite",
     notes: l.notes,
-    createdAt: String(l.created_at ?? ""),
+    createdAt: l.created_at instanceof Date ? l.created_at.toISOString() : String(l.created_at ?? ""),
   }));
 
   const checkIns = logs.filter(l => l.type === "check_in");
   const checkOuts = logs.filter(l => l.type === "check_out");
 
   const [rule] = await db.select().from(attendanceRulesTable).where(eq(attendanceRulesTable.isActive, 1));
+  const lateRules = rule
+    ? await db.select().from(attendanceLateRulesTable)
+        .where(eq(attendanceLateRulesTable.ruleId, rule.id))
+        .orderBy(attendanceLateRulesTable.minutesLateMin)
+    : [];
+  const checkInFrom = rule?.checkInFrom ?? "07:30";
   const checkInTo = rule?.checkInTo ?? "09:00";
 
+  // Helper: compute minutes late relative to checkInFrom (start of window)
+  function minutesLate(createdAtStr: string): number {
+    const timeStr = createdAtStr.slice(11, 16); // "HH:MM"
+    if (timeStr <= checkInTo) return 0; // on time or early
+    // compute diff from checkInFrom
+    const [fh, fm] = checkInFrom.split(":").map(Number);
+    const [th, tm] = timeStr.split(":").map(Number);
+    return Math.max(0, (th * 60 + tm) - (fh * 60 + fm));
+  }
+
+  // Helper: find penalty tier for given minutes late
+  function findPenalty(mins: number): number {
+    if (mins === 0) return 0;
+    let penalty = 0;
+    for (const lr of lateRules) {
+      const minThreshold = lr.minutesLateMin ?? 0;
+      const maxThreshold = lr.minutesLateMax ?? Infinity;
+      if (mins >= minThreshold && mins < maxThreshold) {
+        penalty = lr.penaltyAmount ? parseFloat(String(lr.penaltyAmount)) : 0;
+        break;
+      }
+    }
+    return penalty;
+  }
+
   let onTimeCount = 0;
+  const bonusPenalty: { type: string; amount: number; description: string; date: string }[] = [];
+
   checkIns.forEach(ci => {
     const timeStr = ci.createdAt.slice(11, 16);
-    if (timeStr <= checkInTo) onTimeCount++;
+    if (timeStr <= checkInTo) {
+      onTimeCount++;
+    } else {
+      // Late check-in: compute penalty
+      const mins = minutesLate(ci.createdAt);
+      const penaltyAmt = findPenalty(mins);
+      if (penaltyAmt > 0) {
+        const dateStr = ci.createdAt.slice(0, 10);
+        bonusPenalty.push({
+          type: "penalty",
+          amount: penaltyAmt,
+          description: `Đi trễ ${mins} phút (${timeStr})`,
+          date: dateStr,
+        });
+      }
+    }
   });
 
   const adjustmentsR = await pool.query(
@@ -225,11 +291,10 @@ router.get("/attendance/me", async (req, res) => {
   const weeklyBonus = parseFloat(String(rule?.weeklyOnTimeBonus ?? "50000"));
   const weeksOnTime = Math.floor(onTimeCount / 5);
 
-  // Build bonusPenalty array: one entry per week's bonus earned
-  const bonusPenalty: { type: string; amount: number; description: string; date: string }[] = [];
-  const [y, m] = month.split("-").map(Number);
+  // Weekly on-time bonuses
+  const [y, mo] = month.split("-").map(Number);
   for (let w = 0; w < weeksOnTime; w++) {
-    const weekEnd = new Date(y, m - 1, (w + 1) * 7);
+    const weekEnd = new Date(y, mo - 1, (w + 1) * 7);
     bonusPenalty.push({
       type: "bonus",
       amount: weeklyBonus,
@@ -238,7 +303,12 @@ router.get("/attendance/me", async (req, res) => {
     });
   }
 
+  // Sort bonusPenalty by date
+  bonusPenalty.sort((a, b) => a.date.localeCompare(b.date));
+
+  const latePenaltyTotal = bonusPenalty.filter(bp => bp.type === "penalty").reduce((s, bp) => s + bp.amount, 0);
   const earnedBonus = weeksOnTime * weeklyBonus + bonusAdj;
+  const totalPenalty = latePenaltyTotal + penaltyAdj;
 
   res.json({
     month,
@@ -249,8 +319,8 @@ router.get("/attendance/me", async (req, res) => {
     onTimeCount,
     onTimeRate: checkIns.length > 0 ? Math.round((onTimeCount / checkIns.length) * 100) : 0,
     earnedBonus,
-    penalty: penaltyAdj,
-    net: earnedBonus - penaltyAdj,
+    penalty: totalPenalty,
+    net: earnedBonus - totalPenalty,
   });
 });
 
@@ -283,7 +353,7 @@ router.get("/attendance/admin", async (req, res) => {
     bookingId: l.booking_id,
     isOffsite: l.method === "offsite",
     notes: l.notes,
-    createdAt: String(l.created_at ?? ""),
+    createdAt: l.created_at instanceof Date ? (l.created_at as Date).toISOString() : String(l.created_at ?? ""),
   }));
   res.json(mappedRows);
 });
