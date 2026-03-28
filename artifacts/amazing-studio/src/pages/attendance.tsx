@@ -475,22 +475,25 @@ export default function AttendancePage() {
                 </button>
               </div>
 
-              {/* GPS fallback buttons */}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => doGPS("checkin")}
-                  disabled={hasCheckedIn || geoLoading || checkin.isPending}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-blue-300 text-xs text-blue-600 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-default transition-colors">
-                  <MapPin className="w-3.5 h-3.5" />
-                  Vào bằng GPS
-                </button>
-                <button
-                  onClick={() => doGPS("checkout")}
-                  disabled={!hasCheckedIn || hasCheckedOut || geoLoading || checkout.isPending}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-orange-300 text-xs text-orange-600 hover:bg-orange-50 disabled:opacity-40 disabled:cursor-default transition-colors">
-                  <MapPin className="w-3.5 h-3.5" />
-                  Ra bằng GPS
-                </button>
+              {/* GPS fallback buttons — for offsite workers only */}
+              <div className="space-y-1.5">
+                <p className="text-xs text-muted-foreground text-center">Ngoài studio? Dùng GPS (có lịch chụp ngoài hôm nay)</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => doGPS("checkin")}
+                    disabled={hasCheckedIn || geoLoading || checkin.isPending}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-blue-300 text-xs text-blue-600 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-default transition-colors">
+                    <MapPin className="w-3.5 h-3.5" />
+                    Vào ngoài studio
+                  </button>
+                  <button
+                    onClick={() => doGPS("checkout")}
+                    disabled={!hasCheckedIn || hasCheckedOut || geoLoading || checkout.isPending}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-orange-300 text-xs text-orange-600 hover:bg-orange-50 disabled:opacity-40 disabled:cursor-default transition-colors">
+                    <MapPin className="w-3.5 h-3.5" />
+                    Ra ngoài studio
+                  </button>
+                </div>
               </div>
 
               {/* Today's logs */}

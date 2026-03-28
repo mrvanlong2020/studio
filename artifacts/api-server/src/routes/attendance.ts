@@ -28,9 +28,9 @@ router.post("/attendance/check-in", async (req, res) => {
 
   const { lat, lng, accuracyM, qrPayload, bookingId } = req.body;
 
-  // QR payload validation: accept "AMAZING-QR-{YYYY-MM-DD}" for today's date
+  // Validate QR token if provided
   let qrVerified = false;
-  if (qrPayload && qrPayload !== "gps-auto") {
+  if (qrPayload) {
     const todayDateStr = new Date().toISOString().slice(0, 10);
     const expectedToken = `AMAZING-QR-${todayDateStr}`;
     qrVerified = qrPayload === expectedToken;
@@ -56,8 +56,18 @@ router.post("/attendance/check-in", async (req, res) => {
     distanceM = getDistanceM(parseFloat(String(lat)), parseFloat(String(lng)), studioLat, studioLng);
     const inGeofence = distanceM <= radiusM;
 
-    if (!inGeofence) {
-      // Kiểm tra có booking offsite hôm nay không
+    if (inGeofence) {
+      // Inside studio geofence: QR code is required
+      if (!qrVerified) {
+        return res.status(400).json({
+          error: "Bạn đang ở trong studio. Vui lòng quét mã QR để chấm công.",
+          distanceM: Math.round(distanceM),
+          requiresQr: true,
+        });
+      }
+      method = "qr";
+    } else {
+      // Outside geofence: only allowed if has offsite booking today
       const today = new Date().toISOString().slice(0, 10);
       const offsite = await pool.query(`
         SELECT id FROM bookings
@@ -83,6 +93,11 @@ router.post("/attendance/check-in", async (req, res) => {
           radiusM,
         });
       }
+    }
+  } else {
+    // No GPS provided: QR is required (no way to verify location)
+    if (!qrVerified) {
+      return res.status(400).json({ error: "Vui lòng quét mã QR hoặc cấp phép vị trí GPS để chấm công." });
     }
   }
 
@@ -277,6 +292,10 @@ router.get("/attendance/admin", async (req, res) => {
 router.get("/attendance/rules", async (req, res) => {
   const callerId = verifyToken(req.headers.authorization);
   if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
+  const callerR = await pool.query(`SELECT role, roles FROM staff WHERE id = $1`, [callerId]);
+  const caller = callerR.rows[0] as Record<string, unknown> | undefined;
+  const isAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
+  if (!isAdmin) return res.status(403).json({ error: "Không có quyền" });
   const [activeRule] = await db.select().from(attendanceRulesTable).where(eq(attendanceRulesTable.isActive, 1));
   const late = await db.select().from(attendanceLateRulesTable).orderBy(attendanceLateRulesTable.minutesLateMin);
   const fmtLate = late.map(l => ({
@@ -342,7 +361,13 @@ router.get("/attendance/adjustments", async (req, res) => {
   const callerId = verifyToken(req.headers.authorization);
   if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
 
-  const staffId = req.query.staffId ? parseInt(String(req.query.staffId)) : callerId;
+  const callerR = await pool.query(`SELECT role, roles FROM staff WHERE id = $1`, [callerId]);
+  const caller = callerR.rows[0] as Record<string, unknown> | undefined;
+  const callerIsAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
+
+  const requestedStaffId = req.query.staffId ? parseInt(String(req.query.staffId)) : callerId;
+  // Non-admins can only see their own adjustments
+  const staffId = callerIsAdmin ? requestedStaffId : callerId;
   const month = String(req.query.month || new Date().toISOString().slice(0, 7));
 
   const adj = await pool.query(
