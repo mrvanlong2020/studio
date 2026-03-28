@@ -20,6 +20,7 @@ import {
 import { Button, Input } from "@/components/ui";
 import { ServiceSearchBox } from "@/components/service-search-box";
 import { SurchargeEditor, type SurchargeItem } from "@/components/surcharge-editor";
+import { StaffAssignmentEditor, type StaffAssignment, newStaffAssignment } from "@/components/staff-assignment-editor";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -76,6 +77,7 @@ type OrderLine = {
   selectedAddons: string[];
   photoId: number | null; photoName: string; photoTask: string;
   makeupId: number | null; makeupName: string; makeupTask: string;
+  assignedStaff: StaffAssignment[];
   notes?: string;
   conceptImages?: string[];
 };
@@ -198,13 +200,14 @@ function lookupCastByPkg(staffId: number | null, role: string, packageId: number
   return found?.amount ?? null;
 }
 
-function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRates, allCastRates, onChange, onRemove }: {
+function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRates, allCastRates, allStaff, onChange, onRemove }: {
   line: OrderLine;
   photographers: Staff[];
   makeupArtists: Staff[];
   services: ServiceOption[];
   allStaffRates: StaffRate[];
   allCastRates: CastRatePkg[];
+  allStaff: Staff[];
   onChange: (u: OrderLine) => void;
   onRemove?: () => void;
 }) {
@@ -404,87 +407,18 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
         </div>
       )}
 
-      {/* Chọn nhân sự */}
-      <div className="grid grid-cols-2 gap-1.5">
-        <div>
-          <p className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><Camera className="w-3 h-3" /> Nhiếp ảnh</p>
-          <select className="w-full h-8 border border-input rounded-lg px-2 text-xs bg-background" value={line.photoId ?? ""}
-            onChange={e => { const s = photographers.find(x => x.id === parseInt(e.target.value)); onChange({ ...line, photoId: s?.id ?? null, photoName: s?.name ?? "", photoTask: "" }); }}>
-            <option value="">— Chọn —</option>
-            {photographers.map(s => <option key={s.id} value={s.id}>{s.name}{s.staffType === "freelancer" ? " (CTV)" : ""}</option>)}
-          </select>
-          {line.photoId && (
-            <select className="w-full h-8 border border-input rounded-lg px-2 text-xs bg-background mt-1" value={line.photoTask ?? ""}
-              onChange={e => onChange({ ...line, photoTask: e.target.value })}>
-              <option value="">— Loại chụp —</option>
-              <option value="chup_cong">Chụp cổng</option>
-              <option value="chup_album">Chụp album</option>
-              <option value="chup_tiec_truyen_thong">Chụp tiệc truyền thống</option>
-              <option value="chup_tiec_phong_su">Chụp tiệc phóng sự</option>
-              <option value="chup_beauty">Chụp beauty</option>
-              <option value="chup_nang_tho">Chụp nàng thơ</option>
-              <option value="chup_gia_dinh">Chụp gia đình</option>
-              <option value="chup_em_be">Chụp em bé</option>
-              <option value="chup_ngoai_canh">Chụp ngoại cảnh</option>
-              <option value="chup_prewedding">Chụp prewedding</option>
-              <option value="chup_concept">Chụp concept</option>
-              <option value="chup_san_pham">Chụp sản phẩm</option>
-              <option value="ho_tro_chup">Hỗ trợ chụp</option>
-              <option value="mac_dinh">Mặc định</option>
-            </select>
-          )}
-          {line.photoId && photoCast > 0 && (
-            <div className="mt-1 text-[10px] bg-blue-50 text-blue-700 rounded px-2 py-1 flex justify-between">
-              <span>💰 Cast {photographers.find(p => p.id === line.photoId)?.name}</span>
-              <span className="font-semibold">{fmtVND(photoCast)}</span>
-            </div>
-          )}
-          {line.photoId && photoCast === 0 && (
-            <div className="mt-1 text-[10px] bg-orange-50 text-orange-600 rounded px-2 py-1">⚠️ Chưa có cast</div>
-          )}
-        </div>
-        <div>
-          <p className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1"><Sparkles className="w-3 h-3" /> Makeup</p>
-          {isPkg && selectedSvc?.includesMakeup === false ? (
-            <div className="h-8 flex items-center px-3 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-500 italic">
-              🚫 Gói không bao gồm makeup
-            </div>
-          ) : (
-            <>
-              <select className="w-full h-8 border border-input rounded-lg px-2 text-xs bg-background" value={line.makeupId ?? ""}
-                onChange={e => { const s = makeupArtists.find(x => x.id === parseInt(e.target.value)); onChange({ ...line, makeupId: s?.id ?? null, makeupName: s?.name ?? "", makeupTask: "" }); }}>
-                <option value="">— Không —</option>
-                {makeupArtists.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-              {line.makeupId && (
-                <select className="w-full h-8 border border-input rounded-lg px-2 text-xs bg-background mt-1" value={line.makeupTask ?? ""}
-                  onChange={e => onChange({ ...line, makeupTask: e.target.value })}>
-                  <option value="">— Loại makeup —</option>
-                  <option value="makeup_chup_cong">Makeup chụp cổng</option>
-                  <option value="makeup_chup_album">Makeup chụp album</option>
-                  <option value="makeup_chup_tiec">Makeup chụp tiệc</option>
-                  <option value="makeup_nang_tho">Makeup nàng thơ</option>
-                  <option value="makeup_beauty">Makeup beauty</option>
-                  <option value="makeup_ngoai_canh">Makeup ngoại cảnh</option>
-                  <option value="makeup_co_dau">Makeup cô dâu</option>
-                  <option value="makeup_me">Makeup mẹ / người thân</option>
-                  <option value="makeup_phu">Makeup phụ</option>
-                  <option value="mac_dinh">Mặc định</option>
-                </select>
-              )}
-              {line.makeupId && makeupCast > 0 && (
-                <div className="mt-1 text-[10px] bg-pink-50 text-pink-700 rounded px-2 py-1 flex justify-between">
-                  <span>💰 Cast {makeupArtists.find(m => m.id === line.makeupId)?.name}</span>
-                  <span className="font-semibold">{fmtVND(makeupCast)}</span>
-                </div>
-              )}
-              {line.makeupId && makeupCast === 0 && (
-                <div className="mt-1 text-[10px] bg-orange-50 text-orange-600 rounded px-2 py-1">⚠️ Chưa có cast</div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
+      {/* Chọn nhân sự — Dynamic staff list */}
+      <StaffAssignmentEditor
+        value={line.assignedStaff}
+        onChange={newStaff => onChange({ ...line, assignedStaff: newStaff })}
+        staffOptions={allStaff.map(s => ({ id: s.id, name: s.name, roles: s.roles || [] }))}
+        roleOptions={[
+          { value: "photographer", label: "📷 Nhiếp ảnh" },
+          { value: "makeup", label: "💄 Makeup" },
+          { value: "assistant", label: "🤝 Trợ lý" },
+          { value: "other", label: "👤 Khác" },
+        ]}
+      />
 
       {/* Addon */}
       {isPkg && availableAddons.length > 0 && (
@@ -730,6 +664,7 @@ function ShowFormPanel({
     price: 0, basePrice: 0, selectedAddons: [],
     photoId: null, photoName: "", photoTask: "",
     makeupId: null, makeupName: "", makeupTask: "",
+    assignedStaff: [],
     notes: "", conceptImages: [],
   });
   const makeSubDraft = (defaultDate: string, defaultTime: string): SubServiceDraft => ({
@@ -1116,7 +1051,7 @@ function ShowFormPanel({
                       <label className="text-[10px] text-muted-foreground mb-1 block">Gói / dịch vụ</label>
                       <div className="space-y-1.5">
                         {sub.items.map(line => (
-                          <OrderLineRow key={line.tempId} line={line} photographers={photographers} makeupArtists={makeupArtists} services={allServices} allStaffRates={allStaffRates} allCastRates={allCastRates}
+                          <OrderLineRow key={line.tempId} line={line} photographers={photographers} makeupArtists={makeupArtists} services={allServices} allStaffRates={allStaffRates} allCastRates={allCastRates} allStaff={allStaff}
                             onChange={updated => updateSubDraft(sub.id, { items: sub.items.map(l => l.tempId === line.tempId ? updated : l) })}
                             onRemove={sub.items.length > 1 ? () => updateSubDraft(sub.id, { items: sub.items.filter(l => l.tempId !== line.tempId) }) : undefined}
                           />
