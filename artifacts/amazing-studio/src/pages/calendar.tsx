@@ -76,6 +76,7 @@ type OrderLine = {
   basePrice: number;
   selectedAddons: string[];
   surcharges: SurchargeItem[];
+  baseJobType: string; // Base job type key from BASE_TASKS (e.g., "chup_cong", "chup_album")
   photoId: number | null; photoName: string; photoTask: string;
   makeupId: number | null; makeupName: string; makeupTask: string;
   assignedStaff: StaffAssignment[];
@@ -276,6 +277,7 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
       basePrice: svc?.price ?? 0,
       selectedAddons: [],
       surcharges: [],
+      baseJobType: "mac_dinh", // Reset to default when selecting new service
       // Tự xóa makeup khi chọn gói không có makeup
       ...(noMakeup ? { makeupId: null, makeupName: "", makeupTask: "" } : {}),
     });
@@ -418,7 +420,8 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
         value={line.assignedStaff}
         onChange={newStaff => onChange({ ...line, assignedStaff: newStaff })}
         staffOptions={allStaff.map(s => ({ id: s.id, name: s.name, roles: s.roles || [] }))}
-        allStaffRates={allStaffRates.map(r => ({ staffId: r.staffId, role: r.role, amount: r.amount }))}
+        allStaffRates={allStaffRates.map(r => ({ staffId: r.staffId, role: r.role, taskKey: r.taskKey, rate: r.rate }))}
+        baseJobType={line.baseJobType}
       />
 
       {/* Phí phát sinh — Surcharges per package */}
@@ -669,6 +672,7 @@ function ShowFormPanel({
   const emptyOrderLine = (): OrderLine => ({
     tempId: genId(), serviceName: "", serviceId: null, serviceKey: "",
     price: 0, basePrice: 0, selectedAddons: [], surcharges: [],
+    baseJobType: "mac_dinh", // Default job type for staff rates lookup
     photoId: null, photoName: "", photoTask: "",
     makeupId: null, makeupName: "", makeupTask: "",
     assignedStaff: [],

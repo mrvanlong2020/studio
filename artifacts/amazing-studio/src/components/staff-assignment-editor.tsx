@@ -9,7 +9,7 @@ export type StaffAssignment = {
   castAmount: number;
 };
 
-type StaffRate = { staffId: number; role: string; amount: number };
+type StaffRate = { staffId: number; role: string; taskKey: string; rate: number | null };
 
 function genId() {
   return Math.random().toString(36).slice(2, 9);
@@ -21,10 +21,14 @@ export function newStaffAssignment(): StaffAssignment {
 
 function fmtVND(n: number) { return n.toLocaleString("vi-VN") + "đ"; }
 
-function lookupStaffRate(staffId: number | null, role: string, rates: StaffRate[]): number {
+function lookupStaffRate(staffId: number | null, role: string, baseJobType: string, rates: StaffRate[]): number {
   if (!staffId || !role) return 0;
-  const found = rates.find(r => r.staffId === staffId && r.role === role);
-  return found?.amount ?? 0;
+  // Try exact match with baseJobType first
+  const found = rates.find(r => r.staffId === staffId && r.role === role && r.taskKey === baseJobType && r.rate != null);
+  if (found) return found.rate;
+  // Fallback to "mac_dinh" (default) if exact job type not found
+  const fallback = rates.find(r => r.staffId === staffId && r.role === role && r.taskKey === "mac_dinh" && r.rate != null);
+  return fallback?.rate ?? 0;
 }
 
 interface StaffAssignmentEditorProps {
@@ -32,6 +36,7 @@ interface StaffAssignmentEditorProps {
   onChange: (items: StaffAssignment[]) => void;
   staffOptions: { id: number; name: string; roles: string[] }[];
   allStaffRates: StaffRate[];
+  baseJobType: string; // Job type for rate lookup (e.g., "chup_cong")
   className?: string;
 }
 
@@ -40,6 +45,7 @@ export function StaffAssignmentEditor({
   onChange,
   staffOptions,
   allStaffRates,
+  baseJobType,
   className,
 }: StaffAssignmentEditorProps) {
   const roleOptions = [
@@ -66,7 +72,7 @@ export function StaffAssignmentEditor({
   };
 
   const handleStaffChange = (itemId: string, staffId: number, role: string) => {
-    const castAmount = lookupStaffRate(staffId, role, allStaffRates);
+    const castAmount = lookupStaffRate(staffId, role, baseJobType, allStaffRates);
     update(itemId, { staffId, staffName: staffOptions.find(s => s.id === staffId)?.name ?? "", castAmount });
   };
 
@@ -110,7 +116,7 @@ export function StaffAssignmentEditor({
                   const newRole = e.target.value;
                   update(item.id, { role: newRole });
                   if (item.staffId) {
-                    const castAmount = lookupStaffRate(item.staffId, newRole, allStaffRates);
+                    const castAmount = lookupStaffRate(item.staffId, newRole, baseJobType, allStaffRates);
                     update(item.id, { castAmount });
                   }
                 }}
