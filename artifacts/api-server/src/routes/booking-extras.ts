@@ -174,51 +174,48 @@ router.patch("/bookings/:id/reschedule", async (req, res) => {
     }
 
     if (staffIds.length > 0) {
-      // Lấy tên nhân viên được phân công để hiển thị trong lỗi xung đột
-      const staffNamesR = await pool.query(
-        `SELECT id, name FROM staff WHERE id = ANY($1::int[])`,
-        [staffIds],
-      );
-      const staffNames: Record<number, string> = {};
-      for (const s of staffNamesR.rows as { id: number; name: string }[]) {
-        staffNames[s.id] = s.name;
-      }
-
-      // Tìm buổi chụp khác cùng ngày có chung nhân viên được phân công
+      // Tìm buổi chụp khác cùng ngày/giờ có chung nhân viên được phân công.
+      // Nếu newTime được cung cấp: conflict khi trùng ngày VÀ (trùng giờ hoặc giờ bên kia NULL).
+      // Nếu không có newTime: conflict khi trùng ngày.
       const conflictR = await pool.query(`
-        SELECT b.id, b.shoot_date, b.shoot_time, c.name as customer_name,
+        SELECT b.id, b.shoot_date, b.shoot_time, c.name AS customer_name,
           (
             SELECT string_agg(s.name, ', ')
             FROM staff s
             WHERE s.id = ANY($3::int[])
               AND (
                 b.assigned_staff @> to_jsonb(s.id)
-                OR (b.assigned_staff->>'photo')::int = s.id
+                OR (b.assigned_staff->>'photo')::int      = s.id
                 OR (b.assigned_staff->>'photographer')::int = s.id
-                OR (b.assigned_staff->>'makeup')::int = s.id
-                OR (b.assigned_staff->>'sale')::int = s.id
-                OR (b.assigned_staff->>'photoshop')::int = s.id
+                OR (b.assigned_staff->>'makeup')::int     = s.id
+                OR (b.assigned_staff->>'sale')::int       = s.id
+                OR (b.assigned_staff->>'photoshop')::int  = s.id
               )
-          ) as conflicting_staff_names
+          ) AS conflicting_staff_names
         FROM bookings b
         LEFT JOIN customers c ON c.id = b.customer_id
         WHERE b.shoot_date = $1
           AND b.id != $2
           AND b.status NOT IN ('cancelled', 'huy')
           AND (
+            $4::text IS NULL
+            OR b.shoot_time IS NULL
+            OR b.shoot_time = $4::text
+          )
+          AND (
             SELECT COUNT(*) FROM staff s2
             WHERE s2.id = ANY($3::int[])
               AND (
                 b.assigned_staff @> to_jsonb(s2.id)
-                OR (b.assigned_staff->>'photo')::int = s2.id
+                OR (b.assigned_staff->>'photo')::int      = s2.id
                 OR (b.assigned_staff->>'photographer')::int = s2.id
-                OR (b.assigned_staff->>'makeup')::int = s2.id
-                OR (b.assigned_staff->>'sale')::int = s2.id
-                OR (b.assigned_staff->>'photoshop')::int = s2.id
+                OR (b.assigned_staff->>'makeup')::int     = s2.id
+                OR (b.assigned_staff->>'sale')::int       = s2.id
+                OR (b.assigned_staff->>'photoshop')::int  = s2.id
               )
           ) > 0
         LIMIT 3
-      `, [newDate, bookingId, staffIds]);
+      `, [newDate, bookingId, staffIds, newTime || null]);
 
       if (conflictR.rows.length > 0) {
         const conflicts = conflictR.rows as {
