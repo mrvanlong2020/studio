@@ -75,6 +75,7 @@ type OrderLine = {
   tempId: string; serviceName: string; serviceId: number | null; serviceKey: string; price: number;
   basePrice: number;
   selectedAddons: string[];
+  surcharges: SurchargeItem[];
   photoId: number | null; photoName: string; photoTask: string;
   makeupId: number | null; makeupName: string; makeupTask: string;
   assignedStaff: StaffAssignment[];
@@ -240,7 +241,11 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
   const operatingCost = selectedSvc?.operatingCost || 0;
   const salePercent = selectedSvc?.salePercent || 0;
   const saleAmt = Math.round(line.price * salePercent / 100);
-  const totalCost = ptsCast + printCost + operatingCost + saleAmt + photoCast + makeupCast;
+  
+  // Phí phát sinh cho gói này
+  const surchargesTotal = (line.surcharges || []).reduce((s, i) => s + (i.amount || 0), 0);
+  
+  const totalCost = ptsCast + printCost + operatingCost + saleAmt + photoCast + makeupCast + surchargesTotal;
   const profit = line.price - totalCost;
 
   // Addon state — computed from line.selectedAddons + selectedSvc.addons
@@ -270,6 +275,7 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
       price: svc?.price ?? 0,
       basePrice: svc?.price ?? 0,
       selectedAddons: [],
+      surcharges: [],
       // Tự xóa makeup khi chọn gói không có makeup
       ...(noMakeup ? { makeupId: null, makeupName: "", makeupTask: "" } : {}),
     });
@@ -413,6 +419,12 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
         onChange={newStaff => onChange({ ...line, assignedStaff: newStaff })}
         staffOptions={allStaff.map(s => ({ id: s.id, name: s.name, roles: s.roles || [] }))}
         allStaffRates={allStaffRates.map(r => ({ staffId: r.staffId, role: r.role, amount: r.amount }))}
+      />
+
+      {/* Phí phát sinh — Surcharges per package */}
+      <SurchargeEditor 
+        value={line.surcharges || []} 
+        onChange={newSurcharges => onChange({ ...line, surcharges: newSurcharges })} 
       />
 
       {/* Addon */}
@@ -656,7 +668,7 @@ function ShowFormPanel({
   // ── Service blocks (unified: single or multi-service) ────────────────────
   const emptyOrderLine = (): OrderLine => ({
     tempId: genId(), serviceName: "", serviceId: null, serviceKey: "",
-    price: 0, basePrice: 0, selectedAddons: [],
+    price: 0, basePrice: 0, selectedAddons: [], surcharges: [],
     photoId: null, photoName: "", photoTask: "",
     makeupId: null, makeupName: "", makeupTask: "",
     assignedStaff: [],
