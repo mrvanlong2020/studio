@@ -1,0 +1,55 @@
+You are modifying an existing monorepo:
+- Frontend: artifacts/amazing-studio (React + Vite + Tailwind + Wouter + TanStack Query)
+- Backend: artifacts/api-server (Express)
+- DB: lib/db (Drizzle + Postgres)
+
+Implement ALL changes below with DB migrations, API routes, and UI updates. Output: a checklist + list of files changed + any new env vars.
+
+A) Staff self-service (staff role):
+- Add “My Profile” page: staff can view ONLY their own staff record (name, role, avatar, salary fields), change password (requires current password), and view:
+  - My earnings this month (only completed jobs count)
+  - My completed vs pending jobs
+  - My attendance days this month
+  - Charts: earnings by week + (optional) revenue influenced by bookings credited to me
+  - KPI widget (targets vs actual, score 0–100; red if below threshold)
+- Add backend endpoints:
+  - GET /api/staff/me
+  - PATCH /api/staff/me/password
+  - GET /api/staff/me/metrics?month=YYYY-MM
+  - GET /api/staff/me/kpi?month=YYYY-MM
+Enforce server-side row-level access for staff.
+
+B) Avatar size:
+- Increase avatar size 2x anywhere it appears in layout/header/profile.
+
+C) Upsell + package upgrades:
+- Create a booking_items table (or use existing if present) with sold_by_staff_id and types: base_package, addon, manual, upgrade_delta, extra_retouched.
+- Implement upgrade and upsell so it’s auditable and not double-counted. Add commission fields if needed.
+
+D) Reschedule:
+- In calendar UI add an icon button “Reschedule” on confirmed shows.
+- Implement PATCH endpoint to change date/time + log old/new + reason.
+- Re-check staff schedule conflicts.
+
+E) Expenses:
+- Allow staff to create expenses as submitted.
+- Only admin can approve + mark paid. Add payer field {mom, owner}.
+- Staff can view own expense requests.
+
+F) Pricing readonly for staff:
+- Allow staff to access pricing page but only GET; disable edits.
+- Backend: GET pricing allowed for staff; mutations admin-only.
+
+G) Retouched photos in package:
+- Add service_packages.included_retouched_photos integer.
+- Pricing UI: input field.
+- When creating booking/show: selecting package auto-fills included retouched photos snapshot in booking.
+- PTS pay uses included + extra retouches; extra is treated as extra cost line item.
+
+H) Attendance + rewards:
+- Create attendance module with QR scan + GPS check-in at studio (geofence).
+- Offsite exception if staff assigned to an offsite show event.
+- Add attendance_rules editable by admin (blank penalty amounts allowed) with “+” rows for late thresholds; weekly on-time bonus 50k.
+- Add staff view: my attendance summary + computed bonuses/penalties.
+
+Make sure no admin-only financial data becomes accessible to staff except their own metrics.
