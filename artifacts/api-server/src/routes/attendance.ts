@@ -19,13 +19,16 @@ function generateQrToken(dateStr: string): string {
   return `AMAZING-QR-${dateStr}-${sig}`;
 }
 
+function todayVN(): string {
+  return new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
 function verifyQrToken(payload: string): boolean {
   if (!QR_SECRET) return false;
   const match = payload.match(/^AMAZING-QR-(\d{4}-\d{2}-\d{2})-([0-9a-f]{16})$/);
   if (!match) return false;
   const [, dateStr, providedSig] = match;
-  const todayStr = new Date().toISOString().slice(0, 10);
-  if (dateStr !== todayStr) return false;
+  if (dateStr !== todayVN()) return false;
   const expectedSig = createHmac("sha256", QR_SECRET).update(`qr:${dateStr}`).digest("hex").slice(0, 16);
   try {
     return timingSafeEqual(Buffer.from(providedSig), Buffer.from(expectedSig));
@@ -90,8 +93,8 @@ router.post("/attendance/check-in", async (req, res) => {
       }
       method = "qr";
     } else {
-      // Outside geofence: only allowed if has offsite booking today
-      const today = new Date().toISOString().slice(0, 10);
+      // Outside geofence: only allowed if has offsite booking today (VN timezone)
+      const today = todayVN();
       const offsite = await pool.query(`
         SELECT id FROM bookings
         WHERE shoot_date = $1
@@ -155,7 +158,7 @@ router.get("/attendance/qr-token", async (req, res) => {
   const isAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
   if (!isAdmin) return res.status(403).json({ error: "Không có quyền" });
 
-  const todayDateStr = new Date().toISOString().slice(0, 10);
+  const todayDateStr = todayVN();
   const token = generateQrToken(todayDateStr);
   res.json({ token, date: todayDateStr });
 });
@@ -353,7 +356,7 @@ router.get("/attendance/admin", async (req, res) => {
   const logsR = await pool.query(
     `SELECT al.id, al.staff_id, al.type, al.method, al.lat, al.lng, al.accuracy_m, al.distance_m, al.booking_id, al.notes, al.created_at, s.name as staff_name FROM attendance_logs al
      JOIN staff s ON s.id = al.staff_id
-     WHERE to_char(al.created_at, 'YYYY-MM') = $1 ORDER BY al.created_at`,
+     WHERE to_char(al.created_at + interval '7 hours', 'YYYY-MM') = $1 ORDER BY al.created_at`,
     [month]
   );
   const mappedRows = (logsR.rows as Record<string, unknown>[]).map(l => ({

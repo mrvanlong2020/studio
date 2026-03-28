@@ -183,13 +183,14 @@ export default function AttendancePage() {
   const [geoErr, setGeoErr] = useState<string | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
   const [checkMsg, setCheckMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [month, setMonth] = useState(() => new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 7));
   const [showQr, setShowQr] = useState(false);
   const [qrAction, setQrAction] = useState<"checkin" | "checkout">("checkin");
 
   // Admin adjustments form
   const [showAdjForm, setShowAdjForm] = useState(false);
-  const [adjForm, setAdjForm] = useState({ staffId: "", type: "bonus", amount: "", reason: "", date: new Date().toISOString().slice(0, 10) });
+  const [adjForm, setAdjForm] = useState({ staffId: "", type: "bonus", amount: "", reason: "", date: new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10) });
+  const [adjViewStaffId, setAdjViewStaffId] = useState<string>("");
 
   // Admin manual check form
   const [showManualForm, setShowManualForm] = useState(false);
@@ -224,6 +225,12 @@ export default function AttendancePage() {
     queryFn: () => fetchAuth(`/api/attendance/qr-token`),
     enabled: tab === "admin" && effectiveIsAdmin,
     staleTime: 60 * 60 * 1000,
+  });
+
+  const { data: adminAdjustments = [] } = useQuery<{ id: number; type: string; amount: number; reason: string | null; date: string }[]>({
+    queryKey: ["attendance-adjustments-admin", adjViewStaffId, month],
+    queryFn: () => fetchAuth(`/api/attendance/adjustments?staffId=${adjViewStaffId}&month=${month}`),
+    enabled: effectiveIsAdmin && !!adjViewStaffId,
   });
 
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -609,7 +616,14 @@ export default function AttendancePage() {
             {effectiveIsAdmin && (
               <div className="rounded-2xl border border-border bg-card overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-2.5 border-b">
-                  <span className="font-semibold text-sm">Điều chỉnh thủ công</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm">Điều chỉnh thủ công</span>
+                    <select value={adjViewStaffId} onChange={e => setAdjViewStaffId(e.target.value)}
+                      className="text-xs border border-border rounded px-1.5 py-0.5 bg-background">
+                      <option value="">-- Xem theo NV --</option>
+                      {staffList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
                   <button onClick={() => setShowAdjForm(v => !v)}
                     className="text-xs text-primary hover:underline flex items-center gap-1">
                     <Plus className="w-3.5 h-3.5" /> Thêm
@@ -620,7 +634,7 @@ export default function AttendancePage() {
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="text-xs text-muted-foreground mb-1 block">Nhân viên *</label>
-                        <select value={adjForm.staffId} onChange={e => setAdjForm(f => ({ ...f, staffId: e.target.value }))}
+                        <select value={adjForm.staffId} onChange={e => { setAdjForm(f => ({ ...f, staffId: e.target.value })); setAdjViewStaffId(e.target.value); }}
                           className={inputCls}>
                           <option value="">-- Chọn --</option>
                           {staffList.map(s => (
@@ -662,10 +676,12 @@ export default function AttendancePage() {
                     </div>
                   </div>
                 )}
-                {(myAtt?.adjustments?.length ?? 0) === 0 && !showAdjForm ? (
-                  <div className="text-center py-4 text-xs text-muted-foreground">Chưa có điều chỉnh</div>
+                {!adjViewStaffId ? (
+                  <div className="text-center py-4 text-xs text-muted-foreground">Chọn nhân viên để xem điều chỉnh</div>
+                ) : adminAdjustments.length === 0 && !showAdjForm ? (
+                  <div className="text-center py-4 text-xs text-muted-foreground">Chưa có điều chỉnh tháng này</div>
                 ) : (
-                  (myAtt?.adjustments ?? []).map(adj => (
+                  adminAdjustments.map(adj => (
                     <div key={adj.id} className="flex items-center justify-between px-4 py-2.5 text-sm border-t border-border">
                       <div>
                         <p className="font-medium">{adj.reason || "(Không ghi chú)"}</p>
