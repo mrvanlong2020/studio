@@ -1549,6 +1549,15 @@ function generateContractHTML(
       <span>Tổng giá trị hợp đồng</span>
       <span style="font-size:22px;font-weight:800;">${fmtVNDStr(totalAmount)}</span>
     </div>
+    ${discountAmount > 0 ? `
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13.5px;">
+      <span style="opacity:0.9;">🎁 Khuyến mãi / Giảm giá</span>
+      <span style="font-weight:600;color:#f9e4ff;">-${fmtVNDStr(discountAmount)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13.5px;">
+      <span style="opacity:0.9;">Sau khuyến mãi</span>
+      <span style="font-weight:700;">${fmtVNDStr(Math.max(0, totalAmount - discountAmount))}</span>
+    </div>` : ""}
     <div style="height:1px;background:rgba(255,255,255,0.25);margin:8px 0 12px;"></div>
     <div style="display:flex;justify-content:space-between;margin-bottom:7px;font-size:13.5px;">
       <span style="opacity:0.9;">✅ Đã đặt cọc / đã thanh toán</span>
