@@ -866,7 +866,11 @@ function ShowFormPanel({
         .filter(s => s.name.trim() && s.amount > 0)
         .map(({ name, amount }) => ({ name, amount }));
 
-      const body = {
+      // Task #24: trích servicePackageId từ serviceKey đầu tiên (format "pkg-{id}")
+      const firstPkgKey = validLines[0]?.serviceKey ?? "";
+      const servicePackageId = firstPkgKey.startsWith("pkg-") ? parseInt(firstPkgKey.replace("pkg-", "")) : null;
+
+      const body: Record<string, unknown> = {
         customerId: cid, shootDate: effectiveShootDate, shootTime: sub0.shootTime || "08:00",
         serviceCategory: "wedding", packageType,
         location: location || null, status: finalStatus,
@@ -878,6 +882,7 @@ function ShowFormPanel({
         assignedStaff, notes: notes || null,
         photoCount: photoCount !== "" ? parseInt(photoCount) : null,
       };
+      if (servicePackageId) body.servicePackageId = servicePackageId;
 
       if (isEdit && booking) {
         saved = await authFetch(`${BASE}/api/bookings/${booking.id}`, {

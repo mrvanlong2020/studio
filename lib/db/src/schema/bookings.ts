@@ -3,6 +3,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
 import { staffTable } from "./tasks";
+import { servicePackagesTable } from "./pricing";
 
 export const bookingsTable = pgTable("bookings", {
   id: serial("id").primaryKey(),
@@ -31,6 +32,8 @@ export const bookingsTable = pgTable("bookings", {
   bannerUrl: text("banner_url"),
   // Task #13: ảnh hậu kỳ
   includedRetouchedPhotosSnapshot: integer("included_retouched_photos_snapshot").notNull().default(0),
+  // Task #24: link gói dịch vụ (tracking only, không cascade khi sửa bảng giá)
+  servicePackageId: integer("service_package_id").references(() => servicePackagesTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

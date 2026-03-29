@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { bookingsTable, customersTable, paymentsTable, expensesTable, tasksTable, staffTable } from "@workspace/db/schema";
-import { eq, and, desc, inArray, or, ilike, sql } from "drizzle-orm";
+import { bookingsTable, customersTable, paymentsTable, expensesTable, tasksTable, staffTable, servicePackagesTable, packageItemsTable } from "@workspace/db/schema";
+import { eq, and, desc, inArray, or, ilike, sql, asc } from "drizzle-orm";
 import { computeBookingEarnings } from "./job-earnings";
 
 const router: IRouter = Router();
@@ -33,6 +33,7 @@ const bookingFields = {
   isParentContract: bookingsTable.isParentContract,
   photoCount: bookingsTable.photoCount,
   includedRetouchedPhotosSnapshot: bookingsTable.includedRetouchedPhotosSnapshot,
+  servicePackageId: bookingsTable.servicePackageId,
   createdAt: bookingsTable.createdAt,
 };
 
@@ -127,6 +128,8 @@ router.post("/bookings", async (req, res) => {
     depositPaymentMethod, depositCollector,
     // Multi-service contract support
     subServices,
+    // Task #24: link to package (tracking only)
+    servicePackageId,
   } = req.body;
 
   const depMethod    = depositPaymentMethod || "cash";
@@ -224,6 +227,20 @@ router.post("/bookings", async (req, res) => {
   }
 
   // ── Single booking (existing behavior) ──
+
+  // Task #24: nếu có servicePackageId, snapshot items + includedRetouchedPhotos từ package
+  let snapshotItems = items || [];
+  let snapshotRetouched = includedRetouchedPhotosSnapshot != null ? parseInt(String(includedRetouchedPhotosSnapshot)) : 0;
+  if (servicePackageId) {
+    const pkgId = parseInt(String(servicePackageId));
+    const [pkg] = await db.select().from(servicePackagesTable).where(eq(servicePackagesTable.id, pkgId));
+    if (pkg) {
+      const pkgItems = await db.select().from(packageItemsTable).where(eq(packageItemsTable.packageId, pkgId)).orderBy(asc(packageItemsTable.sortOrder));
+      if (pkgItems.length > 0 && snapshotItems.length === 0) snapshotItems = pkgItems;
+      if (!includedRetouchedPhotosSnapshot) snapshotRetouched = (pkg as { includedRetouchedPhotos?: number }).includedRetouchedPhotos ?? 0;
+    }
+  }
+
   const [booking] = await db
     .insert(bookingsTable)
     .values({
@@ -238,7 +255,7 @@ router.post("/bookings", async (req, res) => {
       depositAmount: String(depositAmount || 0),
       discountAmount: String(discountAmount || 0),
       paidAmount: String(depositAmount || 0),
-      items: items || [],
+      items: snapshotItems,
       surcharges: surcharges || [],
       notes,
       internalNotes,
@@ -246,7 +263,8 @@ router.post("/bookings", async (req, res) => {
       parentId: parentId || null,
       serviceLabel: serviceLabel || null,
       isParentContract: isParentContract || false,
-      includedRetouchedPhotosSnapshot: includedRetouchedPhotosSnapshot != null ? parseInt(String(includedRetouchedPhotosSnapshot)) : 0,
+      includedRetouchedPhotosSnapshot: snapshotRetouched,
+      servicePackageId: servicePackageId ? parseInt(String(servicePackageId)) : null,
       status: "pending",
     })
     .returning();
@@ -392,6 +410,7 @@ router.put("/bookings/:id", async (req, res) => {
     shootDate, shootTime, serviceCategory, packageType, location, status,
     totalAmount, depositAmount, discountAmount, items, surcharges, notes, internalNotes,
     assignedStaff, parentId, serviceLabel, isParentContract, photoCount, includedRetouchedPhotosSnapshot,
+    servicePackageId,
   } = req.body;
 
   const updateData: Record<string, unknown> = {};
@@ -414,6 +433,7 @@ router.put("/bookings/:id", async (req, res) => {
   if (isParentContract !== undefined) updateData.isParentContract = isParentContract;
   if (photoCount !== undefined) updateData.photoCount = photoCount !== null ? parseInt(String(photoCount)) : null;
   if (includedRetouchedPhotosSnapshot !== undefined) updateData.includedRetouchedPhotosSnapshot = parseInt(String(includedRetouchedPhotosSnapshot)) || 0;
+  if (servicePackageId !== undefined) updateData.servicePackageId = servicePackageId ? parseInt(String(servicePackageId)) : null;
 
   if (Object.keys(updateData).length > 0) {
     const payments = await db.select().from(paymentsTable).where(eq(paymentsTable.bookingId, id));

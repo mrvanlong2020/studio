@@ -161,12 +161,18 @@ export default function PricingPage() {
       return fetch(`${BASE}/api/service-packages/${id}`, {
         method: "PUT", headers: authHeaders,
         body: JSON.stringify(data),
-      }).then(r => r.json());
+      }).then(async r => {
+        if (!r.ok) throw new Error((await r.json()).error ?? "Lỗi lưu gói");
+        return r.json();
+      });
     },
     onSuccess: (updated: ServicePackage) => {
       qc.invalidateQueries({ queryKey: ["service-packages"] });
       setSelectedPkg(updated);
       setInlineEdit(null);
+    },
+    onError: (err: Error) => {
+      alert("Lưu thất bại: " + err.message);
     },
   });
   const deleteSurcharge = useMutation({
