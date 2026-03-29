@@ -1326,7 +1326,7 @@ function generateContractHTML(
   booking: Booking,
   siblings: Booking[],
   allPackages: DetailPackage[],
-  paymentSummary?: { totalAmount: number; paidAmount: number; remainingAmount: number },
+  paymentSummary?: { totalAmount: number; paidAmount: number; discountAmount?: number; remainingAmount: number },
 ): string {
   const today = new Date();
   const todayStr = format(today, "dd/MM/yyyy");
@@ -1338,7 +1338,8 @@ function generateContractHTML(
   // Payment summary: use caller-supplied summary (from parentContract or booking) — same source as on-screen
   const totalAmount     = Number(paymentSummary?.totalAmount     ?? booking.totalAmount     ?? 0) || 0;
   const paidAmount      = Number(paymentSummary?.paidAmount      ?? booking.paidAmount      ?? 0) || 0;
-  const remainingAmount = Number(paymentSummary?.remainingAmount ?? booking.remainingAmount ?? Math.max(0, totalAmount - paidAmount)) || 0;
+  const discountAmount  = Number(paymentSummary?.discountAmount  ?? booking.discountAmount  ?? 0) || 0;
+  const remainingAmount = Number(paymentSummary?.remainingAmount ?? booking.remainingAmount ?? Math.max(0, totalAmount - discountAmount - paidAmount)) || 0;
 
   // ── Lịch chụp section ─────────────────────────────────────────────────────
   const scheduleSectionHTML = isMulti
@@ -1724,16 +1725,25 @@ function ShowDetailPanel({
   };
 
   const handlePrintContract = () => {
+    const parentDiscount = Number(parentContract?.discountAmount ?? 0) || 0;
+    const parentDeposit = Number(parentContract?.depositAmount ?? 0) || 0;
+    const parentTotal = Number(parentContract?.totalAmount ?? 0) || 0;
+    const bookingDeposit = Number(booking.depositAmount ?? 0) || 0;
+    const bookingDiscount = Number(booking.discountAmount ?? 0) || 0;
+    const bookingTotal = Number(booking.totalAmount ?? 0) || 0;
+    
     const paymentSummary = parentContract
       ? {
-          totalAmount:     Number(parentContract.totalAmount     ?? 0) || 0,
-          paidAmount:      Number(parentContract.depositAmount   ?? 0) || 0,
-          remainingAmount: Number(parentContract.remainingAmount ?? 0) || 0,
+          totalAmount:     parentTotal,
+          paidAmount:      parentDeposit,
+          discountAmount:  parentDiscount,
+          remainingAmount: Math.max(0, parentTotal - parentDiscount - parentDeposit),
         }
       : {
-          totalAmount:     Number(booking.totalAmount     ?? 0) || 0,
-          paidAmount:      Number(booking.paidAmount      ?? booking.depositAmount ?? 0) || 0,
-          remainingAmount: Number(booking.remainingAmount ?? 0) || 0,
+          totalAmount:     bookingTotal,
+          paidAmount:      bookingDeposit,
+          discountAmount:  bookingDiscount,
+          remainingAmount: Math.max(0, bookingTotal - bookingDiscount - bookingDeposit),
         };
     const html = generateContractHTML(booking, siblings, allPackages, paymentSummary);
     const win = window.open("", "_blank");
@@ -1787,16 +1797,25 @@ function ShowDetailPanel({
             setContractImagesLoading(true);
             setShowContractImages(true);
             try {
+              const parentDiscount = Number(parentContract?.discountAmount ?? 0) || 0;
+              const parentDeposit = Number(parentContract?.depositAmount ?? 0) || 0;
+              const parentTotal = Number(parentContract?.totalAmount ?? 0) || 0;
+              const bookingDeposit = Number(booking.depositAmount ?? 0) || 0;
+              const bookingDiscount = Number(booking.discountAmount ?? 0) || 0;
+              const bookingTotal = Number(booking.totalAmount ?? 0) || 0;
+              
               const paymentSummary = parentContract
                 ? {
-                    totalAmount:     Number(parentContract.totalAmount     ?? 0) || 0,
-                    paidAmount:      Number(parentContract.depositAmount   ?? 0) || 0,
-                    remainingAmount: Number(parentContract.remainingAmount ?? 0) || 0,
+                    totalAmount:     parentTotal,
+                    paidAmount:      parentDeposit,
+                    discountAmount:  parentDiscount,
+                    remainingAmount: Math.max(0, parentTotal - parentDiscount - parentDeposit),
                   }
                 : {
-                    totalAmount:     Number(booking.totalAmount     ?? 0) || 0,
-                    paidAmount:      Number(booking.paidAmount      ?? booking.depositAmount ?? 0) || 0,
-                    remainingAmount: Number(booking.remainingAmount ?? 0) || 0,
+                    totalAmount:     bookingTotal,
+                    paidAmount:      bookingDeposit,
+                    discountAmount:  bookingDiscount,
+                    remainingAmount: Math.max(0, bookingTotal - bookingDiscount - bookingDeposit),
                   };
               const html = generateContractHTML(booking, siblings, allPackages, paymentSummary);
               const urls = await buildContractImages(html);
