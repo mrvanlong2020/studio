@@ -44,6 +44,8 @@ export const tasksTable = pgTable("tasks", {
   dueDate: date("due_date"),
   completedAt: timestamp("completed_at"),
   notes: text("notes"),
+  // Task #22: chi phí sản xuất của task này (tự tính từ staffRates khi tạo, có thể override)
+  cost: numeric("cost", { precision: 12, scale: 2 }).notNull().default("0"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

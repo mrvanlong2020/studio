@@ -34,6 +34,8 @@ export const bookingsTable = pgTable("bookings", {
   includedRetouchedPhotosSnapshot: integer("included_retouched_photos_snapshot").notNull().default(0),
   // Task #24: link gói dịch vụ (tracking only, không cascade khi sửa bảng giá)
   servicePackageId: integer("service_package_id").references(() => servicePackagesTable.id, { onDelete: "set null" }),
+  // Task #22: vai trò bắt buộc cho buổi chụp (VD: ["photographer","makeup","videographer"])
+  requiredRoles: jsonb("required_roles").notNull().default([]),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

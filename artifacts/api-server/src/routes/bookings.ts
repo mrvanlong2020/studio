@@ -34,6 +34,7 @@ const bookingFields = {
   photoCount: bookingsTable.photoCount,
   includedRetouchedPhotosSnapshot: bookingsTable.includedRetouchedPhotosSnapshot,
   servicePackageId: bookingsTable.servicePackageId,
+  requiredRoles: bookingsTable.requiredRoles,
   createdAt: bookingsTable.createdAt,
 };
 
@@ -80,19 +81,43 @@ router.get("/bookings", async (req, res) => {
 
   const allPayments = await db.select().from(paymentsTable);
 
-  // Aggregate task counts per booking
-  const taskCounts = await db
+  // Aggregate task counts + productionCost + coveredRoles per booking
+  const taskAggRows = await db
     .select({
       bookingId: tasksTable.bookingId,
       count: sql<number>`count(*)::int`,
+      productionCost: sql<string>`coalesce(sum(${tasksTable.cost}), 0)::text`,
+      role: tasksTable.role,
+      assigneeId: tasksTable.assigneeId,
+    })
+    .from(tasksTable)
+    .where(sql`${tasksTable.bookingId} is not null`);
+
+  // Build maps per booking
+  const taskCountMap: Record<number, number> = {};
+  const productionCostMap: Record<number, number> = {};
+  const coveredRolesMap: Record<number, Set<string>> = {};
+
+  for (const row of taskAggRows) {
+    if (row.bookingId == null) continue;
+    const bid = row.bookingId;
+    taskCountMap[bid] = (taskCountMap[bid] ?? 0) + 1;
+    if (!coveredRolesMap[bid]) coveredRolesMap[bid] = new Set();
+    if (row.assigneeId != null && row.role) coveredRolesMap[bid].add(row.role);
+  }
+
+  // Sum productionCost separately using SQL aggregate
+  const costAgg = await db
+    .select({
+      bookingId: tasksTable.bookingId,
+      totalCost: sql<string>`coalesce(sum(${tasksTable.cost}), 0)::text`,
     })
     .from(tasksTable)
     .where(sql`${tasksTable.bookingId} is not null`)
     .groupBy(tasksTable.bookingId);
 
-  const taskCountMap: Record<number, number> = {};
-  for (const row of taskCounts) {
-    if (row.bookingId != null) taskCountMap[row.bookingId] = row.count;
+  for (const row of costAgg) {
+    if (row.bookingId != null) productionCostMap[row.bookingId] = parseFloat(row.totalCost);
   }
 
   const bookings = rows.map((b) => {
@@ -100,6 +125,7 @@ router.get("/bookings", async (req, res) => {
     const paidAmount = bPayments.reduce((s, p) => s + parseFloat(p.amount), 0);
     const totalAmount = parseFloat(b.totalAmount);
     const discountAmt = parseFloat(b.discountAmount ?? "0");
+    const productionCost = productionCostMap[b.id] ?? 0;
     return {
       ...b,
       totalAmount,
@@ -108,6 +134,10 @@ router.get("/bookings", async (req, res) => {
       discountAmount: discountAmt,
       remainingAmount: Math.max(0, totalAmount - discountAmt - paidAmount),
       taskCount: taskCountMap[b.id] ?? 0,
+      productionCost,
+      profit: totalAmount - discountAmt - productionCost,
+      requiredRoles: (b.requiredRoles as string[]) ?? [],
+      coveredRoles: [...(coveredRolesMap[b.id] ?? new Set<string>())],
     };
   });
 
@@ -317,6 +347,8 @@ router.get("/bookings/:id", async (req, res) => {
       id: tasksTable.id, title: tasksTable.title, category: tasksTable.category,
       status: tasksTable.status, priority: tasksTable.priority, dueDate: tasksTable.dueDate,
       assigneeId: tasksTable.assigneeId, assigneeName: staffTable.name,
+      role: tasksTable.role, taskType: tasksTable.taskType,
+      cost: tasksTable.cost,
     })
     .from(tasksTable)
     .leftJoin(staffTable, eq(tasksTable.assigneeId, staffTable.id))
@@ -325,6 +357,9 @@ router.get("/bookings/:id", async (req, res) => {
   const paidAmount = payments.reduce((s, p) => s + parseFloat(p.amount), 0);
   const totalAmount = parseFloat(row.totalAmount);
   const totalExpenses = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const discountAmt = parseFloat(row.discountAmount ?? "0");
+  const productionCost = tasks.reduce((s, t) => s + (t.cost != null ? parseFloat(t.cost as string) : 0), 0);
+  const coveredRoles = [...new Set(tasks.filter(t => t.assigneeId != null && t.role).map(t => t.role as string))];
 
   // ── If this booking is a child (has parentId), fetch siblings + parent ──
   let siblings: unknown[] = [];

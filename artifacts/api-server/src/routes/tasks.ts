@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { tasksTable, staffTable } from "@workspace/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { tasksTable, staffTable, staffRatePricesTable, bookingsTable } from "@workspace/db/schema";
+import { eq, desc, and, or } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -13,9 +13,41 @@ const TASK_TYPE_LABELS: Record<string, string> = {
 
 const fmt = (t: Record<string, unknown>, assigneeName: string | null) => ({
   ...t,
+  cost: t.cost != null ? parseFloat(t.cost as string) : 0,
   assigneeName,
   taskTypeLabel: TASK_TYPE_LABELS[(t.taskType as string) ?? ""] ?? (t.taskType as string) ?? "",
 });
+
+// ── Helper: tự tính cost từ staffRatePricesTable ──────────────────────────────
+async function lookupCost(staffId: number | null, role: string | null, taskType: string | null, bookingTotalAmount: number): Promise<number> {
+  if (!staffId || !role) return 0;
+  const taskKey = taskType || "mac_dinh";
+
+  // Exact match: staffId + role + taskKey
+  const rows = await db.select()
+    .from(staffRatePricesTable)
+    .where(and(
+      eq(staffRatePricesTable.staffId, staffId),
+      eq(staffRatePricesTable.role, role),
+      or(
+        eq(staffRatePricesTable.taskKey, taskKey),
+        eq(staffRatePricesTable.taskKey, "mac_dinh"),
+      ),
+    ));
+
+  // Prefer exact taskKey match, fallback to mac_dinh
+  const exact = rows.find(r => r.taskKey === taskKey);
+  const fallback = rows.find(r => r.taskKey === "mac_dinh");
+  const matched = exact ?? fallback;
+
+  if (!matched || matched.rate == null) return 0;
+
+  const rate = parseFloat(matched.rate);
+  if (matched.rateType === "percent") {
+    return Math.round(rate / 100 * bookingTotalAmount);
+  }
+  return rate;
+}
 
 // GET /tasks
 router.get("/tasks", async (req, res) => {
@@ -40,6 +72,7 @@ router.get("/tasks", async (req, res) => {
       dueDate: tasksTable.dueDate,
       completedAt: tasksTable.completedAt,
       notes: tasksTable.notes,
+      cost: tasksTable.cost,
       createdAt: tasksTable.createdAt,
     })
     .from(tasksTable)
@@ -56,14 +89,30 @@ router.get("/tasks", async (req, res) => {
 
 // POST /tasks
 router.post("/tasks", async (req, res) => {
-  const { title, description, category, assigneeId, bookingId, servicePackageId, role, taskType, priority, dueDate, notes } = req.body;
+  const { title, description, category, assigneeId, bookingId, servicePackageId, role, taskType, priority, dueDate, notes, cost: costOverride } = req.body;
   if (!title?.trim()) return res.status(400).json({ error: "Thiếu tiêu đề" });
+
+  // Task #22: bookingId bắt buộc
+  if (!bookingId) return res.status(400).json({ error: "Thiếu bookingId — mỗi việc phải thuộc 1 đơn hàng" });
+
+  // Lookup booking total for percent-rate calc
+  let bookingTotal = 0;
+  const [booking] = await db.select({ totalAmount: bookingsTable.totalAmount }).from(bookingsTable).where(eq(bookingsTable.id, parseInt(String(bookingId))));
+  if (booking) bookingTotal = parseFloat(booking.totalAmount);
+
+  // Auto-compute cost from staffRates unless manually overridden
+  let cost = 0;
+  if (costOverride != null && costOverride !== "") {
+    cost = parseFloat(String(costOverride));
+  } else {
+    cost = await lookupCost(assigneeId ? parseInt(String(assigneeId)) : null, role ?? null, taskType ?? null, bookingTotal);
+  }
 
   const [task] = await db.insert(tasksTable).values({
     title, description,
     category: category || "other",
     assigneeId: assigneeId || null,
-    bookingId: bookingId || null,
+    bookingId: parseInt(String(bookingId)),
     servicePackageId: servicePackageId || null,
     role: role || null,
     taskType: taskType || null,
@@ -71,6 +120,7 @@ router.post("/tasks", async (req, res) => {
     dueDate: dueDate || null,
     notes: notes || null,
     status: "todo",
+    cost: String(cost),
   }).returning();
 
   let assigneeName: string | null = null;
@@ -85,7 +135,7 @@ router.post("/tasks", async (req, res) => {
 // PUT /tasks/:id
 router.put("/tasks/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  const { title, description, assigneeId, priority, status, dueDate, notes, taskType, role, servicePackageId } = req.body;
+  const { title, description, assigneeId, priority, status, dueDate, notes, taskType, role, servicePackageId, cost: costOverride } = req.body;
   const update: Record<string, unknown> = {};
   if (title !== undefined) update.title = title;
   if (description !== undefined) update.description = description;
@@ -101,6 +151,27 @@ router.put("/tasks/:id", async (req, res) => {
   if (taskType !== undefined) update.taskType = taskType;
   if (role !== undefined) update.role = role;
   if (servicePackageId !== undefined) update.servicePackageId = servicePackageId;
+
+  // Re-lookup cost if staffId/role/taskType changed and no manual override
+  if (costOverride != null && costOverride !== "") {
+    update.cost = String(parseFloat(String(costOverride)));
+  } else if (assigneeId !== undefined || role !== undefined || taskType !== undefined) {
+    // Fetch current task to get the full context for cost lookup
+    const [current] = await db.select().from(tasksTable).where(eq(tasksTable.id, id));
+    if (current) {
+      const effectiveStaffId = assigneeId !== undefined ? (assigneeId || null) : current.assigneeId;
+      const effectiveRole = role !== undefined ? (role || null) : current.role;
+      const effectiveTaskType = taskType !== undefined ? (taskType || null) : current.taskType;
+
+      let bookingTotal = 0;
+      if (current.bookingId) {
+        const [booking] = await db.select({ totalAmount: bookingsTable.totalAmount }).from(bookingsTable).where(eq(bookingsTable.id, current.bookingId));
+        if (booking) bookingTotal = parseFloat(booking.totalAmount);
+      }
+      const recomputedCost = await lookupCost(effectiveStaffId, effectiveRole, effectiveTaskType, bookingTotal);
+      update.cost = String(recomputedCost);
+    }
+  }
 
   const [task] = await db.update(tasksTable).set(update).where(eq(tasksTable.id, id)).returning();
   if (!task) return res.status(404).json({ error: "Task không tồn tại" });
