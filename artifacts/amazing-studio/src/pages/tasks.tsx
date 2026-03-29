@@ -36,6 +36,7 @@ type Booking = {
   remainingAmount: number;
   isParentContract: boolean;
   parentId: number | null;
+  taskCount: number;
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -236,16 +237,18 @@ export default function TasksPage() {
             <div className="space-y-2">
               {upcomingBookings.map(booking => {
                 const bookingTasks = tasksByBookingId[booking.id] ?? [];
-                const hasTasks = bookingTasks.length > 0;
+                // Use server-provided taskCount as the authoritative source; fall back to local count
+                const apiTaskCount = booking.taskCount ?? bookingTasks.length;
+                const hasTasks = apiTaskCount > 0;
                 const isExpanded = expandedBookingId === booking.id;
                 const shootDate = booking.shootDate ? new Date(booking.shootDate) : null;
                 const isToday = shootDate && shootDate.toDateString() === today.toDateString();
                 const isPast = shootDate && shootDate < today && !isToday;
                 const daysUntil = shootDate ? Math.round((shootDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : null;
 
-                const doneTasks = bookingTasks.filter(t => t.status === "done").length;
-                const pendingTasks = bookingTasks.filter(t => t.status === "todo").length;
-                const inProgressTasks = bookingTasks.filter(t => t.status === "in_progress").length;
+                const doneTasks = bookingTasks.filter((t: { status: string }) => t.status === "done").length;
+                const pendingTasks = bookingTasks.filter((t: { status: string }) => t.status === "todo").length;
+                const inProgressTasks = bookingTasks.filter((t: { status: string }) => t.status === "in_progress").length;
 
                 return (
                   <div
@@ -301,7 +304,10 @@ export default function TasksPage() {
                       <div className="flex items-center gap-2 flex-shrink-0">
                         {hasTasks ? (
                           <div className="flex items-center gap-1.5 text-xs">
-                            {doneTasks > 0 && <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 font-medium">{doneTasks} xong</span>}
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 font-medium">
+                              Đã giao {apiTaskCount} việc
+                            </span>
+                            {doneTasks > 0 && <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 font-medium">{doneTasks} xong</span>}
                             {inProgressTasks > 0 && <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200 font-medium">{inProgressTasks} đang làm</span>}
                             {pendingTasks > 0 && <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 font-medium">{pendingTasks} chờ</span>}
                           </div>

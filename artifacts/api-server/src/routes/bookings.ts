@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { bookingsTable, customersTable, paymentsTable, expensesTable, tasksTable, staffTable } from "@workspace/db/schema";
-import { eq, and, desc, inArray, or, ilike } from "drizzle-orm";
+import { eq, and, desc, inArray, or, ilike, sql } from "drizzle-orm";
 import { computeBookingEarnings } from "./job-earnings";
 
 const router: IRouter = Router();
@@ -79,6 +79,21 @@ router.get("/bookings", async (req, res) => {
 
   const allPayments = await db.select().from(paymentsTable);
 
+  // Aggregate task counts per booking
+  const taskCounts = await db
+    .select({
+      bookingId: tasksTable.bookingId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(tasksTable)
+    .where(sql`${tasksTable.bookingId} is not null`)
+    .groupBy(tasksTable.bookingId);
+
+  const taskCountMap: Record<number, number> = {};
+  for (const row of taskCounts) {
+    if (row.bookingId != null) taskCountMap[row.bookingId] = row.count;
+  }
+
   const bookings = rows.map((b) => {
     const bPayments = allPayments.filter(p => p.bookingId === b.id);
     const paidAmount = bPayments.reduce((s, p) => s + parseFloat(p.amount), 0);
@@ -91,6 +106,7 @@ router.get("/bookings", async (req, res) => {
       paidAmount,
       discountAmount: discountAmt,
       remainingAmount: Math.max(0, totalAmount - discountAmt - paidAmount),
+      taskCount: taskCountMap[b.id] ?? 0,
     };
   });
 
