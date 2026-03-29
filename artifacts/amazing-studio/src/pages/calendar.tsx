@@ -36,7 +36,7 @@ type Booking = {
   customerPhone: string; shootDate: string; shootTime: string;
   serviceCategory: string; packageType: string; location: string | null;
   status: string; items: OrderLine[]; surcharges?: { name: string; amount: number }[];
-  totalAmount: number; depositAmount: number;
+  totalAmount: number; depositAmount: number; discountAmount?: number;
   paidAmount: number; remainingAmount: number; assignedStaff: number[];
   notes: string | null;
   // Multi-service contract fields

@@ -8,20 +8,37 @@ async function ensureAuthColumns() {
   await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS password_hash TEXT`).catch(() => {});
   await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS username TEXT`).catch(() => {});
 
-  // Seed admin user if staff table is empty
-  const countR = await pool.query(`SELECT COUNT(*) as cnt FROM staff`);
-  const cnt = parseInt((countR.rows[0] as { cnt: string }).cnt, 10);
-  if (cnt === 0) {
-    const adminHash = await bcrypt.hash("123456", 10);
+  // Ensure admin user (tranchi) always exists with correct password
+  const adminR = await pool.query(`SELECT id, phone, password_hash FROM staff WHERE username = 'tranchi' LIMIT 1`);
+  const adminHash = await bcrypt.hash("123456", 10);
+
+  if (adminR.rows.length === 0) {
+    // Admin doesn't exist — create it
     await pool.query(
       `INSERT INTO staff (name, role, roles, phone, username, password_hash, is_active)
        VALUES ('Admin', 'admin', '["admin"]', '0392817079', 'tranchi', $1, 1)`,
       [adminHash]
     );
-    console.log("[startup] Admin user seeded: username=tranchi");
+    console.log("[startup] Admin user seeded: username=tranchi password=123456");
+  } else {
+    const admin = adminR.rows[0] as { id: number; phone: string; password_hash: string | null };
+    if (!admin.password_hash) {
+      // No hash — set to 123456
+      await pool.query(`UPDATE staff SET password_hash = $1 WHERE id = $2`, [adminHash, admin.id]);
+      console.log("[startup] Admin password initialized to default 123456");
+    } else {
+      // Hash exists — check if it was auto-set from phone (wrong), fix it to 123456
+      const matchesPhone = await bcrypt.compare(admin.phone || "0392817079", admin.password_hash);
+      const matches123456 = await bcrypt.compare("123456", admin.password_hash);
+      if (matchesPhone && !matches123456) {
+        await pool.query(`UPDATE staff SET password_hash = $1 WHERE id = $2`, [adminHash, admin.id]);
+        console.log("[startup] Admin password reset from phone-derived to 123456");
+      }
+    }
   }
 
-  const r = await pool.query(`SELECT id, phone, password_hash FROM staff WHERE is_active = 1`);
+  // For all other staff: set phone as default password if no hash set
+  const r = await pool.query(`SELECT id, phone, password_hash FROM staff WHERE is_active = 1 AND username != 'tranchi'`);
   const updates: Promise<void>[] = [];
   for (const row of r.rows as { id: number; phone: string; password_hash: string | null }[]) {
     if (!row.password_hash && row.phone) {
