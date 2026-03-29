@@ -1935,13 +1935,22 @@ function ShowDetailPanel({
                       <span className="text-muted-foreground">Tổng hợp đồng</span>
                       <span className="font-bold">{fmtVND(parentContract.totalAmount)}</span>
                     </div>
+                    {(parentContract.discountAmount ?? 0) > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Giảm giá</span>
+                        <span className="font-semibold text-amber-600">-{fmtVND(parentContract.discountAmount ?? 0)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Đã đặt cọc</span>
                       <span className="font-semibold text-emerald-600">{fmtVND(parentContract.depositAmount)}</span>
                     </div>
                     <div className="flex justify-between text-sm border-t border-border/40 pt-1.5">
                       <span className="font-semibold">Còn lại</span>
-                      <span className={`font-bold ${parentContract.remainingAmount > 0 ? "text-destructive" : "text-emerald-600"}`}>{fmtVND(parentContract.remainingAmount)}</span>
+                      {(() => {
+                        const calcRemaining = Math.max(0, (parentContract.totalAmount ?? 0) - (parentContract.discountAmount ?? 0) - (parentContract.depositAmount ?? 0));
+                        return <span className={`font-bold ${calcRemaining > 0 ? "text-destructive" : "text-emerald-600"}`}>{fmtVND(calcRemaining)}</span>;
+                      })()}
                     </div>
                   </div>
                 </div>

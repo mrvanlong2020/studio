@@ -83,13 +83,14 @@ router.get("/bookings", async (req, res) => {
     const bPayments = allPayments.filter(p => p.bookingId === b.id);
     const paidAmount = bPayments.reduce((s, p) => s + parseFloat(p.amount), 0);
     const totalAmount = parseFloat(b.totalAmount);
+    const discountAmt = parseFloat(b.discountAmount ?? "0");
     return {
       ...b,
       totalAmount,
       depositAmount: parseFloat(b.depositAmount),
       paidAmount,
-      discountAmount: parseFloat(b.discountAmount ?? "0"),
-      remainingAmount: Math.max(0, totalAmount - paidAmount),
+      discountAmount: discountAmt,
+      remainingAmount: Math.max(0, totalAmount - discountAmt - paidAmount),
     };
   });
 
@@ -200,7 +201,7 @@ router.post("/bookings", async (req, res) => {
       depositAmount: parseFloat(parent.depositAmount),
       paidAmount: parseFloat(parent.paidAmount),
       discountAmount: parseFloat(parent.discountAmount ?? "0"),
-      remainingAmount: Math.max(0, parseFloat(parent.totalAmount) - parseFloat(parent.paidAmount)),
+      remainingAmount: Math.max(0, parseFloat(parent.totalAmount) - parseFloat(parent.discountAmount ?? "0") - parseFloat(parent.paidAmount)),
       children: children.map(c => ({ ...c, totalAmount: parseFloat(c.totalAmount) })),
     });
     return;
@@ -256,7 +257,7 @@ router.post("/bookings", async (req, res) => {
     depositAmount: parseFloat(booking.depositAmount),
     paidAmount: parseFloat(booking.paidAmount),
     discountAmount: parseFloat(booking.discountAmount ?? "0"),
-    remainingAmount: Math.max(0, parseFloat(booking.totalAmount) - parseFloat(booking.paidAmount)),
+    remainingAmount: Math.max(0, parseFloat(booking.totalAmount) - parseFloat(booking.discountAmount ?? "0") - parseFloat(booking.paidAmount)),
   });
   } catch (err) {
     console.error("POST /bookings error:", err);
@@ -318,12 +319,14 @@ router.get("/bookings/:id", async (req, res) => {
       const parentPayments = await db.select().from(paymentsTable).where(eq(paymentsTable.bookingId, parentRow.id));
       const parentPaid = parentPayments.reduce((s, p) => s + parseFloat(p.amount), 0);
       const parentTotal = parseFloat(parentRow.totalAmount);
+      const parentDiscount = parseFloat(parentRow.discountAmount ?? "0");
       parentContract = {
         ...parentRow,
         totalAmount: parentTotal,
         depositAmount: parseFloat(parentRow.depositAmount),
         paidAmount: parentPaid,
-        remainingAmount: Math.max(0, parentTotal - parentPaid),
+        discountAmount: parentDiscount,
+        remainingAmount: Math.max(0, parentTotal - parentDiscount - parentPaid),
       };
     }
   }
@@ -350,7 +353,7 @@ router.get("/bookings/:id", async (req, res) => {
     depositAmount: parseFloat(row.depositAmount),
     paidAmount,
     discountAmount: parseFloat(row.discountAmount ?? "0"),
-    remainingAmount: Math.max(0, totalAmount - paidAmount),
+    remainingAmount: Math.max(0, totalAmount - parseFloat(row.discountAmount ?? "0") - paidAmount),
     totalExpenses,
     grossProfit: totalAmount - totalExpenses,
     payments: payments.map(p => ({ ...p, amount: parseFloat(p.amount) })),
@@ -424,7 +427,7 @@ router.put("/bookings/:id", async (req, res) => {
     depositAmount: parseFloat(booking.depositAmount),
     paidAmount,
     discountAmount: parseFloat(booking.discountAmount ?? "0"),
-    remainingAmount: Math.max(0, parseFloat(booking.totalAmount) - paidAmount),
+    remainingAmount: Math.max(0, parseFloat(booking.totalAmount) - parseFloat(booking.discountAmount ?? "0") - paidAmount),
   });
   } catch (err) {
     console.error("PUT /bookings/:id error:", err);
