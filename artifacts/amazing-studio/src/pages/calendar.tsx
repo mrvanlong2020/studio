@@ -44,6 +44,7 @@ type Booking = {
   serviceLabel: string | null;
   isParentContract: boolean;
   photoCount?: number | null;
+  servicePackageId?: number | null;
   // Loaded on detail fetch
   siblings?: Booking[];
   parentContract?: Booking & { remainingAmount: number };
@@ -866,9 +867,12 @@ function ShowFormPanel({
         .filter(s => s.name.trim() && s.amount > 0)
         .map(({ name, amount }) => ({ name, amount }));
 
-      // Task #24: trích servicePackageId từ service line đầu tiên có serviceKey "pkg-{id}"
+      // Task #24: trích servicePackageId từ service line có serviceKey "pkg-{id}"
+      // Khi sửa đơn: nếu không có dòng nào là package → giữ nguyên packageId cũ (tránh unlink)
       const pkgLine = validLines.find(l => (l.serviceKey ?? "").startsWith("pkg-"));
-      const servicePackageId = pkgLine ? parseInt(pkgLine.serviceKey.replace("pkg-", "")) : null;
+      const servicePackageId = pkgLine
+        ? parseInt(pkgLine.serviceKey.replace("pkg-", ""))
+        : (isEdit ? (booking?.servicePackageId ?? null) : null);
 
       const body: Record<string, unknown> = {
         customerId: cid, shootDate: effectiveShootDate, shootTime: sub0.shootTime || "08:00",
