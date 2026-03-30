@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, X, Funnel } from "lucide-react";
+import { UserPlus, X, Funnel, UserCheck } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -77,6 +77,18 @@ export default function CrmLeadsPage() {
     onError: (e: Error) => setFormError(e.message),
   });
 
+  const convertLead = useMutation({
+    mutationFn: (leadId: number) =>
+      authFetch(`${BASE}/api/crm-leads/${leadId}/convert-to-customer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      }).then(async r => {
+        if (!r.ok) { const e = await r.json(); throw new Error(e.error ?? "Lỗi"); }
+        return r.json();
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["crm-leads"] }),
+  });
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError("");
@@ -128,6 +140,7 @@ export default function CrmLeadsPage() {
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Nguồn</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Trạng thái</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Ngày tạo</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Hành động</th>
                 </tr>
               </thead>
               <tbody>
@@ -156,6 +169,16 @@ export default function CrmLeadsPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{formatDate(lead.createdAt)}</td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => convertLead.mutate(lead.id)}
+                          disabled={convertLead.isPending}
+                          title="Chuyển lead này thành khách hàng"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap">
+                          <UserCheck className="w-3.5 h-3.5" />
+                          {convertLead.isPending ? "Đang..." : "Chuyển"}
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}

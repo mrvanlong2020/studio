@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { crmLeadsTable } from "@workspace/db/schema";
+import { crmLeadsTable, customersTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -54,6 +54,43 @@ router.patch("/crm-leads/:id", async (req, res) => {
     res.json(lead);
   } catch (err) {
     console.error("PATCH /crm-leads/:id error:", err);
+    res.status(500).json({ error: "Lỗi hệ thống" });
+  }
+});
+
+router.post("/crm-leads/:id/convert-to-customer", async (req, res) => {
+  try {
+    const leadId = parseInt(req.params.id);
+    const [lead] = await db.select().from(crmLeadsTable).where(eq(crmLeadsTable.id, leadId));
+    if (!lead) return res.status(404).json({ error: "Không tìm thấy lead" });
+
+    // Check if phone already exists in customers
+    const [existingCustomer] = await db
+      .select()
+      .from(customersTable)
+      .where(eq(customersTable.phone, lead.phone));
+    if (existingCustomer) return res.status(400).json({ error: "Khách hàng với SĐT này đã tồn tại" });
+
+    // Create customer from lead
+    const [customer] = await db
+      .insert(customersTable)
+      .values({
+        name: lead.name,
+        phone: lead.phone,
+        source: lead.source || "crm",
+        notes: lead.message || undefined,
+      })
+      .returning();
+
+    // Mark lead as converted
+    await db
+      .update(crmLeadsTable)
+      .set({ status: "lost" })
+      .where(eq(crmLeadsTable.id, leadId));
+
+    res.status(201).json(customer);
+  } catch (err) {
+    console.error("POST /crm-leads/:id/convert-to-customer error:", err);
     res.status(500).json({ error: "Lỗi hệ thống" });
   }
 });
