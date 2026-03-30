@@ -738,7 +738,10 @@ function ShowFormPanel({
     })),
   ];
 
-  const subDraftsTotal = subDrafts.reduce((s, sub) => s + sub.items.reduce((si, l) => si + (l.price || 0), 0), 0);
+  const subDraftsTotal = subDrafts.reduce((s, sub) => s + sub.items.reduce((si, l) => {
+    const lineSurchTotal = (l.surcharges || []).reduce((ls, sc) => ls + (sc.amount || 0), 0);
+    return si + (l.price || 0) + lineSurchTotal;
+  }, 0), 0);
   const surchargesTotal = surcharges.reduce((s, i) => s + (i.amount || 0), 0);
   const totalAmount = subDraftsTotal + surchargesTotal;
   const depositNum = parseFloat(deposit) || 0;
