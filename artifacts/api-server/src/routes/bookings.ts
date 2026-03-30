@@ -81,12 +81,10 @@ router.get("/bookings", async (req, res) => {
 
   const allPayments = await db.select().from(paymentsTable);
 
-  // Aggregate task counts + productionCost + coveredRoles per booking
+  // Fetch all task rows for bookings (plain SELECT — aggregates done in code)
   const taskAggRows = await db
     .select({
       bookingId: tasksTable.bookingId,
-      count: sql<number>`count(*)::int`,
-      productionCost: sql<string>`coalesce(sum(${tasksTable.cost}), 0)::text`,
       role: tasksTable.role,
       assigneeId: tasksTable.assigneeId,
     })
