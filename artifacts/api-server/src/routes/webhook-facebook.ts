@@ -46,7 +46,7 @@ router.post("/webhook/facebook", async (req, res) => {
         const text: string | undefined = msg?.text as string | undefined;
 
         if (!psid || !text) {
-          console.log(`[CRM] Skip non-text message (psid=${psid ?? "unknown"})`);
+          console.log(`[CRM][${ts()}] Skip non-text message (psid=${psid ?? "unknown"})`);
           continue;
         }
 
