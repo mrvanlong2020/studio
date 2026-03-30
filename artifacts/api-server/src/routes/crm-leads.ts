@@ -52,7 +52,7 @@ router.patch("/crm-leads/:id", async (req, res) => {
       setObj.status = status;
     }
     if (notes !== undefined) {
-      setObj.notes = notes === null ? null : String(notes);
+      setObj.notes = notes === null ? null : String(notes).trim();
     }
     if (Object.keys(setObj).length === 0) return res.status(400).json({ error: "Không có gì để cập nhật" });
 

@@ -16,7 +16,7 @@ type CrmLead = {
   phone: string | null;
   message: string | null;
   lastMessage: string | null;
-  lastMessageAt: string | null;
+  lastMessageAt: Date | null;
   source: string | null;
   status: string | null;
   type: string | null;
@@ -61,7 +61,7 @@ function channelMeta(v: string | null) {
 
 const EMPTY_FORM = { name: "", phone: "", message: "", source: "facebook" };
 
-function formatDate(d: string | null | undefined) {
+function formatDate(d: Date | string | null | undefined) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
@@ -96,7 +96,9 @@ export default function CrmLeadsPage() {
     queryKey: ["crm-leads"],
     queryFn: () => authFetch(`${BASE}/api/crm-leads`).then(r => {
       if (!r.ok) throw new Error("Lỗi tải dữ liệu");
-      return r.json();
+      return r.json().then((rows: (Omit<CrmLead, "lastMessageAt"> & { lastMessageAt: string | null })[]) =>
+        rows.map(row => ({ ...row, lastMessageAt: row.lastMessageAt ? new Date(row.lastMessageAt) : null }))
+      );
     }),
   });
 
