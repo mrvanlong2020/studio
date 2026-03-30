@@ -108,8 +108,7 @@ router.get("/customers/by-phone", async (req, res) => {
 
 router.post("/customers", async (req, res) => {
   const { name, phone, email, address, notes, facebook, zalo, source, tags, gender, avatar } = req.body;
-  const normalizedPhone = phone ? normalizePhone(String(phone).trim()) : "";
-  if (!normalizedPhone) return res.status(400).json({ error: "Số điện thoại là bắt buộc" });
+  const normalizedPhone = phone ? normalizePhone(String(phone).trim()) : null;
   try {
     const count = await db.select().from(customersTable);
     const customCode = `KH${String(count.length + 1).padStart(3, "0")}`;
@@ -154,15 +153,13 @@ router.put("/customers/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   const { name, phone, email, address, notes, facebook, zalo, source, tags, gender, avatar } = req.body;
   const rawPhone = phone !== undefined ? String(phone) : undefined;
-  if (rawPhone !== undefined && !normalizePhone(rawPhone.trim())) {
-    return res.status(400).json({ error: "Số điện thoại không được để trống" });
-  }
   try {
     const setFields: Record<string, unknown> = {
       name, email, address, notes, facebook, zalo, source, tags: tags || [], gender, avatar,
     };
     if (rawPhone !== undefined) {
-      setFields.phone = normalizePhone(rawPhone.trim());
+      const normalized = normalizePhone(rawPhone.trim());
+      setFields.phone = normalized || null;
     }
     const [customer] = await db
       .update(customersTable)

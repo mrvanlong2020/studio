@@ -39,11 +39,12 @@ const PAYMENT_TYPE: Record<string, string> = {
 };
 
 type Booking = {
-  id: number; orderCode: string; customerId: number; customerName: string; customerPhone: string;
+  id: number; orderCode: string; customerId: number; customerName: string; customerPhone: string | null;
   shootDate: string; shootTime?: string; serviceCategory: string; packageType: string; location?: string;
   status: string; items: { name?: string; qty?: number; unitPrice?: number; total?: number; serviceName?: string; price?: number; notes?: string; conceptImages?: string[]; [key: string]: unknown }[];
   totalAmount: number; depositAmount: number; paidAmount: number; discountAmount: number; remainingAmount: number;
   totalExpenses: number; grossProfit: number; internalNotes?: string; notes?: string;
+  surcharges: { name: string; amount: number }[];
   payments: Payment[]; expenses: Expense[]; tasks: Task[];
   assignedStaff: number[]; createdAt: string;
 };
@@ -61,7 +62,7 @@ type Task = {
 };
 
 type SimpleBooking = {
-  id: number; orderCode: string; customerName: string; customerPhone: string; shootDate: string; shootTime?: string;
+  id: number; orderCode: string; customerName: string; customerPhone: string | null; shootDate: string; shootTime?: string;
   serviceCategory: string; packageType: string; status: string; totalAmount: number; paidAmount: number; remainingAmount: number; createdAt: string;
 };
 
@@ -168,7 +169,7 @@ export default function BookingsPage() {
   });
 
   const filtered = bookings.filter(b => {
-    const matchSearch = !search || b.customerName.toLowerCase().includes(search.toLowerCase()) || b.orderCode?.toLowerCase().includes(search.toLowerCase()) || b.customerPhone.includes(search);
+    const matchSearch = !search || b.customerName.toLowerCase().includes(search.toLowerCase()) || b.orderCode?.toLowerCase().includes(search.toLowerCase()) || (b.customerPhone ?? "").includes(search);
     const matchStatus = !statusFilter || b.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -179,6 +180,13 @@ export default function BookingsPage() {
     remaining: bookings.reduce((s, b) => s + b.remainingAmount, 0),
     count: bookings.length,
   };
+
+  const effectiveTotal = detail
+    ? detail.totalAmount + (detail.surcharges ?? []).reduce((s, i) => s + i.amount, 0)
+    : 0;
+  const effectiveRemaining = detail
+    ? Math.max(0, effectiveTotal - (detail.discountAmount ?? 0) - (detail.paidAmount ?? 0))
+    : 0;
 
   return (
     <div className="space-y-4">
@@ -246,7 +254,7 @@ export default function BookingsPage() {
                           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${s.bg}`}>{s.label}</span>
                         </div>
                         <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1 flex-wrap">
-                          <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{b.customerPhone}</span>
+                          {b.customerPhone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{b.customerPhone}</span>}
                           <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatDate(b.shootDate)} {b.shootTime?.slice(0, 5)}</span>
                           <span className="flex items-center gap-1"><Package2 className="w-3 h-3" />{b.packageType}</span>
                         </div>
@@ -290,7 +298,7 @@ export default function BookingsPage() {
                           <span className="text-sm text-muted-foreground">{detail.orderCode}</span>
                         </div>
                         <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
-                          <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{detail.customerPhone}</span>
+                          {detail.customerPhone && <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{detail.customerPhone}</span>}
                           <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{formatDate(detail.shootDate)} {detail.shootTime?.slice(0, 5)}</span>
                           {detail.location && <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{detail.location}</span>}
                         </div>
@@ -308,9 +316,9 @@ export default function BookingsPage() {
                     {/* Financial Summary */}
                     <div className="grid grid-cols-3 gap-2 mt-3">
                       {[
-                        { label: "Tổng đơn", value: formatVND(detail.totalAmount), color: "text-foreground" },
+                        { label: "Tổng đơn", value: formatVND(effectiveTotal), color: "text-foreground" },
                         { label: "Đã thu", value: formatVND(detail.paidAmount), color: "text-green-600" },
-                        { label: "Còn nợ", value: formatVND(detail.remainingAmount), color: detail.remainingAmount > 0 ? "text-red-600" : "text-green-600" },
+                        { label: "Còn nợ", value: formatVND(effectiveRemaining), color: effectiveRemaining > 0 ? "text-red-600" : "text-green-600" },
                       ].map(f => (
                         <div key={f.label} className="bg-background rounded-lg p-2 text-center border">
                           <p className="text-[10px] text-muted-foreground">{f.label}</p>
@@ -322,7 +330,7 @@ export default function BookingsPage() {
                     {/* Progress bar */}
                     <div className="mt-2">
                       <div className="h-2 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min((detail.paidAmount / detail.totalAmount) * 100, 100)}%` }} />
+                        <div className="h-full bg-primary rounded-full" style={{ width: `${effectiveTotal > 0 ? Math.min((detail.paidAmount / effectiveTotal) * 100, 100) : 0}%` }} />
                       </div>
                     </div>
                   </div>
@@ -604,9 +612,12 @@ export default function BookingsPage() {
                         <div className="rounded-xl border p-3 bg-muted/20">
                           <div className="space-y-1.5 text-sm">
                             <div className="flex justify-between"><span className="text-muted-foreground">Tổng đơn hàng</span><span className="font-semibold">{formatVND(detail.totalAmount)}</span></div>
+                            {(detail.surcharges ?? []).length > 0 && (detail.surcharges ?? []).map((sc, idx) => (
+                              <div key={idx} className="flex justify-between"><span className="text-muted-foreground">Phụ thu: {sc.name}</span><span>+{formatVND(sc.amount)}</span></div>
+                            ))}
                             {detail.discountAmount > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Giảm giá</span><span className="text-green-600">-{formatVND(detail.discountAmount)}</span></div>}
                             <div className="flex justify-between"><span className="text-muted-foreground">Đã thanh toán</span><span className="text-green-600 font-semibold">{formatVND(detail.paidAmount)}</span></div>
-                            <div className="flex justify-between border-t pt-1.5"><span className="font-bold">Còn lại</span><span className={`font-bold text-base ${detail.remainingAmount > 0 ? "text-red-600" : "text-green-600"}`}>{formatVND(detail.remainingAmount)}</span></div>
+                            <div className="flex justify-between border-t pt-1.5"><span className="font-bold">Còn lại</span><span className={`font-bold text-base ${effectiveRemaining > 0 ? "text-red-600" : "text-green-600"}`}>{formatVND(effectiveRemaining)}</span></div>
                           </div>
                         </div>
                       </div>

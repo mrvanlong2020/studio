@@ -6,6 +6,7 @@ async function runMigrations() {
     await client.query("BEGIN");
 
     await client.query(`ALTER TABLE crm_leads ADD COLUMN IF NOT EXISTS notes TEXT`);
+    await client.query(`ALTER TABLE customers ALTER COLUMN phone DROP NOT NULL`);
 
     await client.query("COMMIT");
     console.log("[migrations] Hoàn thành.");

@@ -223,8 +223,7 @@ export default function CustomersPage() {
   const handleSubmit = async () => {
     setFormError("");
     if (!form.name.trim()) { setFormError("Vui lòng nhập họ và tên khách hàng"); return; }
-    if (!form.phone.trim()) { setFormError("Vui lòng nhập số điện thoại"); return; }
-    if (phoneDuplicate) {
+    if (form.phone.trim() && phoneDuplicate) {
       setFormError(`Số điện thoại này đã thuộc về "${phoneDuplicate.name}"${phoneDuplicate.customCode ? ` (${phoneDuplicate.customCode})` : ""}. Không thể tạo trùng.`);
       return;
     }
