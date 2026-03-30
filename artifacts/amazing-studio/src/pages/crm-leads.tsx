@@ -266,7 +266,7 @@ export default function CrmLeadsPage() {
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Nguồn</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Trạng thái</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Nhắn lúc</th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground"></th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Hành động</th>
                 </tr>
               </thead>
               <tbody>
@@ -373,27 +373,33 @@ export default function CrmLeadsPage() {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tin nhắn cuối</p>
                 <div className="bg-muted/40 rounded-xl px-3 py-2.5 text-sm text-foreground min-h-[40px]">
                   {selectedLead.lastMessage
-                    ? <><p>{selectedLead.lastMessage}</p>
-                        {selectedLead.lastMessageAt && (
-                          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                            <Clock className="w-3 h-3" />{formatDate(selectedLead.lastMessageAt)}
-                          </p>
-                        )}
-                      </>
-                    : <span className="text-muted-foreground/50">Chưa có tin nhắn</span>
+                    ? <p>{selectedLead.lastMessage}</p>
+                    : <span className="text-muted-foreground/50">—</span>
+                  }
+                </div>
+              </div>
+
+              {/* Last message time */}
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Thời gian cuối</p>
+                <div className="bg-muted/40 rounded-xl px-3 py-2.5 text-sm text-foreground">
+                  {selectedLead.lastMessageAt
+                    ? <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{formatDate(selectedLead.lastMessageAt)}</span>
+                    : <span className="text-muted-foreground/50">—</span>
                   }
                 </div>
               </div>
 
               {/* Original message */}
-              {selectedLead.message && (
-                <div className="space-y-1.5">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tin nhắn ban đầu</p>
-                  <div className="bg-muted/40 rounded-xl px-3 py-2.5 text-sm text-foreground">
-                    {selectedLead.message}
-                  </div>
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tin nhắn gốc</p>
+                <div className="bg-muted/40 rounded-xl px-3 py-2.5 text-sm text-foreground min-h-[40px]">
+                  {selectedLead.message
+                    ? <p>{selectedLead.message}</p>
+                    : <span className="text-muted-foreground/50">—</span>
+                  }
                 </div>
-              )}
+              </div>
 
               <hr className="border-border" />
 
