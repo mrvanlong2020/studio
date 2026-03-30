@@ -811,7 +811,10 @@ function ShowFormPanel({
 
         const subServicePayloads = subDrafts.map(sub => {
           const validItems = sub.items.filter(l => l.serviceName || l.serviceId);
-          const subTotal = sub.items.reduce((s, l) => s + (l.price || 0), 0);
+          const subTotal = sub.items.reduce((s, l) => {
+            const lineSurchTotal = (l.surcharges || []).reduce((ls, sc) => ls + (sc.amount || 0), 0);
+            return s + (l.price || 0) + lineSurchTotal;
+          }, 0);
           const subAssigned: Record<string, unknown> = {};
           if (sub.photoId) { subAssigned.photo = sub.photoId; subAssigned.photoTask = sub.photoTask || "mac_dinh"; }
           if (sub.makeupId) { subAssigned.makeup = sub.makeupId; subAssigned.makeupTask = sub.makeupTask || "mac_dinh"; }
