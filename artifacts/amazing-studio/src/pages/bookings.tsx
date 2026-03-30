@@ -611,10 +611,11 @@ export default function BookingsPage() {
                         {/* Debt summary */}
                         <div className="rounded-xl border p-3 bg-muted/20">
                           <div className="space-y-1.5 text-sm">
-                            <div className="flex justify-between"><span className="text-muted-foreground">Tổng đơn hàng</span><span className="font-semibold">{formatVND(detail.totalAmount)}</span></div>
+                            <div className="flex justify-between"><span className="text-muted-foreground">Tổng đơn hàng (gốc)</span><span className="font-semibold">{formatVND(detail.totalAmount)}</span></div>
                             {(detail.surcharges ?? []).length > 0 && (detail.surcharges ?? []).map((sc, idx) => (
                               <div key={idx} className="flex justify-between"><span className="text-muted-foreground">Phụ thu: {sc.name}</span><span>+{formatVND(sc.amount)}</span></div>
                             ))}
+                            {(detail.surcharges ?? []).length > 0 && <div className="flex justify-between"><span className="text-muted-foreground font-medium">Tổng cộng</span><span className="font-semibold">{formatVND(effectiveTotal)}</span></div>}
                             {detail.discountAmount > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Giảm giá</span><span className="text-green-600">-{formatVND(detail.discountAmount)}</span></div>}
                             <div className="flex justify-between"><span className="text-muted-foreground">Đã thanh toán</span><span className="text-green-600 font-semibold">{formatVND(detail.paidAmount)}</span></div>
                             <div className="flex justify-between border-t pt-1.5"><span className="font-bold">Còn lại</span><span className={`font-bold text-base ${effectiveRemaining > 0 ? "text-red-600" : "text-green-600"}`}>{formatVND(effectiveRemaining)}</span></div>
