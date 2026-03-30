@@ -763,7 +763,6 @@ function ShowFormPanel({
   const save = async () => {
     setError("");
     if (!customerName.trim()) { setError("Vui lòng nhập tên khách hàng"); return; }
-    if (!phone.trim()) { setError("Vui lòng nhập số điện thoại"); return; }
     if (!shootDate) { setError("Vui lòng chọn ngày hợp đồng"); return; }
     const isMulti = subDrafts.length >= 2;
     setSaving(true);
@@ -771,21 +770,29 @@ function ShowFormPanel({
       // ── 1. Tạo / tìm khách hàng ──
       let cid = customerId;
       if (!cid) {
-        const foundRaw = await authFetch(`${BASE}/api/customers?search=${encodeURIComponent(phone)}`, { headers: { "Content-Type": "application/json" } }).then(r => r.ok ? r.json() : []).catch(() => []);
-        const found: Customer[] = Array.isArray(foundRaw) ? foundRaw : [];
-        const existing = found.find(c => c.phone === phone);
-        if (existing) {
-          cid = existing.id;
-          if (avatar && !existing.avatar) {
-            await authFetch(`${BASE}/api/customers/${cid}`, {
-              method: "PUT", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ avatar }),
-            });
+        if (phone.trim()) {
+          const foundRaw = await authFetch(`${BASE}/api/customers?search=${encodeURIComponent(phone)}`, { headers: { "Content-Type": "application/json" } }).then(r => r.ok ? r.json() : []).catch(() => []);
+          const found: Customer[] = Array.isArray(foundRaw) ? foundRaw : [];
+          const existing = found.find(c => c.phone === phone);
+          if (existing) {
+            cid = existing.id;
+            if (avatar && !existing.avatar) {
+              await authFetch(`${BASE}/api/customers/${cid}`, {
+                method: "PUT", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ avatar }),
+              });
+            }
+          } else {
+            const nc = await authFetch(`${BASE}/api/customers`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: customerName, phone, facebook: facebook || undefined, zalo: zalo || undefined, avatar: avatar || undefined, source: "walk-in" }),
+            }).then(r => r.json()) as Customer;
+            cid = nc.id;
           }
         } else {
           const nc = await authFetch(`${BASE}/api/customers`, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: customerName, phone, facebook: facebook || undefined, zalo: zalo || undefined, avatar: avatar || undefined, source: "walk-in" }),
+            body: JSON.stringify({ name: customerName, facebook: facebook || undefined, zalo: zalo || undefined, avatar: avatar || undefined, source: "walk-in" }),
           }).then(r => r.json()) as Customer;
           cid = nc.id;
         }
