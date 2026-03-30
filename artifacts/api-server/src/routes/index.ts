@@ -28,6 +28,7 @@ import storageRouter from "./storage";
 import revenueRouter from "./revenue";
 import bookingExtrasRouter from "./booking-extras";
 import attendanceRouter from "./attendance";
+import crmLeadsRouter from "./crm-leads";
 
 const router: IRouter = Router();
 
@@ -60,5 +61,6 @@ router.use(storageRouter);
 router.use(revenueRouter);
 router.use(bookingExtrasRouter);
 router.use(attendanceRouter);
+router.use(crmLeadsRouter);
 
 export default router;

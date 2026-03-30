@@ -16,3 +16,4 @@ export * from "./staff_hr";
 export * from "./photoshop_jobs";
 export * from "./internal_comms";
 export * from "./attendance";
+export * from "./crm_leads";

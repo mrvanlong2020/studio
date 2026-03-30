@@ -26,6 +26,7 @@ import InternalCommsPage from "@/pages/internal-comms";
 import AttendancePage from "@/pages/attendance";
 import AttendanceCheckinPage from "@/pages/attendance-checkin";
 import MyProfilePage from "@/pages/my-profile";
+import CrmLeadsPage from "@/pages/crm-leads";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
 import { StaffAuthProvider, useStaffAuth } from "@/contexts/StaffAuthContext";
@@ -76,6 +77,7 @@ function Router() {
         <Route path="/attendance/check-in" component={AttendanceCheckinPage} />
         <Route path="/attendance" component={AttendancePage} />
         <Route path="/internal-comms" component={InternalCommsPage} />
+        <Route path="/crm-leads" component={() => <AdminRoute component={CrmLeadsPage} />} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

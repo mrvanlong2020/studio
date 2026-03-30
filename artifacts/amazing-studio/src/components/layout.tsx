@@ -7,7 +7,7 @@ import {
   Moon, LogOut, Bell, Wallet, UserPlus, Menu,
   ClipboardList, ScrollText, TrendingUp, LayoutList, UserCog,
   CreditCard, Film, MessageSquare, ChevronDown, Shield, Eye,
-  Camera, Palette, Layers, Banknote, Star, TrendingDown, User, Timer
+  Camera, Palette, Layers, Banknote, Star, TrendingDown, User, Timer, Funnel
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useStaffAuth, type SimulateRole } from "@/contexts/StaffAuthContext";
@@ -19,6 +19,7 @@ const ALL_NAV_ITEMS = [
   { href: "/my-profile",      label: "Hồ sơ của tôi",       icon: User,            adminOnly: false },
   { href: "/calendar",        label: "Lịch chụp",            icon: CalendarDays,    adminOnly: false },
   { href: "/customers",       label: "Khách hàng",           icon: Users,           adminOnly: false },
+  { href: "/crm-leads",       label: "CRM Leads",            icon: Funnel,          adminOnly: true  },
   { href: "/bookings",        label: "Đơn hàng",             icon: ClipboardList,   adminOnly: false },
   { href: "/payments",        label: "Thu tiền",             icon: CreditCard,      adminOnly: false },
   { href: "/expenses",        label: "Chi tiền",             icon: TrendingDown,    adminOnly: true  },
