@@ -53,8 +53,10 @@ function statusMeta(v: string | null) {
 function typeMeta(v: string | null) {
   return TYPE_OPTIONS.find(t => t.value === v) ?? TYPE_OPTIONS[2];
 }
+const CHANNEL_UNKNOWN = { value: "", label: "—", color: "bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500" };
 function channelMeta(v: string | null) {
-  return CHANNEL_OPTIONS.find(c => c.value === v) ?? CHANNEL_OPTIONS[0];
+  if (!v) return CHANNEL_UNKNOWN;
+  return CHANNEL_OPTIONS.find(c => c.value === v) ?? CHANNEL_UNKNOWN;
 }
 
 const EMPTY_FORM = { name: "", phone: "", message: "", source: "facebook" };
