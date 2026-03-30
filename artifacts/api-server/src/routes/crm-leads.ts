@@ -1,9 +1,16 @@
 import { Router, type IRouter } from "express";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import { crmLeadsTable, customersTable } from "@workspace/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
 
 const router: IRouter = Router();
+
+async function ensureCrmLeadsNotesColumn() {
+  await pool.query(`ALTER TABLE crm_leads ADD COLUMN IF NOT EXISTS notes TEXT`).catch((err: unknown) => {
+    console.error("[CRM] ensureCrmLeadsNotesColumn error:", err);
+  });
+}
+ensureCrmLeadsNotesColumn();
 
 router.get("/crm-leads", async (req, res) => {
   try {
@@ -46,12 +53,14 @@ router.patch("/crm-leads/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     const { status, notes } = req.body;
 
-    const setObj: { status?: string; notes?: string } = {};
+    const setObj: { status?: string; notes?: string | null } = {};
     if (status !== undefined) {
       if (!VALID_STATUSES.includes(status)) return res.status(400).json({ error: "Trạng thái không hợp lệ" });
       setObj.status = status;
     }
-    if (notes !== undefined) setObj.notes = String(notes);
+    if (notes !== undefined) {
+      setObj.notes = notes === null ? null : String(notes);
+    }
     if (Object.keys(setObj).length === 0) return res.status(400).json({ error: "Không có gì để cập nhật" });
 
     const [lead] = await db
