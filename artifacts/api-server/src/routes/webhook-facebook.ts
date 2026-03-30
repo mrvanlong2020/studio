@@ -7,6 +7,10 @@ const router: IRouter = Router();
 
 const VERIFY_TOKEN = process.env["FACEBOOK_VERIFY_TOKEN"] ?? "amazing_studio_webhook";
 
+function ts(): string {
+  return new Date().toISOString().slice(0, 16).replace("T", " ");
+}
+
 router.get("/webhook/facebook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -41,7 +45,10 @@ router.post("/webhook/facebook", async (req, res) => {
         const psid: string | undefined = sender?.id as string | undefined;
         const text: string | undefined = msg?.text as string | undefined;
 
-        if (!psid || !text) continue;
+        if (!psid || !text) {
+          console.log(`[CRM] Skip non-text message (psid=${psid ?? "unknown"})`);
+          continue;
+        }
 
         const existing = await db
           .select()
@@ -57,7 +64,7 @@ router.post("/webhook/facebook", async (req, res) => {
               lastMessageAt: new Date(),
             })
             .where(eq(crmLeadsTable.facebookUserId, psid));
-          console.log(`[CRM] Updated lead #${existing[0].id} (psid=${psid}): ${text.slice(0, 50)}`);
+          console.log(`[CRM][${ts()}] Updated lead #${existing[0].id} (psid=${psid}): ${text.slice(0, 50)}`);
         } else {
           const [newLead] = await db
             .insert(crmLeadsTable)
@@ -73,7 +80,7 @@ router.post("/webhook/facebook", async (req, res) => {
               status: "new",
             })
             .returning();
-          console.log(`[CRM] Created new lead #${newLead.id} (psid=${psid}): ${text.slice(0, 50)}`);
+          console.log(`[CRM][${ts()}] Created lead #${newLead.id} (psid=${psid}): ${text.slice(0, 50)}`);
         }
       }
     }
