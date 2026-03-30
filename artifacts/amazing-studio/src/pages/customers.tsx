@@ -70,7 +70,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 type Customer = {
-  id: number; customCode: string; name: string; phone: string; email?: string;
+  id: number; customCode: string; name: string; phone: string | null; email?: string;
   address?: string; gender?: string; facebook?: string; zalo?: string;
   source?: string; tags?: string; notes?: string; createdAt: string;
   avatar?: string; totalBookings?: number; totalPaid?: number; totalDebt?: number;
@@ -173,7 +173,7 @@ export default function CustomersPage() {
 
   const openEdit = (c: Customer) => {
     setForm({
-      name: c.name, phone: c.phone, email: c.email || "", address: c.address || "",
+      name: c.name, phone: c.phone ?? "", email: c.email || "", address: c.address || "",
       gender: c.gender || "", facebook: c.facebook || "", zalo: c.zalo || "",
       source: c.source || "other",
       tags: Array.isArray(c.tags) ? (c.tags as string[]).join(", ") : (c.tags || ""),
@@ -312,7 +312,7 @@ export default function CustomersPage() {
                         ))}
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 flex-wrap">
-                        <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{c.phone}</span>
+                        {c.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{c.phone}</span>}
                         {(c.totalBookings ?? 0) > 0 && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{c.totalBookings} show</span>}
                         {c.address && <span className="flex items-center gap-1 truncate max-w-[150px]"><MapPin className="w-3 h-3 flex-shrink-0" />{c.address}</span>}
                       </div>
@@ -395,7 +395,7 @@ export default function CustomersPage() {
               <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto">
                 <div className="space-y-2">
                   {([
-                    { label: "Số điện thoại", value: customerDetail.phone, icon: Phone },
+                    { label: "Số điện thoại", value: customerDetail.phone ?? undefined, icon: Phone },
                     { label: "Email", value: customerDetail.email, icon: TrendingUp },
                     { label: "Địa chỉ", value: customerDetail.address, icon: MapPin },
                     { label: "Facebook", value: customerDetail.facebook, icon: Facebook },

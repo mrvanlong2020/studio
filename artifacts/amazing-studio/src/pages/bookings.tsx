@@ -89,7 +89,7 @@ export default function BookingsPage() {
     queryFn: () => fetchJson("/api/bookings"),
   });
 
-  const { data: customers = [] } = useQuery<{ id: number; name: string; phone: string; customCode?: string }[]>({
+  const { data: customers = [] } = useQuery<{ id: number; name: string; phone: string | null; customCode?: string }[]>({
     queryKey: ["customers-light"],
     queryFn: () => fetchJson("/api/customers"),
   });
@@ -764,19 +764,19 @@ function CustomerSearchBox({
   onSelect,
   onCreateNew,
 }: {
-  customers: { id: number; name: string; phone: string; customCode?: string }[];
-  onSelect: (c: { id: number; name: string; phone: string; customCode?: string }) => void;
+  customers: { id: number; name: string; phone: string | null; customCode?: string }[];
+  onSelect: (c: { id: number; name: string; phone: string | null; customCode?: string }) => void;
   onCreateNew: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<{ id: number; name: string; phone: string; customCode?: string } | null>(null);
+  const [selected, setSelected] = useState<{ id: number; name: string; phone: string | null; customCode?: string } | null>(null);
 
   const filtered = (() => {
     if (!query.trim()) return [];
     const q = query.toLowerCase();
-    const phoneExact = customers.filter(c => c.phone.includes(query));
-    const nameMatch  = customers.filter(c => !c.phone.includes(query) && c.name.toLowerCase().includes(q));
+    const phoneExact = customers.filter(c => (c.phone ?? "").includes(query));
+    const nameMatch  = customers.filter(c => !(c.phone ?? "").includes(query) && c.name.toLowerCase().includes(q));
     return [...phoneExact, ...nameMatch].slice(0, 10);
   })();
 
@@ -790,7 +790,7 @@ function CustomerSearchBox({
   useEffect(() => {
     const digits = query.replace(/\D/g, "");
     if (digits.length >= 10 && !selected) {
-      const exactMatch = customers.find(c => c.phone.replace(/\D/g, "") === digits);
+      const exactMatch = customers.find(c => (c.phone ?? "").replace(/\D/g, "") === digits);
       if (exactMatch) {
         handleSelect(exactMatch);
       }
@@ -830,7 +830,7 @@ function CustomerSearchBox({
           <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
           <span className="font-semibold">{selected.name}</span>
           <span className="text-muted-foreground">—</span>
-          <span>{selected.phone}</span>
+          {selected.phone && <span>{selected.phone}</span>}
           {selected.customCode && <span className="text-muted-foreground">— {selected.customCode}</span>}
         </div>
       )}
@@ -860,7 +860,7 @@ function CustomerSearchBox({
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
                   <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Phone className="w-3 h-3" /> {c.phone}
+                    <Phone className="w-3 h-3" /> {c.phone ?? "—"}
                     {c.customCode && <span className="ml-1 text-primary/60 font-medium">• {c.customCode}</span>}
                   </p>
                 </div>
@@ -874,7 +874,7 @@ function CustomerSearchBox({
 }
 
 function CreateBookingForm({ customers, onSuccess, onCancel }: {
-  customers: { id: number; name: string; phone: string; customCode?: string }[];
+  customers: { id: number; name: string; phone: string | null; customCode?: string }[];
   onSuccess: () => void;
   onCancel: () => void;
 }) {
