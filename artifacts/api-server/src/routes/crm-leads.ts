@@ -1,16 +1,9 @@
 import { Router, type IRouter } from "express";
-import { db, pool } from "@workspace/db";
+import { db } from "@workspace/db";
 import { crmLeadsTable, customersTable } from "@workspace/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
 
 const router: IRouter = Router();
-
-async function ensureCrmLeadsNotesColumn() {
-  await pool.query(`ALTER TABLE crm_leads ADD COLUMN IF NOT EXISTS notes TEXT`).catch((err: unknown) => {
-    console.error("[CRM] ensureCrmLeadsNotesColumn error:", err);
-  });
-}
-ensureCrmLeadsNotesColumn();
 
 router.get("/crm-leads", async (req, res) => {
   try {

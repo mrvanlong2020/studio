@@ -286,7 +286,7 @@ export default function CrmLeadsPage() {
                           <span className="flex items-center gap-1.5">
                             <MessageSquare className="w-3.5 h-3.5 shrink-0 text-muted-foreground/60" />
                             <span className="truncate" title={lead.lastMessage}>
-                              {lead.lastMessage.length > 50 ? lead.lastMessage.slice(0, 50) + "…" : lead.lastMessage}
+                              {lead.lastMessage.length > 60 ? lead.lastMessage.slice(0, 60) + "…" : lead.lastMessage}
                             </span>
                           </span>
                         ) : <span className="text-muted-foreground/40">—</span>}
