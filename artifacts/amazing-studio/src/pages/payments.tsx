@@ -4,10 +4,15 @@ import {
   Search, CreditCard, Banknote, Phone, Clock, Trash2,
   X, Upload, Eye, AlertCircle, Receipt, ChevronDown,
   Sparkles, ListFilter, History, TrendingUp, ChevronRight,
-  CalendarDays, Layers,
+  CalendarDays, Layers, CheckCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useStaffAuth } from "@/contexts/StaffAuthContext";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const fetchJson = (url: string, opts?: RequestInit) =>
@@ -390,7 +395,6 @@ function SmartSearchBox({
             )}
           </div>
 
-          {/* Footer gợi ý */}
           {mode === "suggestions" && listItems.length > 0 && (
             <div className="px-3 py-2 bg-muted/30 border-t border-border/40 text-[10px] text-muted-foreground text-center">
               Gõ tên, SĐT hoặc mã đơn để tìm kiếm thêm
@@ -414,7 +418,8 @@ export default function PaymentsPage() {
     staleTime: 0,
   });
 
-  /* Selected booking */
+  /* Sheet + selected booking */
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
   const { data: paymentHistory = [], refetch: refetchHistory } = useQuery<Payment[]>({
@@ -436,6 +441,48 @@ export default function PaymentsPage() {
   const recentPayments  = recentData?.payments  ?? [];
   const recentSummary   = recentData?.summary   ?? { count: 0, total: 0 };
 
+  /* Form */
+  const defaultCollector = viewer ? String(viewer.name || viewer.phone || "Quản Trị Viên") : "Quản Trị Viên";
+  const [form, setForm] = useState({
+    amount: "",
+    paymentMethod: "cash",
+    bankName: "",
+    collectorName: defaultCollector,
+    paidDate: today(),
+    notes: "",
+  });
+  useEffect(() => {
+    if (viewer) setForm(f => ({ ...f, collectorName: String(viewer.name || viewer.phone || "Quản Trị Viên") }));
+  }, [viewer?.id]);
+  const [proofImage, setProofImage]   = useState<string | null>(null);
+  const [proofPreview, setProofPreview] = useState(false);
+  const [proofPreviewUrl, setProofPreviewUrl] = useState<string | null>(null);
+  const [saving, setSaving]           = useState(false);
+  const [saveError, setSaveError]     = useState<string | null>(null);
+  const [mainSuccess, setMainSuccess] = useState<string | null>(null);
+  const fileRef                       = useRef<HTMLInputElement>(null);
+
+  /* isDirty: có dữ liệu chưa lưu */
+  const isDirty = form.amount !== "" || form.notes !== "" || proofImage !== null;
+
+  /* Reset toàn bộ form */
+  const resetForm = () => {
+    setForm(f => ({ ...f, amount: "", notes: "", bankName: "" }));
+    setProofImage(null);
+    setSaveError(null);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  /* Khi chọn hồ sơ → mở Sheet */
+  const handleSelectBooking = (b: Booking) => {
+    setSelectedBooking(b);
+    setSaveError(null);
+    setForm(f => ({ ...f, amount: "", notes: "", bankName: "" }));
+    setProofImage(null);
+    if (fileRef.current) fileRef.current.value = "";
+    setSheetOpen(true);
+  };
+
   /* Khi click vào phiếu thu gần đây → chọn booking tương ứng */
   const handleSelectFromRecent = (p: RecentPaymentItem) => {
     if (!p.bookingId) return;
@@ -456,33 +503,21 @@ export default function PaymentsPage() {
       serviceCount:    0,
     };
     handleSelectBooking(booking);
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  /* Form */
-  const defaultCollector = viewer ? String(viewer.name || viewer.phone || "Quản Trị Viên") : "Quản Trị Viên";
-  const [form, setForm] = useState({
-    amount: "",
-    paymentMethod: "cash",
-    bankName: "",
-    collectorName: defaultCollector,
-    paidDate: today(),
-    notes: "",
-  });
-  useEffect(() => {
-    if (viewer) setForm(f => ({ ...f, collectorName: String(viewer.name || viewer.phone || "Quản Trị Viên") }));
-  }, [viewer?.id]);
-  const [proofImage, setProofImage]   = useState<string | null>(null);
-  const [proofPreview, setProofPreview] = useState(false);
-  const [saving, setSaving]           = useState(false);
-  const fileRef                       = useRef<HTMLInputElement>(null);
-
-  /* Khi chọn hồ sơ */
-  const handleSelectBooking = (b: Booking) => {
-    setSelectedBooking(b);
-    setForm(f => ({ ...f, amount: "" }));   // Không tự điền — người dùng phải nhập
-    setProofImage(null);
-    if (fileRef.current) fileRef.current.value = "";
+  /* Đóng Sheet: kiểm tra isDirty */
+  const handleSheetOpenChange = (open: boolean) => {
+    if (!open) {
+      if (isDirty) {
+        const confirmed = window.confirm("Bạn có chắc muốn đóng? Dữ liệu chưa lưu sẽ bị mất.");
+        if (!confirmed) return;
+      }
+      setSheetOpen(false);
+      setSelectedBooking(null);
+      resetForm();
+    } else {
+      setSheetOpen(true);
+    }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -510,7 +545,11 @@ export default function PaymentsPage() {
   const savePayment = async () => {
     if (!selectedBooking) return;
     const amt = parseFloat(form.amount);
-    if (!amt || amt <= 0) { alert("Vui lòng nhập số tiền thu"); return; }
+    if (!amt || amt <= 0) {
+      setSaveError("Vui lòng nhập số tiền thu hợp lệ");
+      return;
+    }
+    setSaveError(null);
     setSaving(true);
     try {
       await fetchJson("/api/payments", {
@@ -531,15 +570,17 @@ export default function PaymentsPage() {
       await refetchHistory();
       await refetchRecent();
       await refreshSelectedBooking(selectedBooking);
-      setForm(f => ({
-        ...f,
-        amount: "",   // Xóa trắng sau khi lưu, tránh bấm nhầm
-        notes: "",
-        bankName: "",
-      }));
-      setProofImage(null);
-      if (fileRef.current) fileRef.current.value = "";
-    } finally { setSaving(false); }
+      // Chỉ reset form sau khi lưu THÀNH CÔNG
+      resetForm();
+      setSheetOpen(false);
+      setSelectedBooking(null);
+      setMainSuccess("✅ Đã lưu phiếu thu thành công!");
+      setTimeout(() => setMainSuccess(null), 2500);
+    } catch {
+      setSaveError("Có lỗi khi lưu phiếu thu. Vui lòng thử lại.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const deletePayment = useMutation({
@@ -551,17 +592,14 @@ export default function PaymentsPage() {
     },
   });
 
+  /* Tính toán số tiền */
   const amtNum = parseFloat(form.amount) || 0;
 
-  /* Fallback: tính lại safeRemaining nếu API trả lệch */
   const safeRemaining = selectedBooking
-    ? Math.max(
-        0,
+    ? selectedBooking.remainingAmount ??
         (selectedBooking.totalAmount - (selectedBooking.discountAmount ?? 0)) - selectedBooking.paidAmount
-      )
     : 0;
-  /* Dùng safeRemaining khi API trả remainingAmount nhưng lệch > 1đ so với tính toán local
-     (có thể do dữ liệu cũ chưa được cập nhật đúng discount) */
+
   const apiRemaining = selectedBooking?.remainingAmount ?? safeRemaining;
   const effectiveRemaining = selectedBooking && Math.abs(apiRemaining - safeRemaining) > 1
     ? safeRemaining
@@ -612,6 +650,14 @@ export default function PaymentsPage() {
         <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
           <Receipt className="w-4 h-4 shrink-0" />
           <span>Nhớ chụp ảnh biên nhận hoặc ảnh chuyển khoản khi thu tiền để quản lý kiểm tra.</span>
+        </div>
+      )}
+
+      {/* Banner thành công sau khi lưu */}
+      {mainSuccess && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm font-medium">
+          <CheckCircle className="w-4 h-4 shrink-0" />
+          <span>{mainSuccess}</span>
         </div>
       )}
 
@@ -699,7 +745,7 @@ export default function PaymentsPage() {
           ) : (
             <>
               <div className="divide-y divide-border/40">
-                {recentPayments.map((p, idx) => {
+                {recentPayments.map((p) => {
                   const isCash    = p.paymentMethod === "cash";
                   const isDeposit = p.paymentType === "deposit";
                   const isPaidFull = p.remainingAmount <= 0;
@@ -780,7 +826,7 @@ export default function PaymentsPage() {
                         )}
                       </div>
 
-                      {/* Số tiền + mũi tên */}
+                      {/* Số tiền + ảnh + mũi tên */}
                       <div className="text-right flex-shrink-0 flex items-center gap-2">
                         <div>
                           <p className={cn(
@@ -793,6 +839,18 @@ export default function PaymentsPage() {
                             {METHOD_LABEL[p.paymentMethod] ?? p.paymentMethod}
                           </p>
                         </div>
+                        {p.proofImageUrl && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setProofPreviewUrl(p.proofImageUrl!);
+                              setProofPreview(true);
+                            }}
+                            className="flex-shrink-0 text-[10px] px-1.5 py-1 bg-primary/10 text-primary rounded-lg font-medium flex items-center gap-0.5"
+                          >
+                            <Eye className="w-3 h-3" /> Ảnh
+                          </button>
+                        )}
                         <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors flex-shrink-0" />
                       </div>
                     </button>
@@ -826,236 +884,377 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      {/* ── Phiếu thu + Lịch sử ──────────────────── */}
-      {selectedBooking && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-          {/* LEFT: Form thu */}
-          <div className="bg-card border border-border rounded-2xl p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold flex items-center gap-1.5">
-                <Receipt className="w-4 h-4 text-primary" /> Phiếu thu tiền
-              </p>
-              <button
-                onClick={() => setSelectedBooking(null)}
-                className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted"
-              >
-                <X className="w-4 h-4" />
-              </button>
+      {/* ── Sheet thu tiền ────────────────────────── */}
+      <Sheet open={sheetOpen} onOpenChange={handleSheetOpenChange}>
+        <SheetContent
+          side="bottom"
+          className="!p-0 flex flex-col overflow-hidden"
+          style={{ minHeight: "82vh", maxHeight: "95vh" }}
+        >
+          {/* Sheet header — sticky, đủ rộng tránh nút X mặc định */}
+          <div className="shrink-0 px-4 pt-4 pb-3 pr-14 border-b border-border bg-background">
+            <SheetTitle className="text-base font-bold text-foreground flex items-center gap-2">
+              <Receipt className="w-4 h-4 text-primary shrink-0" />
+              <span className="truncate">{selectedBooking?.customerName ?? "Thu tiền"}</span>
+            </SheetTitle>
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              {selectedBooking?.orderCode && (
+                <span className="text-xs font-mono font-bold text-primary">{selectedBooking.orderCode}</span>
+              )}
+              {selectedBooking?.packageType && (
+                <span className="text-xs text-muted-foreground truncate">{selectedBooking.packageType}</span>
+              )}
             </div>
+          </div>
 
-            {/* Thông tin hồ sơ */}
-            <div className="bg-muted/40 rounded-xl p-3 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Khách hàng</span>
-                <span className="font-semibold">{selectedBooking.customerName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Số điện thoại</span>
-                <span>{selectedBooking.customerPhone}</span>
-              </div>
-              {selectedBooking.orderCode && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Mã đơn</span>
-                  <span className="font-mono font-bold text-primary">{selectedBooking.orderCode}</span>
+          {/* Scrollable content */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="p-4 space-y-4">
+
+              {/* Error banner */}
+              {saveError && (
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span className="flex-1">{saveError}</span>
+                  <button onClick={() => setSaveError(null)} className="flex-shrink-0 p-0.5 hover:opacity-70">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               )}
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Gói dịch vụ</span>
-                <span className="text-right max-w-[180px]">{selectedBooking.packageType}</span>
-              </div>
-              <div className="border-t border-border/50 pt-2 space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Tổng đơn</span>
-                  <span className="font-bold">{fmtVND(selectedBooking.totalAmount)}</span>
-                </div>
-                {(selectedBooking.discountAmount ?? 0) > 0 && (
-                  <>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Giảm giá</span>
-                      <span className="text-orange-600 font-semibold">−{fmtVND(selectedBooking.discountAmount ?? 0)}</span>
+
+              {/* Thông tin hồ sơ */}
+              {selectedBooking && (
+                <div className="bg-muted/40 rounded-xl p-3 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Khách hàng</span>
+                    <span className="font-semibold">{selectedBooking.customerName}</span>
+                  </div>
+                  {selectedBooking.customerPhone && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Số điện thoại</span>
+                      <span>{selectedBooking.customerPhone}</span>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Sau giảm giá</span>
-                      <span className="font-semibold text-primary">
-                        {fmtVND(selectedBooking.totalAmount - (selectedBooking.discountAmount ?? 0))}
+                  )}
+                  {selectedBooking.orderCode && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Mã đơn</span>
+                      <span className="font-mono font-bold text-primary">{selectedBooking.orderCode}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Gói dịch vụ</span>
+                    <span className="text-right max-w-[180px]">{selectedBooking.packageType}</span>
+                  </div>
+                  <div className="border-t border-border/50 pt-2 space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Tổng đơn</span>
+                      <span className="font-bold">{fmtVND(selectedBooking.totalAmount)}</span>
+                    </div>
+                    {(selectedBooking.discountAmount ?? 0) > 0 && (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Giảm giá</span>
+                          <span className="text-orange-600 font-semibold">−{fmtVND(selectedBooking.discountAmount ?? 0)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Sau giảm giá</span>
+                          <span className="font-semibold text-primary">
+                            {fmtVND(selectedBooking.totalAmount - (selectedBooking.discountAmount ?? 0))}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Đã thu</span>
+                      <span className="text-green-600 font-semibold">{fmtVND(selectedBooking.paidAmount)}</span>
+                    </div>
+                    <div className="flex justify-between text-base">
+                      <span className="font-semibold">Còn lại</span>
+                      <span className={cn("font-bold", effectiveRemaining > 0 ? "text-red-600" : "text-green-600")}>
+                        {effectiveRemaining > 0
+                          ? fmtVND(effectiveRemaining)
+                          : "✓ Đã thu đủ"}
                       </span>
                     </div>
-                  </>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Đã thu</span>
-                  <span className="text-green-600 font-semibold">{fmtVND(selectedBooking.paidAmount)}</span>
-                </div>
-                <div className="flex justify-between text-base">
-                  <span className="font-semibold">Còn lại</span>
-                  <span className={cn("font-bold", effectiveRemaining > 0 ? "text-red-600" : "text-green-600")}>
-                    {effectiveRemaining > 0
-                      ? fmtVND(effectiveRemaining)
-                      : "✓ Đã thu đủ"}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Số tiền thu lần này */}
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
-                💰 Số tiền thu lần này *
-              </label>
-              <input
-                type="number"
-                className="w-full px-3 py-3 border border-border rounded-xl text-base font-bold bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
-                value={form.amount}
-                onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-                placeholder="Nhập số tiền cần thu..."
-              />
-
-              {/* Quick suggestion buttons */}
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {[500000, 1000000, 2000000].map(amt => (
-                  <button key={amt} type="button"
-                    onClick={() => setForm(f => ({ ...f, amount: String(amt) }))}
-                    className="text-xs px-2.5 py-1.5 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground border border-border rounded-lg font-medium transition-colors">
-                    {(amt / 1000).toFixed(0)}k
-                  </button>
-                ))}
-                {effectiveRemaining > 0 && (
-                  <button type="button"
-                    onClick={() => setForm(f => ({ ...f, amount: String(effectiveRemaining) }))}
-                    className="text-xs px-2.5 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 rounded-lg font-semibold transition-colors">
-                    Thu đủ ({fmtVND(effectiveRemaining)})
-                  </button>
-                )}
-              </div>
-
-              {!form.amount && (
-                <p className="mt-1.5 text-xs text-muted-foreground italic">
-                  Vui lòng nhập số tiền cần thu hoặc chọn gợi ý bên trên
-                </p>
-              )}
-              {amtNum > 0 && (
-                <div className={cn(
-                  "mt-1.5 flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-2",
-                  isOverpaid ? "bg-orange-50 text-orange-700" : "bg-green-50 text-green-700"
-                )}>
-                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                  {isOverpaid
-                    ? "Số thu vượt quá số còn nợ"
-                    : `Còn lại sau khi thu: ${fmtVND(afterPay)}`}
-                </div>
-              )}
-            </div>
-
-            {/* Hình thức */}
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
-                💳 Hình thức thanh toán
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { v: "cash",          label: "💵 Tiền mặt"     },
-                  { v: "bank_transfer", label: "🏦 Chuyển khoản" },
-                ].map(opt => (
-                  <button
-                    key={opt.v}
-                    onClick={() => setForm(f => ({ ...f, paymentMethod: opt.v }))}
-                    className={cn(
-                      "py-2.5 rounded-xl text-sm font-medium border transition-all",
-                      form.paymentMethod === opt.v
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-muted/30 text-muted-foreground hover:border-primary/40"
-                    )}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              {form.paymentMethod === "bank_transfer" && (
-                <input
-                  className="mt-2 w-full px-3 py-2 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  placeholder="Tên ngân hàng / Số tài khoản / Mã giao dịch..."
-                  value={form.bankName}
-                  onChange={e => setForm(f => ({ ...f, bankName: e.target.value }))}
-                />
-              )}
-            </div>
-
-            {/* Người thu & Ngày thu */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground block mb-1">👤 Người thu</label>
-                <input
-                  className={`w-full px-3 py-2 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 ${effectiveIsAdmin ? "bg-background" : "bg-muted/40 cursor-default"}`}
-                  value={form.collectorName}
-                  onChange={e => effectiveIsAdmin && setForm(f => ({ ...f, collectorName: e.target.value }))}
-                  readOnly={!effectiveIsAdmin}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground block mb-1">📅 Ngày thu</label>
-                <input
-                  type="date"
-                  className="w-full px-3 py-2 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  value={form.paidDate}
-                  onChange={e => setForm(f => ({ ...f, paidDate: e.target.value }))}
-                />
-              </div>
-            </div>
-
-            {/* Bằng chứng */}
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
-                📷 Bằng chứng thu tiền
-              </label>
-              {proofImage ? (
-                <div className="relative rounded-xl overflow-hidden border border-border">
-                  <img src={proofImage} alt="bằng chứng" className="w-full max-h-32 object-cover" />
-                  <div className="absolute top-1.5 right-1.5 flex gap-1">
-                    <button
-                      onClick={() => setProofPreview(true)}
-                      className="p-1.5 bg-black/60 text-white rounded-lg"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => { setProofImage(null); if (fileRef.current) fileRef.current.value = ""; }}
-                      className="p-1.5 bg-black/60 text-white rounded-lg"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
                   </div>
                 </div>
-              ) : (
-                <button
-                  onClick={() => fileRef.current?.click()}
-                  className="w-full border-2 border-dashed border-border rounded-xl py-4 text-xs text-muted-foreground hover:border-primary/40 hover:bg-muted/20 transition-all flex items-center justify-center gap-2"
-                >
-                  <Upload className="w-4 h-4" />
-                  Tải ảnh chuyển khoản / biên lai / phiếu thu
-                </button>
               )}
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleImageUpload}
-              />
-            </div>
 
-            {/* Ghi chú */}
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">📝 Ghi chú</label>
-              <textarea
-                className="w-full px-3 py-2 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
-                rows={2}
-                placeholder="Khách đưa thiếu / Thu lần 2 / Giữ cọc / Thu hộ..."
-                value={form.notes}
-                onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              />
-            </div>
+              {/* Số tiền thu lần này */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
+                  💰 Số tiền thu lần này *
+                </label>
+                <input
+                  type="number"
+                  className="w-full px-3 py-3 border border-border rounded-xl text-base font-bold bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  value={form.amount}
+                  onChange={e => { setForm(f => ({ ...f, amount: e.target.value })); setSaveError(null); }}
+                  placeholder="Nhập số tiền cần thu..."
+                />
 
+                {/* Quick suggestion buttons */}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {[500000, 1000000, 2000000].map(amt => (
+                    <button key={amt} type="button"
+                      onClick={() => setForm(f => ({ ...f, amount: String(amt) }))}
+                      className="text-xs px-2.5 py-1.5 bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground border border-border rounded-lg font-medium transition-colors">
+                      {(amt / 1000).toFixed(0)}k
+                    </button>
+                  ))}
+                  {effectiveRemaining > 0 && (
+                    <button type="button"
+                      onClick={() => setForm(f => ({ ...f, amount: String(effectiveRemaining) }))}
+                      className="text-xs px-2.5 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 rounded-lg font-semibold transition-colors">
+                      Thu đủ ({fmtVND(effectiveRemaining)})
+                    </button>
+                  )}
+                </div>
+
+                {!form.amount && (
+                  <p className="mt-1.5 text-xs text-muted-foreground italic">
+                    Vui lòng nhập số tiền cần thu hoặc chọn gợi ý bên trên
+                  </p>
+                )}
+                {amtNum > 0 && (
+                  <div className={cn(
+                    "mt-1.5 flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-2",
+                    isOverpaid ? "bg-orange-50 text-orange-700" : "bg-green-50 text-green-700"
+                  )}>
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                    {isOverpaid
+                      ? "Số thu vượt quá số còn nợ"
+                      : `Còn lại sau khi thu: ${fmtVND(afterPay)}`}
+                  </div>
+                )}
+              </div>
+
+              {/* Hình thức */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
+                  💳 Hình thức thanh toán
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { v: "cash",          label: "💵 Tiền mặt"     },
+                    { v: "bank_transfer", label: "🏦 Chuyển khoản" },
+                  ].map(opt => (
+                    <button
+                      key={opt.v}
+                      onClick={() => setForm(f => ({ ...f, paymentMethod: opt.v }))}
+                      className={cn(
+                        "py-2.5 rounded-xl text-sm font-medium border transition-all",
+                        form.paymentMethod === opt.v
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border bg-muted/30 text-muted-foreground hover:border-primary/40"
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                {form.paymentMethod === "bank_transfer" && (
+                  <input
+                    className="mt-2 w-full px-3 py-2 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    placeholder="Tên ngân hàng / Số tài khoản / Mã giao dịch..."
+                    value={form.bankName}
+                    onChange={e => setForm(f => ({ ...f, bankName: e.target.value }))}
+                  />
+                )}
+              </div>
+
+              {/* Người thu & Ngày thu */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground block mb-1">👤 Người thu</label>
+                  <input
+                    className={`w-full px-3 py-2 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 ${effectiveIsAdmin ? "bg-background" : "bg-muted/40 cursor-default"}`}
+                    value={form.collectorName}
+                    onChange={e => effectiveIsAdmin && setForm(f => ({ ...f, collectorName: e.target.value }))}
+                    readOnly={!effectiveIsAdmin}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground block mb-1">📅 Ngày thu</label>
+                  <input
+                    type="date"
+                    className="w-full px-3 py-2 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    value={form.paidDate}
+                    onChange={e => setForm(f => ({ ...f, paidDate: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              {/* Bằng chứng */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
+                  📷 Bằng chứng thu tiền
+                </label>
+                {proofImage ? (
+                  <div className="relative rounded-xl overflow-hidden border border-border">
+                    <img src={proofImage} alt="bằng chứng" className="w-full max-h-32 object-cover" />
+                    <div className="absolute top-1.5 right-1.5 flex gap-1">
+                      <button
+                        onClick={() => { setProofPreviewUrl(proofImage); setProofPreview(true); }}
+                        className="p-1.5 bg-black/60 text-white rounded-lg"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => { setProofImage(null); if (fileRef.current) fileRef.current.value = ""; }}
+                        className="p-1.5 bg-black/60 text-white rounded-lg"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    className="w-full border-2 border-dashed border-border rounded-xl py-4 text-xs text-muted-foreground hover:border-primary/40 hover:bg-muted/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Upload className="w-4 h-4" />
+                    Tải ảnh chuyển khoản / biên lai / phiếu thu
+                  </button>
+                )}
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageUpload}
+                />
+              </div>
+
+              {/* Ghi chú */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground block mb-1">📝 Ghi chú</label>
+                <textarea
+                  className="w-full px-3 py-2 border border-border rounded-xl text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                  rows={2}
+                  placeholder="Khách đưa thiếu / Thu lần 2 / Giữ cọc / Thu hộ..."
+                  value={form.notes}
+                  onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                />
+              </div>
+
+              {/* ── Lịch sử thu của booking này ───── */}
+              <div className="pt-2">
+                <p className="text-sm font-semibold mb-3 flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-primary" /> Lịch sử thu tiền
+                  {paymentHistory.length > 0 && (
+                    <span className="ml-1 text-[11px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
+                      {paymentHistory.length} phiếu
+                    </span>
+                  )}
+                </p>
+
+                {paymentHistory.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Receipt className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm">Chưa có phiếu thu nào</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {paymentHistory.map(p => (
+                      <div
+                        key={p.id}
+                        className="border border-border rounded-xl p-3 bg-muted/20 space-y-2"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className={cn(
+                              "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
+                              p.paymentType === "deposit"
+                                ? "bg-amber-100 text-amber-700"
+                                : p.paymentMethod === "cash"
+                                ? "bg-green-100 text-green-700"
+                                : "bg-blue-100 text-blue-700"
+                            )}>
+                              {p.paymentMethod === "cash"
+                                ? <Banknote className="w-4 h-4" />
+                                : <CreditCard className="w-4 h-4" />}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-sm font-bold text-primary">{fmtVND(p.amount)}</p>
+                                {p.paymentType === "deposit" && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold">
+                                    Cọc
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {METHOD_LABEL[p.paymentMethod] ?? p.paymentMethod}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {p.proofImageUrl && (
+                              <button
+                                onClick={() => { setProofPreviewUrl(p.proofImageUrl!); setProofPreview(true); }}
+                                className="text-[10px] px-2 py-1 bg-primary/10 text-primary rounded-lg flex items-center gap-0.5 font-medium"
+                              >
+                                <Eye className="w-3 h-3" /> Ảnh
+                              </button>
+                            )}
+                            {effectiveIsAdmin && (
+                              <button
+                                onClick={() => { if (confirm("Xóa phiếu thu này?")) deletePayment.mutate(p.id); }}
+                                className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground space-y-0.5 pl-10">
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-3 h-3 flex-shrink-0" />
+                            <span>{p.paidDate ? fmtDate(p.paidDate) : fmtDate(p.paidAt)}</span>
+                            {p.collectorName && (
+                              <><span className="opacity-40">·</span><span>{p.collectorName}</span></>
+                            )}
+                          </div>
+                          {p.bankName && (
+                            <p className="pl-4">{p.bankName}</p>
+                          )}
+                          {p.notes && (
+                            <p className="pl-4 italic">"{p.notes}"</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Tổng kết */}
+                {selectedBooking && paymentHistory.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-border space-y-1.5 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Tổng đã thu</span>
+                      <span className="font-bold text-green-600">{fmtVND(selectedBooking.paidAmount)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Còn lại</span>
+                      <span className={cn(
+                        "font-bold",
+                        effectiveRemaining > 0 ? "text-red-600" : "text-green-600"
+                      )}>
+                        {effectiveRemaining > 0
+                          ? fmtVND(effectiveRemaining)
+                          : "✓ Đã thu đủ"}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          </div>
+
+          {/* Sticky save button */}
+          <div className="shrink-0 p-4 border-t border-border bg-background">
             <button
               onClick={savePayment}
               disabled={saving || !form.amount || amtNum <= 0}
@@ -1064,138 +1263,26 @@ export default function PaymentsPage() {
               {saving ? "Đang lưu..." : "✅ Lưu phiếu thu"}
             </button>
           </div>
-
-          {/* RIGHT: Lịch sử thu */}
-          <div className="bg-card border border-border rounded-2xl p-4">
-            <p className="text-sm font-semibold mb-3 flex items-center gap-1.5">
-              <Clock className="w-4 h-4 text-primary" /> Lịch sử thu tiền
-              {paymentHistory.length > 0 && (
-                <span className="ml-1 text-[11px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
-                  {paymentHistory.length} phiếu
-                </span>
-              )}
-            </p>
-
-            {paymentHistory.length === 0 ? (
-              <div className="text-center py-10 text-muted-foreground">
-                <Receipt className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Chưa có phiếu thu nào</p>
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {paymentHistory.map(p => (
-                  <div
-                    key={p.id}
-                    className="border border-border rounded-xl p-3 bg-muted/20 space-y-2"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className={cn(
-                          "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
-                          p.paymentType === "deposit"
-                            ? "bg-amber-100 text-amber-700"
-                            : p.paymentMethod === "cash"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-blue-100 text-blue-700"
-                        )}>
-                          {p.paymentMethod === "cash"
-                            ? <Banknote className="w-4 h-4" />
-                            : <CreditCard className="w-4 h-4" />}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <p className="text-sm font-bold text-primary">{fmtVND(p.amount)}</p>
-                            {p.paymentType === "deposit" && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold">
-                                Cọc
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {METHOD_LABEL[p.paymentMethod] ?? p.paymentMethod}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {p.proofImageUrl && (
-                          <button
-                            onClick={() => { setProofImage(p.proofImageUrl!); setProofPreview(true); }}
-                            className="text-[10px] px-2 py-1 bg-primary/10 text-primary rounded-lg flex items-center gap-0.5 font-medium"
-                          >
-                            <Eye className="w-3 h-3" /> Ảnh
-                          </button>
-                        )}
-                        {effectiveIsAdmin && (
-                          <button
-                            onClick={() => { if (confirm("Xóa phiếu thu này?")) deletePayment.mutate(p.id); }}
-                            className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    <div className="text-xs text-muted-foreground space-y-0.5 pl-10">
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-3 h-3 flex-shrink-0" />
-                        <span>{p.paidDate ? fmtDate(p.paidDate) : fmtDate(p.paidAt)}</span>
-                        {p.collectorName && (
-                          <><span className="opacity-40">·</span><span>{p.collectorName}</span></>
-                        )}
-                      </div>
-                      {p.bankName && (
-                        <p className="pl-4">{p.bankName}</p>
-                      )}
-                      {p.notes && (
-                        <p className="pl-4 italic">"{p.notes}"</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Tổng kết */}
-            {paymentHistory.length > 0 && (
-              <div className="mt-4 pt-3 border-t border-border space-y-1.5 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Tổng đã thu</span>
-                  <span className="font-bold text-green-600">{fmtVND(selectedBooking.paidAmount)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Còn lại</span>
-                  <span className={cn(
-                    "font-bold",
-                    effectiveRemaining > 0 ? "text-red-600" : "text-green-600"
-                  )}>
-                    {effectiveRemaining > 0
-                      ? fmtVND(effectiveRemaining)
-                      : "✓ Đã thu đủ"}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+        </SheetContent>
+      </Sheet>
 
       {/* Proof image lightbox */}
-      {proofPreview && proofImage && (
+      {proofPreview && proofPreviewUrl && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
-          onClick={() => setProofPreview(false)}
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85"
+          onClick={() => { setProofPreview(false); setProofPreviewUrl(null); }}
         >
           <div
             className="relative max-w-lg max-h-[90vh]"
             onClick={e => e.stopPropagation()}
           >
             <img
-              src={proofImage}
+              src={proofPreviewUrl}
               alt="bằng chứng"
               className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl"
             />
             <button
-              onClick={() => setProofPreview(false)}
+              onClick={() => { setProofPreview(false); setProofPreviewUrl(null); }}
               className="absolute top-3 right-3 bg-black/60 text-white rounded-full p-1.5"
             >
               <X className="w-4 h-4" />
