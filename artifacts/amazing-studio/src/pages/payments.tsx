@@ -455,12 +455,6 @@ export default function PaymentsPage() {
     if (viewer) setForm(f => ({ ...f, collectorName: String(viewer.name || viewer.phone || "Quản Trị Viên") }));
   }, [viewer?.id]);
 
-  // Tự động xóa highlight sau 2s, với cleanup để tránh timer race
-  useEffect(() => {
-    if (newPaymentId === null) return;
-    const t = setTimeout(() => setNewPaymentId(null), 2000);
-    return () => clearTimeout(t);
-  }, [newPaymentId]);
   const [proofImage, setProofImage]   = useState<string | null>(null);
   const [proofPreview, setProofPreview] = useState(false);
   const [proofPreviewUrl, setProofPreviewUrl] = useState<string | null>(null);
@@ -469,6 +463,13 @@ export default function PaymentsPage() {
   const [mainSuccess, setMainSuccess] = useState<string | null>(null);
   const [newPaymentId, setNewPaymentId] = useState<number | null>(null);
   const fileRef                       = useRef<HTMLInputElement>(null);
+
+  // Tự động xóa highlight sau 2s, với cleanup để tránh timer race
+  useEffect(() => {
+    if (newPaymentId === null) return;
+    const t = setTimeout(() => setNewPaymentId(null), 2000);
+    return () => clearTimeout(t);
+  }, [newPaymentId]);
 
   /* isDirty: có dữ liệu chưa lưu */
   const isDirty = form.amount !== "" || form.notes !== "" || proofImage !== null;
