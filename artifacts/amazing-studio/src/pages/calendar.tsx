@@ -1665,13 +1665,14 @@ function generateContractHTML(
 }
 
 function ShowDetailPanel({
-  booking, onClose, onEdit, onDeleteDone, isAdmin,
+  booking, onClose, onEdit, onDeleteDone, isAdmin, onNavigate,
 }: {
   booking: Booking;
   onClose: () => void;
   onEdit: () => void;
   onDeleteDone: () => void;
   isAdmin: boolean;
+  onNavigate?: (booking: Booking) => void;
 }) {
   const qc = useQueryClient();
   const { data: allStaff = [] } = useQuery<Staff[]>({
@@ -1934,8 +1935,9 @@ function ShowDetailPanel({
                     const sibDate = (() => { try { const d = parseISO(sib.shootDate); return isNaN(d.getTime()) ? null : d; } catch { return null; } })();
                     const isCurrent = sib.id === booking.id;
                     const sibSt = STATUS[sib.status as keyof typeof STATUS] ?? STATUS.pending;
-                    return (
-                      <div key={sib.id} className={`flex items-center gap-3 px-3 py-2.5 ${idx > 0 ? "border-t border-violet-100 dark:border-violet-900" : ""} ${isCurrent ? "bg-violet-50 dark:bg-violet-950/20" : ""}`}>
+                    const borderCls = idx > 0 ? "border-t border-violet-100 dark:border-violet-900" : "";
+                    const inner = (
+                      <>
                         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${sibSt.dot}`} />
                         <div className="flex-1 min-w-0">
                           <span className={`text-sm font-semibold ${isCurrent ? "text-violet-700 dark:text-violet-300" : ""}`}>
@@ -1949,7 +1951,22 @@ function ShowDetailPanel({
                         {isAdmin && sib.totalAmount > 0 && (
                           <span className="text-xs font-bold text-primary flex-shrink-0">{fmtVND(sib.totalAmount)}</span>
                         )}
+                        {!isCurrent && <ChevronRight className="w-3.5 h-3.5 text-violet-400 flex-shrink-0" />}
+                      </>
+                    );
+                    return isCurrent ? (
+                      <div key={sib.id} className={`flex items-center gap-3 px-3 py-2.5 bg-violet-50 dark:bg-violet-950/20 ${borderCls}`}>
+                        {inner}
                       </div>
+                    ) : (
+                      <button
+                        key={sib.id}
+                        type="button"
+                        onClick={() => onNavigate?.(sib)}
+                        className={`w-full text-left flex items-center gap-3 px-3 py-2.5 hover:bg-violet-100 dark:hover:bg-violet-900/30 transition-colors ${borderCls}`}
+                      >
+                        {inner}
+                      </button>
                     );
                   })}
                 </div>
@@ -2815,6 +2832,7 @@ export default function CalendarPage() {
           onEdit={handleDetailEdit}
           onDeleteDone={handleDetailDeleteDone}
           isAdmin={isAdmin}
+          onNavigate={(sib) => setViewingBooking(sib)}
         />
       </div>
     );
