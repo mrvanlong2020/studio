@@ -4,7 +4,7 @@ import {
   bookingsTable, customersTable, dressesTable, rentalsTable,
   paymentsTable, tasksTable, transactionsTable, expensesTable,
 } from "@workspace/db/schema";
-import { eq, and, gte, lte, count, sum, ne, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, gte, lte, count, sum, ne } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -103,6 +103,39 @@ router.get("/dashboard/stats", async (_req, res) => {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 type PeriodPreset = "today" | "7days" | "month" | "year";
 
+interface BookingRow {
+  id: number;
+  orderCode: string | null;
+  customerId: number;
+  shootDate: string;
+  status: string;
+  serviceCategory: string;
+  packageType: string;
+  serviceLabel: string | null;
+  totalAmount: string;
+  discountAmount: string;
+  paidAmount: string;
+  createdAt: Date;
+}
+
+interface PaymentRow {
+  id: number;
+  bookingId: number | null;
+  amount: string;
+  paidAt: Date;
+  paymentType: string;
+}
+
+interface ServiceEntry {
+  category: string;
+  serviceKey: string;
+  label: string;
+  bookedCount: number;
+  bookedAmount: number;
+  owedAmount: number;
+  collectedAmount: number;
+}
+
 function getPeriodRange(preset: PeriodPreset): { start: Date; end: Date; startDate: string; endDate: string } {
   const now = new Date();
   const end = new Date(now);
@@ -130,7 +163,7 @@ function getPeriodRange(preset: PeriodPreset): { start: Date; end: Date; startDa
   };
 }
 
-function computeRemaining(b: { totalAmount: string; discountAmount: string; paidAmount: string }) {
+function computeRemaining(b: { totalAmount: string; discountAmount: string; paidAmount: string }): number {
   return Math.max(
     0,
     parseFloat(b.totalAmount) - parseFloat(b.discountAmount || "0") - parseFloat(b.paidAmount),
@@ -165,6 +198,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 // ── Dashboard v2 ──────────────────────────────────────────────────────────────
+// Response shape matches the user-approved JSON contract (nested: summary/charts/breakdown/debts).
 router.get("/dashboard/v2", async (req, res) => {
   try {
     const preset = (req.query.period as PeriodPreset) || "month";
@@ -173,8 +207,8 @@ router.get("/dashboard/v2", async (req, res) => {
     const year = now.getFullYear();
     const today = now.toISOString().slice(0, 10);
 
-    // ── 1. Bookings in period (by createdAt) ───────────────────────────────
-    const bookingsInPeriod = await db
+    // ── 1. Bookings in period (by createdAt) — for "đã chốt" KPI ──────────
+    const bookingsInPeriod: BookingRow[] = await db
       .select({
         id: bookingsTable.id,
         orderCode: bookingsTable.orderCode,
@@ -199,8 +233,8 @@ router.get("/dashboard/v2", async (req, res) => {
         ),
       );
 
-    // ── 2. All active bookings (for owed totals — no period filter) ────────
-    const allActiveBookings = await db
+    // ── 2. ALL active NON-PARENT bookings — for owed totals ───────────────
+    const allActiveBookings: BookingRow[] = await db
       .select({
         id: bookingsTable.id,
         orderCode: bookingsTable.orderCode,
@@ -216,7 +250,6 @@ router.get("/dashboard/v2", async (req, res) => {
         createdAt: bookingsTable.createdAt,
       })
       .from(bookingsTable)
-      .leftJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
       .where(
         and(
           eq(bookingsTable.isParentContract, false),
@@ -224,7 +257,28 @@ router.get("/dashboard/v2", async (req, res) => {
         ),
       );
 
-    // ── 3. All active bookings WITH customer info (for top debtors) ────────
+    // ── 2b. ALL non-cancelled bookings (incl. parent contracts) — for service lookup
+    // Payments may be recorded against parent contract bookings (isParentContract=true),
+    // so we need to include them in the service lookup map.
+    const allBookingsForLookup: BookingRow[] = await db
+      .select({
+        id: bookingsTable.id,
+        orderCode: bookingsTable.orderCode,
+        customerId: bookingsTable.customerId,
+        shootDate: bookingsTable.shootDate,
+        status: bookingsTable.status,
+        serviceCategory: bookingsTable.serviceCategory,
+        packageType: bookingsTable.packageType,
+        serviceLabel: bookingsTable.serviceLabel,
+        totalAmount: bookingsTable.totalAmount,
+        discountAmount: bookingsTable.discountAmount,
+        paidAmount: bookingsTable.paidAmount,
+        createdAt: bookingsTable.createdAt,
+      })
+      .from(bookingsTable)
+      .where(ne(bookingsTable.status, "cancelled"));
+
+    // ── 3. All active bookings WITH customer info — for top debtors ────────
     const allActiveWithCustomer = await db
       .select({
         id: bookingsTable.id,
@@ -246,8 +300,8 @@ router.get("/dashboard/v2", async (req, res) => {
         ),
       );
 
-    // ── 4. Payments in period (by paidAt, exclude refunds) ────────────────
-    const paymentsInPeriod = await db
+    // ── 4. Payments in period (by paidAt) — for "đã thu" KPI ─────────────
+    const paymentsInPeriod: PaymentRow[] = await db
       .select({
         id: paymentsTable.id,
         bookingId: paymentsTable.bookingId,
@@ -280,8 +334,8 @@ router.get("/dashboard/v2", async (req, res) => {
         ),
       );
 
-    // ── 6. Upcoming bookings (for backward compat display) ────────────────
-    const upcomingRows = await db
+    // ── 6. Upcoming bookings ───────────────────────────────────────────────
+    const upcomingBookings = await db
       .select({
         id: bookingsTable.id,
         customerName: customersTable.name,
@@ -294,22 +348,24 @@ router.get("/dashboard/v2", async (req, res) => {
       })
       .from(bookingsTable)
       .innerJoin(customersTable, eq(bookingsTable.customerId, customersTable.id))
-      .where(and(gte(bookingsTable.shootDate, today), ne(bookingsTable.status, "cancelled"), eq(bookingsTable.isParentContract, false)))
+      .where(and(
+        gte(bookingsTable.shootDate, today),
+        ne(bookingsTable.status, "cancelled"),
+        eq(bookingsTable.isParentContract, false),
+      ))
       .orderBy(bookingsTable.shootDate)
       .limit(5);
 
-    // ── Compute summary ────────────────────────────────────────────────────
+    // ── Compute summary KPIs ───────────────────────────────────────────────
     const bookedAmount = bookingsInPeriod.reduce((s, b) => s + parseFloat(b.totalAmount), 0);
     const bookedCount = bookingsInPeriod.length;
 
     const collectedAmount = paymentsInPeriod.reduce((s, p) => s + parseFloat(p.amount), 0);
     const collectedCount = paymentsInPeriod.length;
 
-    // owedTotal / owedCount: use remainingAmount = max(0, total - discount - paid)
+    // owedTotal / owedCount: use booking.remainingAmount = max(0, total-discount-paid)
     const owedTotal = allActiveBookings.reduce((s, b) => s + computeRemaining(b), 0);
     const owedCount = allActiveBookings.filter(b => computeRemaining(b) > 0).length;
-
-    // owedInPeriod: nợ của booking tạo trong kỳ (dùng remainingAmount)
     const owedInPeriod = bookingsInPeriod.reduce((s, b) => s + computeRemaining(b), 0);
 
     const linkedExpenses = expensesInPeriod
@@ -319,7 +375,6 @@ router.get("/dashboard/v2", async (req, res) => {
       .filter(e => e.bookingId == null)
       .reduce((s, e) => s + parseFloat(e.amount), 0);
     const totalExpenses = linkedExpenses + generalExpenses;
-
     const profit = collectedAmount - totalExpenses;
 
     // ── Charts ─────────────────────────────────────────────────────────────
@@ -330,12 +385,13 @@ router.get("/dashboard/v2", async (req, res) => {
       const bookedBuckets = buildMonthBuckets(year);
       const collectedBuckets = buildMonthBuckets(year);
 
+      // chartBooked: from bookings.createdAt
       bookingsInPeriod.forEach(b => {
         const m = new Date(b.createdAt).getMonth();
         bookedBuckets[m].amount += parseFloat(b.totalAmount);
         bookedBuckets[m].count += 1;
       });
-
+      // chartCollected: from payments.paidAt
       paymentsInPeriod.forEach(p => {
         const m = new Date(p.paidAt).getMonth();
         collectedBuckets[m].amount += parseFloat(p.amount);
@@ -350,28 +406,42 @@ router.get("/dashboard/v2", async (req, res) => {
 
       bookingsInPeriod.forEach(b => {
         const d = new Date(b.createdAt).toISOString().slice(0, 10);
-        const bucket = bookedBuckets.find(bk => bk.date === d);
-        if (bucket) { bucket.amount += parseFloat(b.totalAmount); bucket.count += 1; }
+        const bk = bookedBuckets.find(bk => bk.date === d);
+        if (bk) { bk.amount += parseFloat(b.totalAmount); bk.count += 1; }
       });
 
       paymentsInPeriod.forEach(p => {
         const d = new Date(p.paidAt).toISOString().slice(0, 10);
-        const bucket = collectedBuckets.find(bk => bk.date === d);
-        if (bucket) { bucket.amount += parseFloat(p.amount); bucket.count += 1; }
+        const bk = collectedBuckets.find(bk => bk.date === d);
+        if (bk) { bk.amount += parseFloat(p.amount); bk.count += 1; }
       });
 
       chartBooked = bookedBuckets;
       chartCollected = collectedBuckets;
     }
 
-    // ── Breakdown by service (packageType) ────────────────────────────────
-    const bookingIdSet = new Set(bookingsInPeriod.map(b => b.id));
-    const serviceMap = new Map<string, {
-      category: string; serviceKey: string; label: string;
-      bookedCount: number; bookedAmount: number; owedAmount: number;
-      collectedAmount: number;
-    }>();
+    // ── Build service attribution maps from ALL non-cancelled bookings ────
+    // Includes parent contracts so payments made against parent booking IDs
+    // are still attributed to the correct service/category.
+    const bookingServiceLookup = new Map<number, { serviceKey: string; category: string; label: string }>();
+    for (const b of allBookingsForLookup) {
+      bookingServiceLookup.set(b.id, {
+        serviceKey: b.packageType || b.serviceCategory || "other",
+        category: b.serviceCategory || "other",
+        label: b.serviceLabel || b.packageType || b.serviceCategory || "Khác",
+      });
+    }
 
+    const bookingCategoryLookup = new Map<number, { category: string; label: string }>();
+    for (const b of allBookingsForLookup) {
+      const cat = b.serviceCategory || "other";
+      bookingCategoryLookup.set(b.id, { category: cat, label: CATEGORY_LABELS[cat] || cat });
+    }
+
+    // ── byService breakdown ────────────────────────────────────────────────
+    const serviceMap = new Map<string, ServiceEntry>();
+
+    // 1. Populate booked/owed from bookingsInPeriod
     for (const b of bookingsInPeriod) {
       const key = b.packageType || b.serviceCategory || "other";
       const label = b.serviceLabel || b.packageType || b.serviceCategory || "Khác";
@@ -381,38 +451,41 @@ router.get("/dashboard/v2", async (req, res) => {
       if (!serviceMap.has(key)) {
         serviceMap.set(key, { category: cat, serviceKey: key, label, bookedCount: 0, bookedAmount: 0, owedAmount: 0, collectedAmount: 0 });
       }
-      const entry = serviceMap.get(key)!;
-      entry.bookedCount += 1;
-      entry.bookedAmount += parseFloat(b.totalAmount);
-      entry.owedAmount += rem;
+      const e = serviceMap.get(key)!;
+      e.bookedCount += 1;
+      e.bookedAmount += parseFloat(b.totalAmount);
+      e.owedAmount += rem;
     }
 
+    // 2. Attribute payments to services using ALL active bookings as lookup
     for (const p of paymentsInPeriod) {
       if (p.bookingId == null) continue;
-      const bk = bookingsInPeriod.find(b => b.id === p.bookingId);
-      if (!bk) continue;
-      const key = bk.packageType || bk.serviceCategory || "other";
-      const entry = serviceMap.get(key);
-      if (entry) entry.collectedAmount += parseFloat(p.amount);
+      const svc = bookingServiceLookup.get(p.bookingId);
+      if (!svc) continue;
+
+      // Ensure an entry exists even if the booking wasn't created in this period
+      if (!serviceMap.has(svc.serviceKey)) {
+        serviceMap.set(svc.serviceKey, {
+          category: svc.category, serviceKey: svc.serviceKey, label: svc.label,
+          bookedCount: 0, bookedAmount: 0, owedAmount: 0, collectedAmount: 0,
+        });
+      }
+      serviceMap.get(svc.serviceKey)!.collectedAmount += parseFloat(p.amount);
     }
 
-    const totalBookedAmtAll = Array.from(serviceMap.values()).reduce((s, v) => s + v.bookedAmount, 0) || 1;
-    const totalCollectedAmtAll = Array.from(serviceMap.values()).reduce((s, v) => s + v.collectedAmount, 0) || 1;
+    const totalBookedSvc = Array.from(serviceMap.values()).reduce((s, v) => s + v.bookedAmount, 0) || 1;
+    const totalCollectedSvc = Array.from(serviceMap.values()).reduce((s, v) => s + v.collectedAmount, 0) || 1;
 
     const byService = Array.from(serviceMap.values())
       .map(v => ({
         ...v,
-        bookedPercent: parseFloat(((v.bookedAmount / totalBookedAmtAll) * 100).toFixed(1)),
-        collectedPercent: parseFloat(((v.collectedAmount / totalCollectedAmtAll) * 100).toFixed(1)),
+        bookedPercent: parseFloat(((v.bookedAmount / totalBookedSvc) * 100).toFixed(1)),
+        collectedPercent: parseFloat(((v.collectedAmount / totalCollectedSvc) * 100).toFixed(1)),
       }))
       .sort((a, b) => b.bookedAmount - a.bookedAmount);
 
-    // ── Breakdown by category (serviceCategory) ───────────────────────────
-    const categoryMap = new Map<string, {
-      category: string; label: string;
-      bookedCount: number; bookedAmount: number; owedAmount: number;
-      collectedAmount: number;
-    }>();
+    // ── byCategory breakdown ───────────────────────────────────────────────
+    const categoryMap = new Map<string, ServiceEntry>();
 
     for (const b of bookingsInPeriod) {
       const cat = b.serviceCategory || "other";
@@ -420,35 +493,40 @@ router.get("/dashboard/v2", async (req, res) => {
       const rem = computeRemaining(b);
 
       if (!categoryMap.has(cat)) {
-        categoryMap.set(cat, { category: cat, label, bookedCount: 0, bookedAmount: 0, owedAmount: 0, collectedAmount: 0 });
+        categoryMap.set(cat, { category: cat, serviceKey: cat, label, bookedCount: 0, bookedAmount: 0, owedAmount: 0, collectedAmount: 0 });
       }
-      const entry = categoryMap.get(cat)!;
-      entry.bookedCount += 1;
-      entry.bookedAmount += parseFloat(b.totalAmount);
-      entry.owedAmount += rem;
+      const e = categoryMap.get(cat)!;
+      e.bookedCount += 1;
+      e.bookedAmount += parseFloat(b.totalAmount);
+      e.owedAmount += rem;
     }
 
     for (const p of paymentsInPeriod) {
       if (p.bookingId == null) continue;
-      const bk = bookingsInPeriod.find(b => b.id === p.bookingId);
-      if (!bk) continue;
-      const cat = bk.serviceCategory || "other";
-      const entry = categoryMap.get(cat);
-      if (entry) entry.collectedAmount += parseFloat(p.amount);
+      const catInfo = bookingCategoryLookup.get(p.bookingId);
+      if (!catInfo) continue;
+
+      if (!categoryMap.has(catInfo.category)) {
+        categoryMap.set(catInfo.category, {
+          category: catInfo.category, serviceKey: catInfo.category, label: catInfo.label,
+          bookedCount: 0, bookedAmount: 0, owedAmount: 0, collectedAmount: 0,
+        });
+      }
+      categoryMap.get(catInfo.category)!.collectedAmount += parseFloat(p.amount);
     }
 
-    const totalBookedCatAll = Array.from(categoryMap.values()).reduce((s, v) => s + v.bookedAmount, 0) || 1;
-    const totalCollectedCatAll = Array.from(categoryMap.values()).reduce((s, v) => s + v.collectedAmount, 0) || 1;
+    const totalBookedCat = Array.from(categoryMap.values()).reduce((s, v) => s + v.bookedAmount, 0) || 1;
+    const totalCollectedCat = Array.from(categoryMap.values()).reduce((s, v) => s + v.collectedAmount, 0) || 1;
 
     const byCategory = Array.from(categoryMap.values())
       .map(v => ({
         ...v,
-        bookedPercent: parseFloat(((v.bookedAmount / totalBookedCatAll) * 100).toFixed(1)),
-        collectedPercent: parseFloat(((v.collectedAmount / totalCollectedCatAll) * 100).toFixed(1)),
+        bookedPercent: parseFloat(((v.bookedAmount / totalBookedCat) * 100).toFixed(1)),
+        collectedPercent: parseFloat(((v.collectedAmount / totalCollectedCat) * 100).toFixed(1)),
       }))
       .sort((a, b) => b.bookedAmount - a.bookedAmount);
 
-    // ── Top debtors (all time, top 10 by remaining) ────────────────────────
+    // ── Top debtors (all time, sorted by remainingAmount desc) ────────────
     const topDebtors = allActiveWithCustomer
       .map(b => ({
         bookingId: b.id,
@@ -465,6 +543,7 @@ router.get("/dashboard/v2", async (req, res) => {
       .sort((a, b) => b.remainingAmount - a.remainingAmount)
       .slice(0, 10);
 
+    // ── Response (nested shape per user-approved contract) ─────────────────
     res.json({
       period: {
         preset,
@@ -496,7 +575,7 @@ router.get("/dashboard/v2", async (req, res) => {
       debts: {
         topDebtors,
       },
-      upcomingBookings: upcomingRows,
+      upcomingBookings,
       meta: {
         currency: "VND",
         bookingDateModeOptions: ["createdAt", "shootDate"],
@@ -505,6 +584,7 @@ router.get("/dashboard/v2", async (req, res) => {
           "collectedAmount lấy từ payments.paidAt",
           "profit = collectedAmount - totalExpenses trong cùng kỳ",
           "owedTotal dùng remainingAmount = max(0, total - discount - paid)",
+          "byService/byCategory.collectedAmount: gán payment theo booking từ toàn bộ active bookings",
         ],
       },
     });
