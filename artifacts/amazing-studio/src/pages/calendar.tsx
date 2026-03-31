@@ -1350,6 +1350,7 @@ function generateContractHTML(
   siblings: Booking[],
   allPackages: DetailPackage[],
   paymentSummary?: { totalAmount: number; paidAmount: number; discountAmount?: number; remainingAmount: number },
+  forImageExport = false,
 ): string {
   const today = new Date();
   const todayStr = format(today, "dd/MM/yyyy");
@@ -1516,7 +1517,7 @@ function generateContractHTML(
 <body>
 <div class="page">
 
-  <!-- Nút in + Chỉnh sửa -->
+  ${!forImageExport ? `<!-- Nút in + Chỉnh sửa -->
   <div class="no-print" style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
     <span id="edit-hint" style="display:none;font-size:12px;color:#9b59b6;font-style:italic;margin-right:auto;">✏️ Đang chỉnh sửa — bấm vào bất kỳ chỗ nào để sửa nội dung</span>
     <button id="btn-edit" onclick="toggleEdit()" style="background:#7f8c8d;color:#fff;border:none;padding:11px 22px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:0.3px;">
@@ -1525,7 +1526,7 @@ function generateContractHTML(
     <button onclick="window.print()" style="background:#8B1A6B;color:#fff;border:none;padding:11px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:0.3px;">
       🖨️ In / Lưu PDF
     </button>
-  </div>
+  </div>` : ""}
 
   <div id="contract-body">
 
@@ -1670,7 +1671,7 @@ function generateContractHTML(
   </div><!-- end contract-body -->
 
 </div>
-<script>
+${!forImageExport ? `<script>
   var editMode = false;
   function toggleEdit() {
     editMode = !editMode;
@@ -1696,7 +1697,7 @@ function generateContractHTML(
       hint.style.display = 'none';
     }
   }
-</script>
+</script>` : ""}
 </body>
 </html>`;
 }
@@ -1886,7 +1887,7 @@ function ShowDetailPanel({
                     discountAmount:  bookingDiscount,
                     remainingAmount: Math.max(0, bookingTotal - bookingDiscount - bookingDeposit),
                   };
-              const html = generateContractHTML(booking, siblings, allPackages, paymentSummary);
+              const html = generateContractHTML(booking, siblings, allPackages, paymentSummary, true);
               const urls = await buildContractImages(html);
               setContractImageUrls(urls);
             } catch (err) {
