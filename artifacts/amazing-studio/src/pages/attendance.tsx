@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useStaffAuth } from "@/contexts/StaffAuthContext";
 import { Button } from "@/components/ui";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import jsQR from "jsqr";
 import QRCode from "qrcode";
 
@@ -730,7 +731,7 @@ export default function AttendancePage() {
                       </div>
                       <div>
                         <label className="text-xs text-muted-foreground mb-1 block">Số tiền (đ)</label>
-                        <input type="number" value={adjForm.amount} onChange={e => setAdjForm(f => ({ ...f, amount: e.target.value }))}
+                        <CurrencyInput value={adjForm.amount} onChange={raw => setAdjForm(f => ({ ...f, amount: raw }))}
                           className={inputCls} placeholder="0" />
                       </div>
                       <div>
@@ -1008,7 +1009,7 @@ export default function AttendancePage() {
                     <div className="space-y-1">
                       <label className="text-xs text-muted-foreground">Bonus tuần chuyên cần (đ/tuần)</label>
                       {editingRules
-                        ? <input type="number" value={ruleForm.weeklyOnTimeBonus} onChange={e => setRuleForm(f => ({ ...f, weeklyOnTimeBonus: e.target.value }))} className={inputCls} />
+                        ? <CurrencyInput value={ruleForm.weeklyOnTimeBonus} onChange={raw => setRuleForm(f => ({ ...f, weeklyOnTimeBonus: raw }))} className={inputCls} />
                         : <p className="text-sm font-bold text-green-600 py-1.5">{vnd(parseFloat(ruleForm.weeklyOnTimeBonus || "0"))}</p>}
                     </div>
                   </div>
@@ -1060,10 +1061,10 @@ export default function AttendancePage() {
                           <div>
                             <label className="text-xs text-muted-foreground block mb-1">Phạt (đ, trống=không phạt)</label>
                             {editingRules
-                              ? <input type="number" value={lr.penaltyAmount ?? ""}
-                                  onChange={e => {
+                              ? <CurrencyInput value={String(lr.penaltyAmount ?? "")}
+                                  onChange={raw => {
                                     const copy = [...lateRules];
-                                    copy[i] = { ...copy[i], penaltyAmount: e.target.value ? parseFloat(e.target.value) : null };
+                                    copy[i] = { ...copy[i], penaltyAmount: raw ? parseFloat(raw) : null };
                                     setLateRules(copy);
                                   }} className={inputCls} placeholder="Không phạt" />
                               : <span className={`font-bold ${lr.penaltyAmount ? "text-red-600" : "text-muted-foreground"}`}>

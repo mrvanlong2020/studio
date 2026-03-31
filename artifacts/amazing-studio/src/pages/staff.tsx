@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -448,15 +449,15 @@ function StaffFormSheet({ open, onClose, editStaff }: StaffFormSheetProps) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label>Lương cứng (đ/tháng)</Label>
-                  <Input type="number" value={form.baseSalaryAmount}
-                    onChange={e => setField("baseSalaryAmount", e.target.value)}
-                    placeholder="vd: 5000000" className="mt-1" />
+                  <CurrencyInput value={form.baseSalaryAmount}
+                    onChange={raw => setField("baseSalaryAmount", raw)}
+                    placeholder="vd: 5.000.000" className="mt-1" />
                 </div>
                 <div>
                   <Label>Phụ cấp (đ/tháng)</Label>
-                  <Input type="number" value={form.allowance}
-                    onChange={e => setField("allowance", e.target.value)}
-                    placeholder="vd: 500000" className="mt-1" />
+                  <CurrencyInput value={form.allowance}
+                    onChange={raw => setField("allowance", raw)}
+                    placeholder="vd: 500.000" className="mt-1" />
                 </div>
                 <div className="sm:col-span-2">
                   <Label>Ghi chú lương</Label>

@@ -1,5 +1,6 @@
 import { Plus, Trash2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CurrencyInput } from "@/components/ui/currency-input";
 
 export type SurchargeItem = {
   id: string;
@@ -79,12 +80,11 @@ export function SurchargeEditor({ value, onChange, className }: SurchargeEditorP
                 onChange={e => update(item.id, { name: e.target.value })}
               />
               <div className="relative flex-shrink-0 w-32">
-                <input
-                  type="number"
+                <CurrencyInput
                   className="w-full px-2.5 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary/40 text-right"
                   placeholder="0"
-                  value={item.amount || ""}
-                  onChange={e => update(item.id, { amount: parseFloat(e.target.value) || 0 })}
+                  value={String(item.amount || "")}
+                  onChange={raw => update(item.id, { amount: parseFloat(raw) || 0 })}
                 />
               </div>
               <button

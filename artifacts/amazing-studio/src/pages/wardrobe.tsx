@@ -5,6 +5,7 @@ import {
   RefreshCw, Tag, Palette, Ruler, Package, Camera, Loader2
 } from "lucide-react";
 import { formatVND } from "@/lib/utils";
+import { CurrencyInput } from "@/components/ui/currency-input";
 
 function getImageSrc(imageUrl: string | null): string | null {
   if (!imageUrl) return null;
@@ -429,14 +430,14 @@ export default function WardrobePage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Giá thuê (VNĐ) *</label>
-                  <input type="number" min={0} value={form.rentalPrice}
-                    onChange={e => setForm(f => ({ ...f, rentalPrice: +e.target.value }))}
+                  <CurrencyInput value={String(form.rentalPrice || "")}
+                    onChange={raw => setForm(f => ({ ...f, rentalPrice: parseFloat(raw) || 0 }))}
                     className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none" required />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Giá cọc (VNĐ)</label>
-                  <input type="number" min={0} value={form.depositRequired}
-                    onChange={e => setForm(f => ({ ...f, depositRequired: +e.target.value }))}
+                  <CurrencyInput value={String(form.depositRequired || "")}
+                    onChange={raw => setForm(f => ({ ...f, depositRequired: parseFloat(raw) || 0 }))}
                     className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none" />
                 </div>
               </div>

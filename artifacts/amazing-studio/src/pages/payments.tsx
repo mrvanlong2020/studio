@@ -7,6 +7,7 @@ import {
   CalendarDays, Layers, CheckCircle, Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { useStaffAuth } from "@/contexts/StaffAuthContext";
 import {
   Sheet,
@@ -1008,11 +1009,10 @@ export default function PaymentsPage() {
                 <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
                   💰 Số tiền thu lần này *
                 </label>
-                <input
-                  type="number"
+                <CurrencyInput
                   className="w-full px-3 py-3 border border-border rounded-xl text-base font-bold bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
                   value={form.amount}
-                  onChange={e => { setForm(f => ({ ...f, amount: e.target.value })); setSaveError(null); }}
+                  onChange={raw => { setForm(f => ({ ...f, amount: raw })); setSaveError(null); }}
                   placeholder="Nhập số tiền cần thu..."
                 />
 

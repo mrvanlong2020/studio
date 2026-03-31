@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useGetAccountingSummary, useListStaff, useListTransactions } from "@workspace/api-client-react";
 import { formatVND, formatDate } from "@/lib/utils";
 import { Button, Input, Select, Textarea, Dialog, DialogContent, DialogHeader, DialogTitle, Badge, Tabs, TabsList, TabsTrigger, TabsContent, Card, CardContent } from "@/components/ui";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Plus, TrendingUp, TrendingDown, DollarSign, Briefcase, Receipt, Users, Wallet, Trash2, Edit, User, ExternalLink } from "lucide-react";
 import { Link } from "wouter";
 
@@ -194,7 +195,7 @@ export default function AccountingHrPage() {
               <h4 className="font-semibold text-sm">Thêm khoản chi phí mới</h4>
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2"><label className="text-xs font-medium text-muted-foreground">Mô tả *</label><Input placeholder="VD: Mua đèn studio..." value={expForm.description} onChange={e => setExpForm(f => ({ ...f, description: e.target.value }))} /></div>
-                <div><label className="text-xs font-medium text-muted-foreground">Số tiền *</label><Input type="number" placeholder="0" value={expForm.amount} onChange={e => setExpForm(f => ({ ...f, amount: e.target.value }))} /></div>
+                <div><label className="text-xs font-medium text-muted-foreground">Số tiền *</label><CurrencyInput placeholder="0" value={expForm.amount} onChange={raw => setExpForm(f => ({ ...f, amount: raw }))} /></div>
                 <div><label className="text-xs font-medium text-muted-foreground">Danh mục</label>
                   <Select value={expForm.category} onChange={e => setExpForm(f => ({ ...f, category: e.target.value }))}>
                     {Object.entries(EXPENSE_CAT).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -290,9 +291,9 @@ export default function AccountingHrPage() {
                   </Select>
                 </div>
                 <div><label className="text-xs font-medium text-muted-foreground">Năm *</label><Input type="number" placeholder="2026" value={prForm.year} onChange={e => setPrForm(f => ({ ...f, year: e.target.value }))} /></div>
-                <div><label className="text-xs font-medium text-muted-foreground">Lương cơ bản</label><Input type="number" placeholder="0" value={prForm.baseSalary} onChange={e => setPrForm(f => ({ ...f, baseSalary: e.target.value }))} /></div>
-                <div><label className="text-xs font-medium text-muted-foreground">Thưởng</label><Input type="number" placeholder="0" value={prForm.bonus} onChange={e => setPrForm(f => ({ ...f, bonus: e.target.value }))} /></div>
-                <div><label className="text-xs font-medium text-muted-foreground">Khấu trừ</label><Input type="number" placeholder="0" value={prForm.deduction} onChange={e => setPrForm(f => ({ ...f, deduction: e.target.value }))} /></div>
+                <div><label className="text-xs font-medium text-muted-foreground">Lương cơ bản</label><CurrencyInput placeholder="0" value={prForm.baseSalary} onChange={raw => setPrForm(f => ({ ...f, baseSalary: raw }))} /></div>
+                <div><label className="text-xs font-medium text-muted-foreground">Thưởng</label><CurrencyInput placeholder="0" value={prForm.bonus} onChange={raw => setPrForm(f => ({ ...f, bonus: raw }))} /></div>
+                <div><label className="text-xs font-medium text-muted-foreground">Khấu trừ</label><CurrencyInput placeholder="0" value={prForm.deduction} onChange={raw => setPrForm(f => ({ ...f, deduction: raw }))} /></div>
                 <div><label className="text-xs font-medium text-muted-foreground">Lương thực nhận</label>
                   <div className="h-10 flex items-center px-3 rounded-xl border bg-primary/5 font-bold text-primary text-sm">
                     {formatVND((parseFloat(prForm.baseSalary || "0") + parseFloat(prForm.bonus || "0")) - parseFloat(prForm.deduction || "0"))}

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatVND, formatDate } from "@/lib/utils";
 import { Button, Input, Select, Textarea, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Plus, Search, FileText, User, Calendar, CheckCircle2, Clock, AlertCircle, Trash2, Edit, Printer, ReceiptText } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -508,7 +509,7 @@ export default function ContractsPage() {
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Giá trị dịch vụ *</label>
-                <Input type="number" placeholder="0" value={form.totalValue} onChange={e => setForm(f => ({ ...f, totalValue: e.target.value }))} />
+                <CurrencyInput placeholder="0" value={form.totalValue} onChange={raw => setForm(f => ({ ...f, totalValue: raw }))} />
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Trạng thái</label>

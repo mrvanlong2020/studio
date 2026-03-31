@@ -18,6 +18,7 @@ import {
   Pencil, ShieldCheck, Eye, FileText, CalendarDays,
 } from "lucide-react";
 import { Button, Input } from "@/components/ui";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { ServiceSearchBox } from "@/components/service-search-box";
 import { SurchargeEditor, type SurchargeItem } from "@/components/surcharge-editor";
 import { StaffAssignmentEditor, type StaffAssignment, newStaffAssignment } from "@/components/staff-assignment-editor";
@@ -473,8 +474,8 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
               {addonTotal > 0 && <span className="ml-2 text-[10px] text-amber-600 font-normal">({fmtVND(line.basePrice || 0)} + addon)</span>}
             </div>
           ) : (
-            <Input type="number" className="h-8 text-sm w-40" value={line.price || ""} placeholder="0"
-              onChange={e => onChange({ ...line, price: parseFloat(e.target.value) || 0 })} />
+            <CurrencyInput className="h-8 text-sm w-40" value={String(line.price || "")} placeholder="0"
+              onChange={raw => onChange({ ...line, price: parseFloat(raw) || 0 })} />
           )}
         </div>
         {/* Dịch vụ đơn: studio giữ */}
@@ -1204,7 +1205,7 @@ function ShowFormPanel({
               </div>
               <div className="flex justify-between items-center gap-3">
                 <span className="text-sm text-muted-foreground flex-shrink-0">Giảm giá:</span>
-                <Input type="number" className="h-8 text-sm text-right w-40" value={discount} placeholder="0" onChange={e => setDiscount(e.target.value)} />
+                <CurrencyInput className="h-8 text-sm text-right w-40" value={discount} placeholder="0" onChange={setDiscount} />
               </div>
               {discountNum > 0 && (
                 <div className="flex justify-between items-center">
@@ -1214,7 +1215,7 @@ function ShowFormPanel({
               )}
               <div className="flex justify-between items-center gap-3">
                 <span className="text-sm text-muted-foreground flex-shrink-0">Đặt cọc:</span>
-                <Input type="number" className="h-8 text-sm text-right w-40" value={deposit} placeholder="0" onChange={e => setDeposit(e.target.value)} />
+                <CurrencyInput className="h-8 text-sm text-right w-40" value={deposit} placeholder="0" onChange={setDeposit} />
               </div>
               {parseFloat(deposit) > 0 && (
                 <div className="flex items-center gap-1.5">

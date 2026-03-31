@@ -6,6 +6,7 @@ import {
   AlertCircle, Trash2, Edit2, Camera, Building2, Clock,
 } from "lucide-react";
 import { useStaffAuth } from "@/contexts/StaffAuthContext";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { getImageSrc } from "@/lib/imageUtils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -420,10 +421,9 @@ export default function ExpensesPage() {
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-bold">₫</span>
-                  <input
-                    type="number"
+                  <CurrencyInput
                     value={form.amount}
-                    onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+                    onChange={raw => setForm(f => ({ ...f, amount: raw }))}
                     placeholder="0"
                     required
                     className="w-full pl-7 pr-3 py-2.5 border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-red-300 text-lg font-bold"
