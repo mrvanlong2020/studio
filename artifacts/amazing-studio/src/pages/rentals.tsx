@@ -5,6 +5,7 @@ import { useRentals, useCreateRentalMutation, useUpdateRentalMutation } from "@/
 import { useCustomers } from "@/hooks/use-customers";
 import { useDresses } from "@/hooks/use-dresses";
 import { formatVND, formatDate } from "@/lib/formatters";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Plus, CalendarRange, CheckCircle2, AlertCircle } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -193,11 +194,11 @@ export default function Rentals() {
           <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 rounded-xl">
             <div className="space-y-2">
               <Label>Giá thuê (VNĐ)</Label>
-              <Input type="number" {...register("rentalPrice")} />
+              <CurrencyInput value={String(watch("rentalPrice") || "")} onChange={raw => setValue("rentalPrice", parseFloat(raw) || 0, { shouldValidate: true })} />
             </div>
             <div className="space-y-2">
               <Label>Tiền cọc nhận (VNĐ)</Label>
-              <Input type="number" {...register("depositPaid")} />
+              <CurrencyInput value={String(watch("depositPaid") || "")} onChange={raw => setValue("depositPaid", parseFloat(raw) || 0, { shouldValidate: true })} />
             </div>
           </div>
 

@@ -3,6 +3,7 @@ import { Layout } from "@/components/layout";
 import { Card, CardContent, Button, Input, Dialog, Label, Textarea, Select, Badge } from "@/components/ui-elements";
 import { useDresses, useCreateDressMutation, useUpdateDressMutation, useDeleteDressMutation } from "@/hooks/use-dresses";
 import { formatVND } from "@/lib/formatters";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Plus, Edit, Trash2, Tag, Image as ImageIcon } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -42,7 +43,7 @@ export default function Dresses() {
   const deleteMutation = useDeleteDressMutation();
   const { toast } = useToast();
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<DressFormValues>({
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<DressFormValues>({
     resolver: zodResolver(dressSchema),
     defaultValues: {
       condition: "excellent",
@@ -217,11 +218,11 @@ export default function Dresses() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Giá thuê (VNĐ) <span className="text-destructive">*</span></Label>
-              <Input type="number" {...register("rentalPrice")} />
+              <CurrencyInput value={String(watch("rentalPrice") || "")} onChange={raw => setValue("rentalPrice", parseFloat(raw) || 0, { shouldValidate: true })} />
             </div>
             <div className="space-y-2">
               <Label>Yêu cầu cọc (VNĐ) <span className="text-destructive">*</span></Label>
-              <Input type="number" {...register("depositRequired")} />
+              <CurrencyInput value={String(watch("depositRequired") || "")} onChange={raw => setValue("depositRequired", parseFloat(raw) || 0, { shouldValidate: true })} />
             </div>
           </div>
 

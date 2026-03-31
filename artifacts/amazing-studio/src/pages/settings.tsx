@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, Input, Button, Textarea } from "@/components/ui";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Save, Store, Mail, Phone, MapPin, Building, Clock, Navigation, Loader2, LocateFixed, CheckCircle2, AlertCircle } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -227,7 +228,10 @@ export default function SettingsPage() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Mức cọc mặc định (%)</label>
-              <Input type="number" {...f("defaultDeposit")} />
+              <CurrencyInput
+                value={form.defaultDeposit !== undefined ? String(Math.round(form.defaultDeposit ?? 0) || "") : ""}
+                onChange={raw => setForm(p => ({ ...p, defaultDeposit: parseFloat(raw) || 0 }))}
+              />
             </div>
             <div className="space-y-2 md:col-span-2">
               <label className="text-sm font-medium">Tài khoản ngân hàng (Hiển thị trên báo giá)</label>
