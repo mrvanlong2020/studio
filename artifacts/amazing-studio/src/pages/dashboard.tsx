@@ -1,219 +1,610 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useGetDashboardStats } from "@workspace/api-client-react";
-import { formatVND, formatDate } from "@/lib/utils";
-import { Card, CardContent, Badge, Button } from "@/components/ui";
-import { 
-  ArrowRight, Users, Camera, Shirt, Wallet, TrendingUp, AlertCircle,
-  CalendarDays, CheckSquare, DollarSign, ReceiptText, Clock, CheckCircle2
+import { formatVND } from "@/lib/utils";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip,
+  ResponsiveContainer,
+} from "recharts";
+import {
+  ClipboardList, Wallet, AlertTriangle, TrendingUp,
+  CalendarDays, ArrowRight, Receipt, BadgeAlert, Layers,
 } from "lucide-react";
 import { Link } from "wouter";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { Button, Badge } from "@/components/ui";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const fetchJson = (url: string) => fetch(`${BASE}${url}`).then(r => r.json());
 
-const STATUS_COLORS: Record<string, string> = {
-  pending: "#eab308", confirmed: "#3b82f6", in_progress: "#8b5cf6", completed: "#22c55e", cancelled: "#ef4444",
-};
+type Period = "today" | "7days" | "month" | "year";
+
+const PERIOD_TABS: { key: Period; label: string }[] = [
+  { key: "today", label: "Hôm nay" },
+  { key: "7days", label: "7 ngày" },
+  { key: "month", label: "Tháng này" },
+  { key: "year", label: "Năm nay" },
+];
+
 const STATUS_LABELS: Record<string, string> = {
-  pending: "Chờ xác nhận", confirmed: "Đã xác nhận", in_progress: "Đang làm", completed: "Hoàn thành", cancelled: "Đã hủy",
+  pending: "Chờ XN", confirmed: "Đã XN", in_progress: "Đang làm",
+  completed: "Hoàn thành", cancelled: "Đã hủy",
 };
+const STATUS_COLORS: Record<string, string> = {
+  pending: "bg-yellow-100 text-yellow-700",
+  confirmed: "bg-blue-100 text-blue-700",
+  in_progress: "bg-purple-100 text-purple-700",
+  completed: "bg-green-100 text-green-700",
+  cancelled: "bg-red-100 text-red-700",
+};
+
+function fmtChartLabel(date: string, preset: Period) {
+  if (preset === "year") {
+    const m = parseInt(date.split("-")[1]);
+    return `T${m}`;
+  }
+  const [, mm, dd] = date.split("-");
+  return `${parseInt(dd)}/${parseInt(mm)}`;
+}
+
+function KpiCard({
+  icon: Icon, label, value, sub, sub2, color, bg,
+}: {
+  icon: React.ElementType; label: string; value: string;
+  sub: string; sub2?: string; color: string; bg: string;
+}) {
+  return (
+    <div className={`rounded-2xl border bg-gradient-to-br ${bg} p-4 flex flex-col gap-2`}>
+      <div className="flex items-start justify-between">
+        <p className="text-xs text-muted-foreground font-medium">{label}</p>
+        <div className={`p-2 rounded-xl bg-white/60 ${color}`}>
+          <Icon className="w-4 h-4" />
+        </div>
+      </div>
+      <p className={`text-2xl font-bold tracking-tight ${color}`}>{value}</p>
+      <p className="text-xs text-muted-foreground">{sub}</p>
+      {sub2 && <p className="text-xs font-medium text-muted-foreground border-t pt-1.5 mt-0.5">{sub2}</p>}
+    </div>
+  );
+}
+
+function SkeletonCard() {
+  return (
+    <div className="rounded-2xl border bg-muted/30 p-4 animate-pulse">
+      <div className="h-3 w-20 bg-muted rounded mb-3" />
+      <div className="h-7 w-32 bg-muted rounded mb-2" />
+      <div className="h-3 w-24 bg-muted rounded" />
+    </div>
+  );
+}
+
+function SkeletonChart() {
+  return (
+    <div className="rounded-2xl border bg-card p-5 animate-pulse">
+      <div className="h-4 w-40 bg-muted rounded mb-4" />
+      <div className="h-40 bg-muted/40 rounded" />
+    </div>
+  );
+}
 
 export default function Dashboard() {
-  const { data: stats, isLoading } = useGetDashboardStats();
-  const { data: bookings = [] } = useQuery<any[]>({
-    queryKey: ["bookings-dash"],
-    queryFn: () => fetchJson("/api/bookings"),
-  });
-  const { data: tasks = [] } = useQuery<any[]>({
-    queryKey: ["tasks-dash"],
-    queryFn: () => fetchJson("/api/tasks"),
-  });
+  const [period, setPeriod] = useState<Period>("month");
+  const [breakdownTab, setBreakdownTab] = useState<"service" | "category">("service");
 
-  if (isLoading) return <div className="p-8 text-center text-muted-foreground">Đang tải dữ liệu tổng quan...</div>;
-  if (!stats) return <div className="p-8 text-center text-destructive">Lỗi tải dữ liệu</div>;
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ["dashboard-v2", period],
+    queryFn: () => fetchJson(`/api/dashboard/v2?period=${period}`),
+    staleTime: 30_000,
+  });
 
   const now = new Date();
-  const monthlyData = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
-    const month = d.getMonth(); const year = d.getFullYear();
-    const label = `T${month + 1}`;
-    const monthBookings = bookings.filter(b => {
-      const bd = new Date(b.shootDate || b.createdAt);
-      return bd.getMonth() === month && bd.getFullYear() === year;
-    });
-    return { label, total: monthBookings.reduce((s: number, b: any) => s + parseFloat(b.totalAmount || 0), 0) };
+  const dateLabel = now.toLocaleDateString("vi-VN", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
   });
 
-  // Status distribution for pie chart
-  const statusDist = Object.entries(STATUS_LABELS).map(([k, v]) => ({
-    name: v, value: bookings.filter(b => b.status === k).length, color: STATUS_COLORS[k],
-  })).filter(d => d.value > 0);
+  const summary = data?.summary;
+  const charts = data?.charts;
+  const breakdown = data?.breakdown;
+  const debts = data?.debts;
+  const upcoming = data?.upcomingBookings ?? [];
 
-  const todayTasks = tasks.filter((t: any) => t.status !== "done");
-  const urgentTasks = todayTasks.filter((t: any) => t.priority === "high");
-  const totalDebt = bookings.reduce((s: number, b: any) => s + parseFloat(b.remainingAmount || 0), 0);
+  const bookedChartData = (charts?.booked ?? []).map((d: any) => ({
+    label: fmtChartLabel(d.date, period),
+    amount: d.amount,
+    count: d.count,
+  }));
+  const collectedChartData = (charts?.collected ?? []).map((d: any) => ({
+    label: fmtChartLabel(d.date, period),
+    amount: d.amount,
+    count: d.count,
+  }));
+
+  const activeBreakdown = breakdownTab === "service"
+    ? (breakdown?.byService ?? [])
+    : (breakdown?.byCategory ?? []);
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold">Tổng quan</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Chào mừng trở lại Amazing Studio. Ngày {now.toLocaleDateString("vi-VN", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+      {/* ── Header ─────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-bold">Tổng quan</h1>
+          <p className="text-sm text-muted-foreground mt-0.5 capitalize">{dateLabel}</p>
+        </div>
+        {/* Period Tabs */}
+        <div className="flex gap-1 bg-muted rounded-xl p-1 self-start sm:self-auto">
+          {PERIOD_TABS.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setPeriod(t.key)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                period === t.key
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* ── KPI Row ────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          { label: "Tổng doanh thu", value: formatVND(stats.totalRevenue), sub: `+${formatVND(stats.revenueThisMonth)} tháng này`, icon: Wallet, color: "text-primary", bg: "from-primary/10 to-card" },
-          { label: "Lịch chụp tháng này", value: stats.bookingsThisMonth, sub: `${stats.pendingBookings} chờ xác nhận`, icon: Camera, color: "text-blue-600", bg: "from-blue-50 to-card" },
-          { label: "Công nợ chưa thu", value: formatVND(totalDebt), sub: "Cần theo dõi", icon: ReceiptText, color: "text-red-600", bg: "from-red-50 to-card" },
-          { label: "Tổng khách hàng", value: stats.totalCustomers, sub: "Đã đăng ký", icon: Users, color: "text-emerald-600", bg: "from-emerald-50 to-card" },
-        ].map(c => (
-          <div key={c.label} className={`rounded-xl border bg-gradient-to-br ${c.bg} p-4`}>
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs text-muted-foreground">{c.label}</p>
-                <p className={`text-xl font-bold mt-0.5 ${c.color}`}>{c.value}</p>
-                <p className="text-xs text-muted-foreground mt-1">{c.sub}</p>
-              </div>
-              <div className={`p-2 rounded-xl bg-background/80 ${c.color}`}><c.icon className="w-4 h-4" /></div>
-            </div>
-          </div>
-        ))}
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
+        ) : (
+          <>
+            <KpiCard
+              icon={ClipboardList}
+              label="Đã chốt"
+              value={formatVND(summary?.bookedAmount ?? 0)}
+              sub={`${summary?.bookedCount ?? 0} đơn trong kỳ`}
+              sub2="Theo ngày ký hợp đồng"
+              color="text-violet-600"
+              bg="from-violet-50 to-card"
+            />
+            <KpiCard
+              icon={Wallet}
+              label="Đã thu"
+              value={formatVND(summary?.collectedAmount ?? 0)}
+              sub={`${summary?.collectedCount ?? 0} giao dịch`}
+              sub2="Theo ngày nhận tiền thực tế"
+              color="text-emerald-600"
+              bg="from-emerald-50 to-card"
+            />
+            <KpiCard
+              icon={AlertTriangle}
+              label="Còn nợ (toàn bộ)"
+              value={formatVND(summary?.owedTotal ?? 0)}
+              sub={`${summary?.owedCount ?? 0} booking chưa thanh toán đủ`}
+              sub2={
+                summary?.owedInPeriod > 0
+                  ? `Phát sinh kỳ này: ${formatVND(summary.owedInPeriod)}`
+                  : "Kỳ này không phát sinh nợ mới"
+              }
+              color="text-amber-600"
+              bg="from-amber-50 to-card"
+            />
+            <KpiCard
+              icon={TrendingUp}
+              label="Lợi nhuận"
+              value={formatVND(summary?.profit ?? 0)}
+              sub={`Sau ${formatVND(summary?.totalExpenses ?? 0)} chi phí`}
+              sub2={
+                (summary?.profit ?? 0) >= 0
+                  ? "Đang có lãi trong kỳ"
+                  : "Đang lỗ trong kỳ này"
+              }
+              color={(summary?.profit ?? 0) >= 0 ? "text-blue-600" : "text-red-600"}
+              bg={(summary?.profit ?? 0) >= 0 ? "from-blue-50 to-card" : "from-red-50 to-card"}
+            />
+          </>
+        )}
       </div>
 
-      {/* Charts & Upcoming */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Revenue Chart */}
-        <div className="lg:col-span-2 bg-card rounded-2xl border p-5">
-          <h3 className="font-semibold mb-4 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-primary" />Doanh thu 6 tháng gần đây</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={monthlyData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-              <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} tickFormatter={v => `${v / 1000000}M`} />
-              <RechartsTooltip
-                cursor={{ fill: "hsl(var(--muted)/0.5)" }}
-                contentStyle={{ borderRadius: "12px", border: "1px solid hsl(var(--border))", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
-                formatter={(v: number) => [formatVND(v), "Doanh thu"]}
-              />
-              <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={48} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Upcoming Bookings */}
-        <div className="bg-card rounded-2xl border flex flex-col overflow-hidden">
-          <div className="p-4 border-b flex justify-between items-center">
-            <h3 className="font-semibold flex items-center gap-2"><CalendarDays className="w-4 h-4 text-primary" />Lịch chụp sắp tới</h3>
-            <Link href="/calendar" className="text-muted-foreground hover:text-primary"><ArrowRight className="w-4 h-4" /></Link>
-          </div>
-          <div className="flex-1 overflow-y-auto divide-y max-h-60">
-            {stats.upcomingBookings.length === 0 ? (
-              <div className="flex flex-col items-center justify-center p-8 text-muted-foreground text-sm">
-                <CalendarDays className="w-10 h-10 mb-2 opacity-20" />
-                <p>Không có lịch sắp tới</p>
-              </div>
-            ) : stats.upcomingBookings.map(b => (
-              <div key={b.id} className="px-4 py-3 hover:bg-muted/30 transition-colors flex justify-between items-center">
-                <div>
-                  <p className="font-medium text-sm">{b.customerName}</p>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5"><Camera className="w-3 h-3" />{b.packageType}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium">{formatDate(b.shootDate)}</p>
-                  <p className="text-xs text-muted-foreground">{b.shootTime || "--:--"}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="p-3 border-t">
-            <Link href="/bookings"><Button variant="outline" size="sm" className="w-full">Xem tất cả đơn</Button></Link>
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom row: Status Distribution + Tasks */}
+      {/* ── Charts Row ─────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Status Pie */}
-        <div className="bg-card rounded-2xl border p-5">
-          <h3 className="font-semibold mb-4">Phân bổ trạng thái đơn hàng</h3>
-          {statusDist.length === 0 ? (
-            <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">Chưa có dữ liệu</div>
-          ) : (
-            <div className="flex items-center gap-4">
-              <ResponsiveContainer width={140} height={140}>
-                <PieChart>
-                  <Pie data={statusDist} dataKey="value" cx="50%" cy="50%" innerRadius={40} outerRadius={65}>
-                    {statusDist.map((d, i) => <Cell key={i} fill={d.color} />)}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="space-y-2 flex-1">
-                {statusDist.map(d => (
-                  <div key={d.name} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
-                      <span className="text-muted-foreground text-xs">{d.name}</span>
-                    </div>
-                    <span className="font-semibold text-xs">{d.value}</span>
-                  </div>
-                ))}
-              </div>
+        {isLoading ? (
+          <>
+            <SkeletonChart />
+            <SkeletonChart />
+          </>
+        ) : (
+          <>
+            {/* Chốt theo ngày */}
+            <div className="bg-card rounded-2xl border p-5">
+              <h3 className="font-semibold text-sm mb-1 flex items-center gap-2">
+                <ClipboardList className="w-4 h-4 text-violet-600" />
+                Doanh số chốt
+                <span className="text-xs font-normal text-muted-foreground ml-1">
+                  (theo ngày ký HĐ)
+                </span>
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4">Tổng giá trị booking tạo mới</p>
+              {bookedChartData.length === 0 || bookedChartData.every((d: any) => d.amount === 0) ? (
+                <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">
+                  Không có dữ liệu trong kỳ này
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={bookedChartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                    <XAxis
+                      dataKey="label"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                      interval={period === "month" ? 4 : 0}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                      tickFormatter={v => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(0)}M` : `${(v / 1_000).toFixed(0)}K`}
+                      width={48}
+                    />
+                    <RTooltip
+                      cursor={{ fill: "hsl(var(--muted)/0.5)" }}
+                      contentStyle={{ borderRadius: "12px", border: "1px solid hsl(var(--border))", fontSize: "12px" }}
+                      formatter={(v: number, _: string, item: any) => [
+                        formatVND(v),
+                        `Đã chốt (${item.payload.count} đơn)`,
+                      ]}
+                    />
+                    <Bar dataKey="amount" fill="#7c3aed" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Tasks overview */}
-        <div className="bg-card rounded-2xl border flex flex-col overflow-hidden">
-          <div className="p-4 border-b flex justify-between items-center">
-            <h3 className="font-semibold flex items-center gap-2"><CheckSquare className="w-4 h-4 text-primary" />Công việc cần làm</h3>
-            <Link href="/tasks" className="text-muted-foreground hover:text-primary"><ArrowRight className="w-4 h-4" /></Link>
-          </div>
-          <div className="flex-1 divide-y overflow-y-auto max-h-52">
-            {todayTasks.length === 0 ? (
-              <div className="flex items-center justify-center p-8 text-muted-foreground text-sm">
-                <CheckCircle2 className="w-10 h-10 mb-2 opacity-20" />
-              </div>
-            ) : todayTasks.slice(0, 6).map((t: any) => (
-              <div key={t.id} className="px-4 py-3 hover:bg-muted/30 flex items-center justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate">{t.title}</p>
-                  {t.assigneeName && <p className="text-xs text-muted-foreground mt-0.5">{t.assigneeName}</p>}
+            {/* Thu theo ngày */}
+            <div className="bg-card rounded-2xl border p-5">
+              <h3 className="font-semibold text-sm mb-1 flex items-center gap-2">
+                <Wallet className="w-4 h-4 text-emerald-600" />
+                Tiền đã thu
+                <span className="text-xs font-normal text-muted-foreground ml-1">
+                  (theo ngày nhận tiền)
+                </span>
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4">Tổng tiền thực nhận từ khách</p>
+              {collectedChartData.length === 0 || collectedChartData.every((d: any) => d.amount === 0) ? (
+                <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">
+                  Không có tiền thu trong kỳ này
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {t.priority === "high" && <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-700 rounded font-medium">Cao</span>}
-                  {t.status === "in_progress" && <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">Đang làm</span>}
-                  {t.status === "todo" && <span className="text-[10px] px-1.5 py-0.5 bg-muted text-muted-foreground rounded">Chờ</span>}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="p-3 border-t">
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>{urgentTasks.length} việc khẩn · {todayTasks.length} chưa xong</span>
-              <Link href="/tasks" className="text-primary font-medium hover:underline">Xem tất cả</Link>
+              ) : (
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={collectedChartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                    <XAxis
+                      dataKey="label"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                      interval={period === "month" ? 4 : 0}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                      tickFormatter={v => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(0)}M` : `${(v / 1_000).toFixed(0)}K`}
+                      width={48}
+                    />
+                    <RTooltip
+                      cursor={{ fill: "hsl(var(--muted)/0.5)" }}
+                      contentStyle={{ borderRadius: "12px", border: "1px solid hsl(var(--border))", fontSize: "12px" }}
+                      formatter={(v: number, _: string, item: any) => [
+                        formatVND(v),
+                        `Đã thu (${item.payload.count} giao dịch)`,
+                      ]}
+                    />
+                    <Bar dataKey="amount" fill="#059669" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
 
-      {/* Debt Alert */}
-      {totalDebt > 0 && (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-destructive/10 text-destructive rounded-full"><AlertCircle className="w-5 h-5" /></div>
-            <div>
-              <h3 className="font-semibold text-destructive">Cảnh báo công nợ</h3>
-              <p className="text-sm text-muted-foreground">Tổng công nợ khách hàng chưa thu</p>
+      {/* ── Service Breakdown ──────────────────────────────────── */}
+      <div className="bg-card rounded-2xl border overflow-hidden">
+        <div className="p-4 border-b flex items-center justify-between flex-wrap gap-2">
+          <h3 className="font-semibold flex items-center gap-2">
+            <Layers className="w-4 h-4 text-primary" />
+            Phân tích dịch vụ
+          </h3>
+          <div className="flex gap-1 bg-muted rounded-lg p-0.5">
+            <button
+              onClick={() => setBreakdownTab("service")}
+              className={`px-3 py-1 rounded text-xs font-medium transition-all ${
+                breakdownTab === "service" ? "bg-background shadow-sm" : "text-muted-foreground"
+              }`}
+            >
+              Theo dịch vụ
+            </button>
+            <button
+              onClick={() => setBreakdownTab("category")}
+              className={`px-3 py-1 rounded text-xs font-medium transition-all ${
+                breakdownTab === "category" ? "bg-background shadow-sm" : "text-muted-foreground"
+              }`}
+            >
+              Theo nhóm
+            </button>
+          </div>
+        </div>
+        {isLoading ? (
+          <div className="p-6 space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-8 bg-muted/40 rounded animate-pulse" />
+            ))}
+          </div>
+        ) : activeBreakdown.length === 0 ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">
+            Không có dữ liệu dịch vụ trong kỳ này
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/30">
+                  <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Dịch vụ</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Đơn</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Đã chốt</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-muted-foreground hidden sm:table-cell">%</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Đã thu</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-muted-foreground hidden sm:table-cell">%</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Còn nợ</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {activeBreakdown.map((row: any, i: number) => (
+                  <tr key={i} className="hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="font-medium truncate max-w-[140px]">{row.label}</div>
+                      {breakdownTab === "service" && row.category && (
+                        <div className="text-xs text-muted-foreground capitalize">{row.category}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">{row.bookedCount}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-medium text-violet-700">
+                      {formatVND(row.bookedAmount)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-muted-foreground hidden sm:table-cell text-xs">
+                      {row.bookedPercent}%
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums font-medium text-emerald-700">
+                      {formatVND(row.collectedAmount)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-muted-foreground hidden sm:table-cell text-xs">
+                      {row.collectedPercent}%
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums font-medium text-amber-700">
+                      {row.owedAmount > 0 ? formatVND(row.owedAmount) : <span className="text-muted-foreground">—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              {activeBreakdown.length > 1 && (
+                <tfoot>
+                  <tr className="border-t bg-muted/20 font-semibold">
+                    <td className="px-4 py-2.5 text-sm">Tổng</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-sm">
+                      {activeBreakdown.reduce((s: number, r: any) => s + r.bookedCount, 0)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-sm text-violet-700">
+                      {formatVND(activeBreakdown.reduce((s: number, r: any) => s + r.bookedAmount, 0))}
+                    </td>
+                    <td className="hidden sm:table-cell" />
+                    <td className="px-4 py-2.5 text-right tabular-nums text-sm text-emerald-700">
+                      {formatVND(activeBreakdown.reduce((s: number, r: any) => s + r.collectedAmount, 0))}
+                    </td>
+                    <td className="hidden sm:table-cell" />
+                    <td className="px-4 py-2.5 text-right tabular-nums text-sm text-amber-700">
+                      {formatVND(activeBreakdown.reduce((s: number, r: any) => s + r.owedAmount, 0))}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Debt Section ───────────────────────────────────────── */}
+      <div className="bg-card rounded-2xl border overflow-hidden">
+        <div className="p-4 border-b flex items-center justify-between">
+          <h3 className="font-semibold flex items-center gap-2">
+            <BadgeAlert className="w-4 h-4 text-amber-500" />
+            Công nợ phải thu
+            {!isLoading && summary?.owedTotal > 0 && (
+              <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                {formatVND(summary.owedTotal)}
+              </span>
+            )}
+          </h3>
+          <Link href="/bookings" className="text-muted-foreground hover:text-primary">
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+        {isLoading ? (
+          <div className="p-6 space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-8 bg-muted/40 rounded animate-pulse" />
+            ))}
+          </div>
+        ) : (debts?.topDebtors ?? []).length === 0 ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">
+            Không có công nợ — tuyệt vời!
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/30">
+                  <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Mã HĐ</th>
+                  <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Khách</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-muted-foreground hidden md:table-cell">Tổng HĐ</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-muted-foreground hidden md:table-cell">Đã trả</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Còn nợ</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-muted-foreground hidden sm:table-cell">Ngày chụp</th>
+                  <th className="text-center px-4 py-2.5 font-medium text-muted-foreground hidden sm:table-cell">TT</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {(debts?.topDebtors ?? []).map((d: any) => (
+                  <tr key={d.bookingId} className="hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/calendar?id=${d.bookingId}`}
+                        className="font-mono text-xs text-primary hover:underline"
+                      >
+                        {d.bookingCode}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-sm">{d.customerName}</div>
+                      {d.customerPhone && (
+                        <div className="text-xs text-muted-foreground">{d.customerPhone}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums hidden md:table-cell">
+                      {formatVND(d.totalAmount)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-muted-foreground hidden md:table-cell">
+                      {formatVND(d.paidAmount)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums font-bold text-red-600">
+                      {formatVND(d.remainingAmount)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-muted-foreground hidden sm:table-cell">
+                      {d.shootDate
+                        ? new Date(d.shootDate).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-center hidden sm:table-cell">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${STATUS_COLORS[d.status] ?? "bg-muted text-muted-foreground"}`}>
+                        {STATUS_LABELS[d.status] ?? d.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Expense & Profit ───────────────────────────────────── */}
+      {!isLoading && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Chi phí */}
+          <div className="bg-card rounded-2xl border p-5">
+            <h3 className="font-semibold mb-4 flex items-center gap-2">
+              <Receipt className="w-4 h-4 text-muted-foreground" />
+              Chi phí trong kỳ
+            </h3>
+            <div className="space-y-2.5">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">Chi gắn booking</span>
+                <span className="font-medium tabular-nums">
+                  {formatVND(summary?.linkedExpenses ?? 0)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">Chi tổng quát</span>
+                <span className="font-medium tabular-nums">
+                  {formatVND(summary?.generalExpenses ?? 0)}
+                </span>
+              </div>
+              <div className="border-t pt-2.5 flex justify-between items-center">
+                <span className="font-semibold">Tổng chi</span>
+                <span className="font-bold tabular-nums text-red-600">
+                  {formatVND(summary?.totalExpenses ?? 0)}
+                </span>
+              </div>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-xl font-bold text-destructive">{formatVND(totalDebt)}</p>
-            <Link href="/bookings" className="text-sm font-medium text-destructive hover:underline">Xem chi tiết</Link>
+
+          {/* Lợi nhuận */}
+          <div className={`rounded-2xl border p-5 ${(summary?.profit ?? 0) >= 0 ? "bg-emerald-50/60" : "bg-red-50/60"}`}>
+            <h3 className="font-semibold mb-4 flex items-center gap-2">
+              <TrendingUp className={`w-4 h-4 ${(summary?.profit ?? 0) >= 0 ? "text-emerald-600" : "text-red-600"}`} />
+              Lợi nhuận thực
+            </h3>
+            <div className="space-y-2.5">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">Đã thu</span>
+                <span className="font-medium text-emerald-700 tabular-nums">
+                  +{formatVND(summary?.collectedAmount ?? 0)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">Tổng chi</span>
+                <span className="font-medium text-red-600 tabular-nums">
+                  −{formatVND(summary?.totalExpenses ?? 0)}
+                </span>
+              </div>
+              <div className="border-t pt-2.5 flex justify-between items-center">
+                <span className="font-semibold">Lợi nhuận</span>
+                <div className="text-right">
+                  <span className={`font-bold text-lg tabular-nums ${(summary?.profit ?? 0) >= 0 ? "text-emerald-700" : "text-red-600"}`}>
+                    {formatVND(summary?.profit ?? 0)}
+                  </span>
+                  <div className="text-xs mt-0.5">
+                    <span className={`px-1.5 py-0.5 rounded font-medium ${(summary?.profit ?? 0) >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                      {(summary?.profit ?? 0) >= 0 ? "Có lãi" : "Bị lỗ"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
+
+      {/* ── Upcoming Bookings ──────────────────────────────────── */}
+      <div className="bg-card rounded-2xl border overflow-hidden">
+        <div className="p-4 border-b flex items-center justify-between">
+          <h3 className="font-semibold flex items-center gap-2">
+            <CalendarDays className="w-4 h-4 text-primary" />
+            Lịch chụp sắp tới
+          </h3>
+          <Link href="/calendar" className="text-muted-foreground hover:text-primary">
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+        <div className="divide-y">
+          {upcoming.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-8 text-muted-foreground text-sm gap-2">
+              <CalendarDays className="w-10 h-10 opacity-20" />
+              <p>Không có lịch chụp sắp tới</p>
+            </div>
+          ) : (
+            upcoming.map((b: any) => (
+              <div key={b.id} className="px-4 py-3 flex justify-between items-center hover:bg-muted/20 transition-colors">
+                <div>
+                  <p className="font-medium text-sm">{b.customerName}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {b.serviceLabel || b.packageType || "—"}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium">
+                    {b.shootDate
+                      ? new Date(b.shootDate).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })
+                      : "—"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{b.shootTime || ""}</p>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="p-3 border-t">
+          <Link href="/bookings">
+            <Button variant="outline" size="sm" className="w-full">Xem tất cả đơn</Button>
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }
