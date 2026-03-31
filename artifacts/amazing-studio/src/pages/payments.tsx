@@ -141,10 +141,14 @@ function BookingRow({
     <button
       onMouseDown={onClick}
       className={cn(
-        "w-full text-left px-3 py-3 transition-all border-b border-border/30 last:border-0",
+        "w-full text-left px-3 py-3 transition-all border-b last:border-0",
         selected
-          ? "bg-primary/8"
-          : "hover:bg-muted/50 active:bg-muted/80"
+          ? "bg-primary/8 border-border/30"
+          : isPaid
+            ? "border-green-100 hover:bg-green-50/40 active:bg-green-50/60"
+            : isPartialPaid
+              ? "border-amber-100 hover:bg-amber-50/40 active:bg-amber-50/60"
+              : "border-red-100 hover:bg-red-50/30 active:bg-red-50/50"
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -556,7 +560,12 @@ export default function PaymentsPage() {
         (selectedBooking.totalAmount - (selectedBooking.discountAmount ?? 0)) - selectedBooking.paidAmount
       )
     : 0;
-  const effectiveRemaining = selectedBooking?.remainingAmount ?? safeRemaining;
+  /* Dùng safeRemaining khi API trả remainingAmount nhưng lệch > 1đ so với tính toán local
+     (có thể do dữ liệu cũ chưa được cập nhật đúng discount) */
+  const apiRemaining = selectedBooking?.remainingAmount ?? safeRemaining;
+  const effectiveRemaining = selectedBooking && Math.abs(apiRemaining - safeRemaining) > 1
+    ? safeRemaining
+    : apiRemaining;
 
   const isOverpaid = amtNum > effectiveRemaining;
   const afterPay   = Math.max(0, effectiveRemaining - amtNum);
