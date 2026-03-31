@@ -1,0 +1,69 @@
+Sửa lại trải nghiệm màn Thu tiền cho gọn, dễ dùng, ưu tiên thao tác trên điện thoại.
+
+Yêu cầu:
+
+1. Sắp xếp lại “Lịch sử thu tiền gần đây”
+- Mục mới nhất phải nằm trên cùng
+- Sắp xếp theo ngày giờ thu mới nhất -> cũ nhất
+- Nếu cùng ngày thì ưu tiên giờ gần nhất lên trước
+- Sau khi lưu phiếu thu mới, item vừa thu phải nhảy lên đầu danh sách ngay
+
+2. Đổi flow tạo phiếu thu
+- Khi tìm và bấm vào tên khách hàng/show, không mở form thu tiền ngay trong cùng màn hình hiện tại nữa
+- Phải mở một cửa sổ / modal / sheet riêng để thu tiền
+- Trong cửa sổ mới này hiển thị đầy đủ:
+  + tên khách
+  + mã đơn
+  + gói dịch vụ
+  + tổng đơn
+  + giảm giá
+  + sau giảm giá
+  + đã thu
+  + còn lại
+  + nhập số tiền thu lần này
+  + hình thức thanh toán
+  + người thu
+  + ngày thu
+  + tải ảnh biên lai / ảnh đã thu tiền
+  + ghi chú
+- Có nút “Lưu phiếu thu”
+
+3. Sau khi bấm “Lưu phiếu thu”
+- Hiện thông báo thành công rõ ràng
+- Tự đóng cửa sổ thu tiền
+- Quay lại màn trước
+- Danh sách lịch sử thu tiền phải tự refresh ngay
+- Phiếu vừa thu phải xuất hiện đầu tiên trong lịch sử
+- Nếu có ảnh biên lai / ảnh đã thu tiền thì hiện nút xem ảnh ngay ở item mới đó
+
+4. Tối ưu giao diện mobile
+- Màn chính chỉ nên là:
+  + ô tìm khách/show
+  + lịch sử thu tiền gần đây
+- Không để form thu tiền dài nằm lẫn trong cùng màn hình nữa vì rất rối
+- Form thu tiền phải tách riêng thành modal / drawer / full-screen sheet cho điện thoại
+
+5. Giữ đúng logic dữ liệu hiện tại
+- Không làm sai công thức tiền
+- Vẫn dùng:
+  finalAmount = totalAmount - discountAmount
+  remainingAmount = finalAmount - paidAmount
+- Sau khi lưu phiếu, số “Đã thu” và “Còn lại” phải cập nhật đúng ngay
+
+6. Ảnh biên lai / ảnh đã thu tiền
+- Nếu người dùng tải ảnh khi tạo phiếu thu, item lịch sử phải hiển thị nút “Ảnh”
+- Bấm vào xem được ảnh đó ngay
+- Ảnh phải gắn đúng với phiếu thu vừa tạo
+
+7. Test lại flow hoàn chỉnh
+- Tìm tên khách
+- Bấm chọn khách
+- Mở cửa sổ thu tiền riêng
+- Nhập số tiền, chọn hình thức, tải ảnh, lưu
+- Đóng cửa sổ
+- Quay lại màn lịch sử
+- Thấy ngay phiếu mới nằm trên cùng, đúng số tiền, đúng giờ, đúng ảnh
+
+Mục tiêu:
+Màn Thu tiền phải gọn, dễ nhìn, dễ thao tác trên điện thoại, không rối như hiện tại.
+Không chỉ sửa UI, phải sửa cả flow thao tác và refresh dữ liệu sau khi lưu.
