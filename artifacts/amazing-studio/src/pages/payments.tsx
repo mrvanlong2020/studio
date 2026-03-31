@@ -4,7 +4,7 @@ import {
   Search, CreditCard, Banknote, Phone, Clock, Trash2,
   X, Upload, Eye, AlertCircle, Receipt, ChevronDown,
   Sparkles, ListFilter, History, TrendingUp, ChevronRight,
-  CalendarDays, Layers, CheckCircle,
+  CalendarDays, Layers, CheckCircle, Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useStaffAuth } from "@/contexts/StaffAuthContext";
@@ -433,7 +433,7 @@ export default function PaymentsPage() {
   const [showAll, setShowAll] = useState(false);
   const recentLimit = showAll ? 50 : 10;
 
-  const { data: recentData, refetch: refetchRecent } = useQuery<RecentData>({
+  const { data: recentData, refetch: refetchRecent, isFetching: recentFetching } = useQuery<RecentData>({
     queryKey: ["payments-recent", period, recentLimit],
     queryFn: () => fetchJson(`/api/payments/recent?period=${period}&limit=${recentLimit}`),
     staleTime: 0,
@@ -460,6 +460,7 @@ export default function PaymentsPage() {
   const [saving, setSaving]           = useState(false);
   const [saveError, setSaveError]     = useState<string | null>(null);
   const [mainSuccess, setMainSuccess] = useState<string | null>(null);
+  const [newPaymentId, setNewPaymentId] = useState<number | null>(null);
   const fileRef                       = useRef<HTMLInputElement>(null);
 
   /* isDirty: có dữ liệu chưa lưu */
@@ -552,7 +553,7 @@ export default function PaymentsPage() {
     setSaveError(null);
     setSaving(true);
     try {
-      await fetchJson("/api/payments", {
+      const created = await fetchJson("/api/payments", {
         method: "POST",
         body: JSON.stringify({
           bookingId:     selectedBooking.id,
@@ -576,6 +577,11 @@ export default function PaymentsPage() {
       setSelectedBooking(null);
       setMainSuccess("✅ Đã lưu phiếu thu thành công!");
       setTimeout(() => setMainSuccess(null), 2500);
+      // Highlight item mới trong 2 giây
+      if (created?.id) {
+        setNewPaymentId(Number(created.id));
+        setTimeout(() => setNewPaymentId(null), 2000);
+      }
     } catch {
       setSaveError("Có lỗi khi lưu phiếu thu. Vui lòng thử lại.");
     } finally {
@@ -683,6 +689,7 @@ export default function PaymentsPage() {
             <div className="flex items-center gap-2">
               <History className="w-4 h-4 text-primary" />
               <span className="text-sm font-semibold">Lịch sử thu gần đây</span>
+              {recentFetching && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
             </div>
             {/* Period filter tabs */}
             <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-xl">
@@ -772,7 +779,10 @@ export default function PaymentsPage() {
                     <button
                       key={p.id}
                       onClick={() => handleSelectFromRecent(p)}
-                      className="w-full text-left px-4 py-3 hover:bg-muted/30 transition-colors flex items-center gap-3 group"
+                      className={cn(
+                        "w-full text-left px-4 py-3 hover:bg-muted/30 transition-colors flex items-center gap-3 group",
+                        p.id === newPaymentId && "bg-emerald-50 dark:bg-emerald-950/20"
+                      )}
                     >
                       {/* Phương thức icon */}
                       <div className={cn(
@@ -847,9 +857,14 @@ export default function PaymentsPage() {
                               setProofPreviewUrl(p.proofImageUrl!);
                               setProofPreview(true);
                             }}
-                            className="flex-shrink-0 text-[10px] px-1.5 py-1 bg-primary/10 text-primary rounded-lg font-medium flex items-center gap-0.5"
+                            className="flex-shrink-0"
                           >
-                            <Eye className="w-3 h-3" /> Ảnh
+                            <img
+                              src={p.proofImageUrl}
+                              alt="Biên lai"
+                              className="w-11 h-11 rounded-lg object-cover aspect-square border border-border flex-shrink-0"
+                              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                            />
                           </button>
                         )}
                         <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors flex-shrink-0" />

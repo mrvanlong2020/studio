@@ -165,7 +165,7 @@ router.get("/payments/recent", async (req, res) => {
     LEFT JOIN customers c ON b.customer_id = c.id
     WHERE p.payment_type IN ('payment', 'deposit')
       AND ${dateFilter}
-    ORDER BY p.paid_at DESC
+    ORDER BY COALESCE(p.paid_at, p.created_at) DESC, p.id DESC
     LIMIT $1`;
 
   const [listResult, sumResult] = await Promise.all([
