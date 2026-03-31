@@ -595,11 +595,12 @@ export default function PaymentsPage() {
   /* Tính toán số tiền */
   const amtNum = parseFloat(form.amount) || 0;
 
+  // safeRemaining: luôn tính theo công thức cục bộ để đối chiếu với API
   const safeRemaining = selectedBooking
-    ? selectedBooking.remainingAmount ??
-        (selectedBooking.totalAmount - (selectedBooking.discountAmount ?? 0)) - selectedBooking.paidAmount
+    ? (selectedBooking.totalAmount - (selectedBooking.discountAmount ?? 0)) - selectedBooking.paidAmount
     : 0;
 
+  // effectiveRemaining: dùng giá trị API, nhưng nếu lệch quá 1đ thì fallback về công thức cục bộ
   const apiRemaining = selectedBooking?.remainingAmount ?? safeRemaining;
   const effectiveRemaining = selectedBooking && Math.abs(apiRemaining - safeRemaining) > 1
     ? safeRemaining
@@ -889,7 +890,7 @@ export default function PaymentsPage() {
         <SheetContent
           side="bottom"
           className="!p-0 flex flex-col overflow-hidden"
-          style={{ minHeight: "82vh", maxHeight: "95vh" }}
+          style={{ minHeight: "85vh", maxHeight: "95vh" }}
         >
           {/* Sheet header — sticky, đủ rộng tránh nút X mặc định */}
           <div className="shrink-0 px-4 pt-4 pb-3 pr-14 border-b border-border bg-background">
