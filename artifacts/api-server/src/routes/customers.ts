@@ -182,7 +182,14 @@ router.delete("/customers/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   await db.delete(customersTable).where(eq(customersTable.id, id));
   res.status(204).send();
-  } catch (err) {
+  } catch (err: unknown) {
+    // Drizzle wraps PG errors in .cause; check for FK constraint (code 23503)
+    const pgError = (err as Record<string, unknown>)?.cause;
+    if (isPgConstraintError(pgError) && pgError.code === "23503") {
+      return res.status(409).json({
+        error: "Không thể xóa khách hàng vì có đơn chụp hoặc thanh toán liên kết. Vui lòng xóa hoặc chuyển các đơn trước.",
+      });
+    }
     console.error("DELETE /customers/:id error:", err);
     res.status(500).json({ error: "Lỗi hệ thống" });
   }

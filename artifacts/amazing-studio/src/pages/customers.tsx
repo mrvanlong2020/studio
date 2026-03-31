@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { formatVND, formatDate } from "@/lib/utils";
 import { Button, Input, Select, Textarea, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui";
 import {
@@ -157,8 +158,15 @@ export default function CustomersPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => fetch(`${BASE}/api/customers/${id}`, { method: "DELETE" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["customers"] }); setSelectedId(null); },
+    mutationFn: (id: number) => fetchJson<void>(`/api/customers/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["customers"] });
+      setSelectedId(null);
+      toast.success("Đã xóa khách hàng");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Không thể xóa khách hàng");
+    },
   });
 
   // ── Form helpers ─────────────────────────────────────────────────────────────
