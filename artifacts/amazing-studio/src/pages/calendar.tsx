@@ -1511,6 +1511,7 @@ function generateContractHTML(
     body { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     .no-print { display:none !important; }
     .page { padding:24px; }
+    #contract-body { outline:none !important; padding:0 !important; border-radius:0 !important; cursor:default !important; }
   }
 </style>
 </head>
@@ -1520,10 +1521,10 @@ function generateContractHTML(
   ${!forImageExport ? `<!-- Nút in + Chỉnh sửa -->
   <div class="no-print" style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
     <span id="edit-hint" style="display:none;font-size:12px;color:#9b59b6;font-style:italic;margin-right:auto;">✏️ Đang chỉnh sửa — bấm vào bất kỳ chỗ nào để sửa nội dung</span>
-    <button id="btn-edit" onclick="toggleEdit()" style="background:#7f8c8d;color:#fff;border:none;padding:11px 22px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:0.3px;">
+    <button id="btn-edit" class="no-print" onclick="toggleEdit()" style="background:#7f8c8d;color:#fff;border:none;padding:11px 22px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:0.3px;">
       ✏️ Chỉnh sửa bản này
     </button>
-    <button onclick="window.print()" style="background:#8B1A6B;color:#fff;border:none;padding:11px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:0.3px;">
+    <button class="no-print" onclick="window.print()" style="background:#8B1A6B;color:#fff;border:none;padding:11px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:0.3px;">
       🖨️ In / Lưu PDF
     </button>
   </div>` : ""}
@@ -1691,6 +1692,8 @@ ${!forImageExport ? `<script>
     } else {
       body.contentEditable = 'false';
       body.style.outline = 'none';
+      body.style.padding = '';
+      body.style.borderRadius = '';
       body.style.cursor = '';
       btn.textContent = '\u270f\ufe0f Ch\u1ec9nh s\u1eeda b\u1ea3n n\u00e0y';
       btn.style.background = '#7f8c8d';
