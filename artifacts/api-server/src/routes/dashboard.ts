@@ -136,30 +136,49 @@ interface ServiceEntry {
   collectedAmount: number;
 }
 
+// Use Asia/Ho_Chi_Minh timezone for date boundaries to avoid midnight day-shift.
+// Dates are formatted as "YYYY-MM-DD" strings in local Vietnam time.
+const APP_TZ = "Asia/Ho_Chi_Minh";
+
+function toLocalDateString(d: Date): string {
+  return d.toLocaleDateString("sv-SE", { timeZone: APP_TZ }); // sv-SE gives "YYYY-MM-DD"
+}
+
+function startOfLocalDay(d: Date): Date {
+  const ymd = toLocalDateString(d);
+  // Reconstruct as UTC so DB comparisons (which store UTC) work correctly
+  return new Date(`${ymd}T00:00:00+07:00`);
+}
+
+function endOfLocalDay(d: Date): Date {
+  const ymd = toLocalDateString(d);
+  return new Date(`${ymd}T23:59:59.999+07:00`);
+}
+
 function getPeriodRange(preset: PeriodPreset): { start: Date; end: Date; startDate: string; endDate: string } {
   const now = new Date();
-  const end = new Date(now);
-  end.setHours(23, 59, 59, 999);
+  const end = endOfLocalDay(now);
 
   let start: Date;
   if (preset === "today") {
-    start = new Date(now);
-    start.setHours(0, 0, 0, 0);
+    start = startOfLocalDay(now);
   } else if (preset === "7days") {
-    start = new Date(now);
-    start.setDate(start.getDate() - 6);
-    start.setHours(0, 0, 0, 0);
+    const d6ago = new Date(now);
+    d6ago.setDate(d6ago.getDate() - 6);
+    start = startOfLocalDay(d6ago);
   } else if (preset === "year") {
-    start = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+    start = startOfLocalDay(yearStart);
   } else {
-    start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    start = startOfLocalDay(monthStart);
   }
 
   return {
     start,
     end,
-    startDate: start.toISOString().slice(0, 10),
-    endDate: end.toISOString().slice(0, 10),
+    startDate: toLocalDateString(start),
+    endDate: toLocalDateString(end),
   };
 }
 
