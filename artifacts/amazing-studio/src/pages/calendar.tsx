@@ -1438,6 +1438,18 @@ function generateContractHTML(
            </div>`
         : "";
 
+      const lineSurcharges = (line.surcharges || []) as { name: string; amount: number }[];
+      const lineSurchHTML = lineSurcharges.length > 0
+        ? `<div style="margin-top:10px;padding:8px 12px;background:#fff5f5;border-radius:8px;border:1px solid #fce4e4;">
+             <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#c0392b;margin-bottom:6px;">⚡ Phụ thu kèm gói:</div>
+             ${lineSurcharges.map(s => `
+               <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;">
+                 <span style="color:#c0392b;">+ ${s.name}</span>
+                 <span style="font-weight:600;color:#c0392b;">${fmtVNDStr(s.amount)}</span>
+               </div>`).join("")}
+           </div>`
+        : "";
+
       return `
         <div style="border:1px solid #e0d0e8;border-radius:10px;padding:16px;margin-bottom:12px;background:#fff;">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;">
@@ -1450,6 +1462,7 @@ function generateContractHTML(
           ${staffHTML}
           ${includesHTML}
           ${productsHTML}
+          ${lineSurchHTML}
         </div>
       `;
     }).join("");
@@ -1494,6 +1507,13 @@ function generateContractHTML(
   const servicesHTML = allServices.map((b, idx) => renderServiceBlock(b, idx)).join("");
   const contractCode = booking.orderCode || `HD-${String(booking.id).padStart(4, "0")}`;
   const notesHTML = allServices.flatMap(b => b.notes ? [b.notes] : []).join(" | ");
+
+  // ── Tổng hợp tất cả phụ thu (per-line + booking-level) ────────────────────
+  const allLineSurcharges = allServices.flatMap(b => (b.items || []).flatMap(l => (l.surcharges || []) as { name: string; amount: number }[]));
+  const allBookingSurcharges = allServices.flatMap(b => (b.surcharges || []) as { name: string; amount: number }[]);
+  const allSurchargesFlat = [...allLineSurcharges, ...allBookingSurcharges];
+  const totalSurchargesAmount = allSurchargesFlat.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+  const baseServicesAmount = Math.max(0, totalAmount - totalSurchargesAmount);
 
   return `<!DOCTYPE html>
 <html lang="vi">
@@ -1580,6 +1600,22 @@ function generateContractHTML(
       <span>Tổng giá trị hợp đồng</span>
       <span style="font-size:22px;font-weight:800;">${fmtVNDStr(totalAmount)}</span>
     </div>
+    ${totalSurchargesAmount > 0 ? `
+    <div style="height:1px;background:rgba(255,255,255,0.2);margin:4px 0 8px;"></div>
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.8px;opacity:0.65;margin-bottom:6px;">Chi tiết cấu thành:</div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px;">
+      <span style="opacity:0.85;">Giá dịch vụ gốc</span>
+      <span>${fmtVNDStr(baseServicesAmount)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px;">
+      <span style="color:#ffb3b3;">⚡ Phụ thu / Phát sinh</span>
+      <span style="color:#ffb3b3;font-weight:700;">+${fmtVNDStr(totalSurchargesAmount)}</span>
+    </div>
+    ${allSurchargesFlat.map(s => `
+    <div style="display:flex;justify-content:space-between;padding:1px 0 1px 12px;font-size:11.5px;opacity:0.8;">
+      <span style="color:#ffd6d6;">· ${s.name}</span>
+      <span style="color:#ffd6d6;">${fmtVNDStr(s.amount)}</span>
+    </div>`).join("")}` : ""}
     ${discountAmount > 0 ? `
     <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13.5px;">
       <span style="opacity:0.9;">🎁 Khuyến mãi / Giảm giá</span>
