@@ -1516,12 +1516,18 @@ function generateContractHTML(
 <body>
 <div class="page">
 
-  <!-- Nút in -->
-  <div class="no-print" style="text-align:right;margin-bottom:24px;">
+  <!-- Nút in + Chỉnh sửa -->
+  <div class="no-print" style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
+    <span id="edit-hint" style="display:none;font-size:12px;color:#9b59b6;font-style:italic;margin-right:auto;">✏️ Đang chỉnh sửa — bấm vào bất kỳ chỗ nào để sửa nội dung</span>
+    <button id="btn-edit" onclick="toggleEdit()" style="background:#7f8c8d;color:#fff;border:none;padding:11px 22px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:0.3px;">
+      ✏️ Chỉnh sửa bản này
+    </button>
     <button onclick="window.print()" style="background:#8B1A6B;color:#fff;border:none;padding:11px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:0.3px;">
       🖨️ In / Lưu PDF
     </button>
   </div>
+
+  <div id="contract-body">
 
   <!-- Header Studio -->
   <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px;padding-bottom:20px;border-bottom:3px solid #8B1A6B;">
@@ -1660,7 +1666,37 @@ function generateContractHTML(
   <div style="text-align:center;margin-top:36px;padding-top:16px;border-top:1px solid #f0e0f0;color:#ccc;font-size:11px;">
     Hóa đơn được tạo bởi Amazing Studio · ${todayStr}
   </div>
+
+  </div><!-- end contract-body -->
+
 </div>
+<script>
+  var editMode = false;
+  function toggleEdit() {
+    editMode = !editMode;
+    var body = document.getElementById('contract-body');
+    var btn = document.getElementById('btn-edit');
+    var hint = document.getElementById('edit-hint');
+    if (editMode) {
+      body.contentEditable = 'true';
+      body.style.outline = '2px dashed #9b59b6';
+      body.style.borderRadius = '8px';
+      body.style.padding = '8px';
+      body.style.cursor = 'text';
+      btn.textContent = '\u2705 Xong ch\u1ec9nh s\u1eeda';
+      btn.style.background = '#27ae60';
+      hint.style.display = 'inline';
+      body.focus();
+    } else {
+      body.contentEditable = 'false';
+      body.style.outline = 'none';
+      body.style.cursor = '';
+      btn.textContent = '\u270f\ufe0f Ch\u1ec9nh s\u1eeda b\u1ea3n n\u00e0y';
+      btn.style.background = '#7f8c8d';
+      hint.style.display = 'none';
+    }
+  }
+</script>
 </body>
 </html>`;
 }
