@@ -165,7 +165,7 @@ router.get("/payments/recent", async (req, res) => {
     LEFT JOIN customers c ON b.customer_id = c.id
     WHERE p.payment_type IN ('payment', 'deposit')
       AND ${dateFilter}
-    ORDER BY COALESCE(p.paid_at, p.created_at) DESC, p.id DESC
+    ORDER BY p.paid_at DESC, p.id DESC
     LIMIT $1`;
 
   const [listResult, sumResult] = await Promise.all([
@@ -294,12 +294,13 @@ router.post("/payments", async (req, res) => {
 
 // POST /payments/sync-deposits — đồng bộ tiền cọc cũ thành phiếu thu
 // - Xóa duplicate deposit records (giữ bản cũ nhất)
+// - Update deposit record nếu amount lệch
 // - Tạo deposit record cho booking nào có depositAmount > 0 nhưng chưa có phiếu thu nào
 // - Cập nhật lại paid_amount trên bookings table
 router.post("/payments/sync-deposits", async (_req, res) => {
   try {
-  const report: { created: number; removed: number; recalculated: number } = {
-    created: 0, removed: 0, recalculated: 0,
+  const report: { created: number; removed: number; updated: number; recalculated: number } = {
+    created: 0, removed: 0, updated: 0, recalculated: 0,
   };
 
   // Lấy tất cả bookings có depositAmount > 0, không phải child booking
@@ -318,11 +319,11 @@ router.post("/payments/sync-deposits", async (_req, res) => {
     const bkId       = Number(bk.id);
     const depAmount  = parseFloat(bk.deposit_amount);
 
-    // Lấy tất cả deposit payments cho booking này, sắp xếp theo thời gian
+    // Lấy tất cả deposit payments cho booking này, sắp xếp theo id (cũ nhất trước)
     const depPayments = await pool.query(`
-      SELECT id FROM payments
+      SELECT id, amount FROM payments
       WHERE booking_id = $1 AND payment_type = 'deposit'
-      ORDER BY paid_at ASC
+      ORDER BY id ASC
     `, [bkId]);
 
     if (depPayments.rows.length === 0) {
@@ -341,6 +342,18 @@ router.post("/payments/sync-deposits", async (_req, res) => {
         report.removed++;
       }
       affectedBookingIds.push(bkId);
+    } else if (depPayments.rows.length === 1) {
+      // Có 1 record — kiểm tra xem amount có lệch không
+      const existingAmount = parseFloat(depPayments.rows[0].amount);
+      if (Math.abs(existingAmount - depAmount) > 0.01) {
+        // Amount lệch → update chỉ amount, không đổi paymentMethod/notes/paidAt
+        await pool.query(
+          `UPDATE payments SET amount = $1 WHERE id = $2`,
+          [String(depAmount), depPayments.rows[0].id]
+        );
+        report.updated++;
+        affectedBookingIds.push(bkId);
+      }
     }
   }
 
@@ -362,7 +375,7 @@ router.post("/payments/sync-deposits", async (_req, res) => {
   }
 
   res.json({
-    message: `Đồng bộ hoàn tất: tạo ${report.created} phiếu cọc mới, xóa ${report.removed} bản trùng, cập nhật ${report.recalculated} đơn hàng`,
+    message: `Đồng bộ hoàn tất: tạo ${report.created} phiếu cọc mới, cập nhật ${report.updated} phiếu, xóa ${report.removed} bản trùng, cập nhật ${report.recalculated} đơn hàng`,
     ...report,
   });
   } catch (err) {

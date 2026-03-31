@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import { bookingsTable, customersTable, paymentsTable, expensesTable, tasksTable, staffTable, servicePackagesTable, packageItemsTable } from "@workspace/db/schema";
 import { eq, and, desc, inArray, or, ilike, sql, asc } from "drizzle-orm";
 import { computeBookingEarnings } from "./job-earnings";
@@ -468,36 +468,125 @@ router.put("/bookings/:id", async (req, res) => {
   if (includedRetouchedPhotosSnapshot !== undefined) updateData.includedRetouchedPhotosSnapshot = parseInt(String(includedRetouchedPhotosSnapshot)) || 0;
   if (servicePackageId !== undefined) updateData.servicePackageId = servicePackageId ? parseInt(String(servicePackageId)) : null;
 
-  if (Object.keys(updateData).length > 0) {
-    const payments = await db.select().from(paymentsTable).where(eq(paymentsTable.bookingId, id));
-    const paidAmount = payments.reduce((s, p) => s + parseFloat(p.amount), 0);
-    updateData.paidAmount = String(paidAmount);
+  // Check booking exists and get current status
+  const [oldBooking] = await db
+    .select({ status: bookingsTable.status, customerId: bookingsTable.customerId })
+    .from(bookingsTable)
+    .where(eq(bookingsTable.id, id));
+  if (!oldBooking) return res.status(404).json({ error: "Không tìm thấy đơn hàng" });
+  const oldStatus = oldBooking.status;
+
+  // Run all changes in a single DB transaction: deposit payment upsert + booking update + recalculate
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // ── 1. Upsert/delete deposit payment record (only if depositAmount is in body) ──
+    if (depositAmount !== undefined) {
+      const newDepositAmount = parseFloat(String(depositAmount));
+
+      const depResult = await client.query<{ id: number }>(
+        `SELECT id FROM payments WHERE booking_id = $1 AND payment_type = 'deposit' ORDER BY id ASC`,
+        [id]
+      );
+      const depRecords = depResult.rows;
+
+      // Delete duplicates, keep oldest
+      if (depRecords.length > 1) {
+        for (const r of depRecords.slice(1)) {
+          await client.query(`DELETE FROM payments WHERE id = $1`, [r.id]);
+        }
+      }
+
+      if (newDepositAmount > 0) {
+        if (depRecords.length > 0) {
+          await client.query(`UPDATE payments SET amount = $1 WHERE id = $2`, [String(newDepositAmount), depRecords[0].id]);
+        } else {
+          await client.query(
+            `INSERT INTO payments (booking_id, amount, payment_method, payment_type, paid_date, notes, paid_at)
+             VALUES ($1, $2, 'cash', 'deposit', NOW(), 'Cọc giữ lịch', NOW())`,
+            [id, String(newDepositAmount)]
+          );
+        }
+      } else {
+        if (depRecords.length > 0) {
+          await client.query(`DELETE FROM payments WHERE id = $1`, [depRecords[0].id]);
+        }
+      }
+    }
+
+    // ── 2. Recalculate paid_amount from all payments ──
+    const paidResult = await client.query<{ total_paid: string }>(
+      `SELECT COALESCE(SUM(amount::numeric), 0) AS total_paid FROM payments WHERE booking_id = $1`,
+      [id]
+    );
+    const paidAmount = parseFloat(paidResult.rows[0].total_paid);
+
+    // ── 3. Calculate remaining_amount using effective totals ──
+    const bkCurrentResult = await client.query<{ total_amount: string; discount_amount: string }>(
+      `SELECT total_amount::numeric AS total_amount, COALESCE(discount_amount::numeric, 0) AS discount_amount FROM bookings WHERE id = $1`,
+      [id]
+    );
+    const bkCurrent = bkCurrentResult.rows[0];
+    const effectiveTotalAmount    = totalAmount    !== undefined ? parseFloat(String(totalAmount))    : parseFloat(bkCurrent.total_amount);
+    const effectiveDiscountAmount = discountAmount !== undefined ? parseFloat(String(discountAmount)) : parseFloat(bkCurrent.discount_amount);
+    const remainingAmount = Math.max(0, effectiveTotalAmount - effectiveDiscountAmount - paidAmount);
+
+    updateData.paidAmount    = String(paidAmount);
+    updateData.remainingAmount = String(remainingAmount);
+
+    // ── 4. Build and execute booking UPDATE inside the same transaction ──
+    const camelToSnake = (s: string) => s.replace(/([A-Z])/g, "_$1").toLowerCase();
+    const jsonbColumns = new Set(["items", "surcharges", "assigned_staff", "required_roles"]);
+    const entries = Object.entries(updateData);
+    const setClauses = entries.map(([k], i) => {
+      const col = camelToSnake(k);
+      return jsonbColumns.has(col) ? `${col} = $${i + 1}::jsonb` : `${col} = $${i + 1}`;
+    }).join(", ");
+    const params = [...entries.map(([k, v]) => {
+      const col = camelToSnake(k);
+      return jsonbColumns.has(col) ? JSON.stringify(v) : v;
+    }), id];
+
+    const updateResult = await client.query<{ customer_id: number }>(
+      `UPDATE bookings SET ${setClauses} WHERE id = $${params.length} RETURNING customer_id`,
+      params
+    );
+    if (updateResult.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Không tìm thấy đơn hàng" });
+    }
+
+    await client.query("COMMIT");
+
+    const customerId = updateResult.rows[0].customer_id;
+
+    if (status === "completed" && oldStatus !== "completed") {
+      computeBookingEarnings(id).catch(err => console.error("Earnings compute error:", err));
+    }
+
+    // Re-read full booking + customer (outside transaction is fine — data is committed)
+    const [[fullBooking], [customer]] = await Promise.all([
+      db.select().from(bookingsTable).where(eq(bookingsTable.id, id)),
+      db.select({ name: customersTable.name, phone: customersTable.phone }).from(customersTable).where(eq(customersTable.id, customerId)),
+    ]);
+
+    res.json({
+      ...fullBooking,
+      customerName: customer?.name,
+      customerPhone: customer?.phone,
+      totalAmount:    parseFloat(fullBooking.totalAmount),
+      depositAmount:  parseFloat(fullBooking.depositAmount),
+      paidAmount,
+      discountAmount: parseFloat(fullBooking.discountAmount ?? "0"),
+      remainingAmount,
+    });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
   }
-
-  const [oldBooking] = await db.select({ status: bookingsTable.status }).from(bookingsTable).where(eq(bookingsTable.id, id));
-  const oldStatus = oldBooking?.status;
-
-  const [booking] = await db.update(bookingsTable).set(updateData).where(eq(bookingsTable.id, id)).returning();
-  if (!booking) return res.status(404).json({ error: "Không tìm thấy đơn hàng" });
-
-  if (status === "completed" && oldStatus !== "completed") {
-    computeBookingEarnings(id).catch(err => console.error("Earnings compute error:", err));
-  }
-
-  const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, booking.customerId));
-  const payments = await db.select().from(paymentsTable).where(eq(paymentsTable.bookingId, id));
-  const paidAmount = payments.reduce((s, p) => s + parseFloat(p.amount), 0);
-
-  res.json({
-    ...booking,
-    customerName: customer.name,
-    customerPhone: customer.phone,
-    totalAmount: parseFloat(booking.totalAmount),
-    depositAmount: parseFloat(booking.depositAmount),
-    paidAmount,
-    discountAmount: parseFloat(booking.discountAmount ?? "0"),
-    remainingAmount: Math.max(0, parseFloat(booking.totalAmount) - parseFloat(booking.discountAmount ?? "0") - paidAmount),
-  });
   } catch (err) {
     console.error("PUT /bookings/:id error:", err);
     res.status(500).json({ error: "Lỗi hệ thống khi cập nhật đơn hàng" });
