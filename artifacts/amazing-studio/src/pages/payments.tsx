@@ -454,6 +454,13 @@ export default function PaymentsPage() {
   useEffect(() => {
     if (viewer) setForm(f => ({ ...f, collectorName: String(viewer.name || viewer.phone || "Quản Trị Viên") }));
   }, [viewer?.id]);
+
+  // Tự động xóa highlight sau 2s, với cleanup để tránh timer race
+  useEffect(() => {
+    if (newPaymentId === null) return;
+    const t = setTimeout(() => setNewPaymentId(null), 2000);
+    return () => clearTimeout(t);
+  }, [newPaymentId]);
   const [proofImage, setProofImage]   = useState<string | null>(null);
   const [proofPreview, setProofPreview] = useState(false);
   const [proofPreviewUrl, setProofPreviewUrl] = useState<string | null>(null);
@@ -580,7 +587,6 @@ export default function PaymentsPage() {
       // Highlight item mới trong 2 giây
       if (created?.id) {
         setNewPaymentId(Number(created.id));
-        setTimeout(() => setNewPaymentId(null), 2000);
       }
     } catch {
       setSaveError("Có lỗi khi lưu phiếu thu. Vui lòng thử lại.");
