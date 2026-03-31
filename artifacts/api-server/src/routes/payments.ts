@@ -24,6 +24,10 @@ router.get("/payments", async (req, res) => {
 });
 
 function fmtBookingRow(row: any) {
+  const totalAmount    = parseFloat(row.totalAmount    || 0);
+  const discountAmount = parseFloat(row.discountAmount || 0);
+  const paidAmount     = parseFloat(row.paidAmount     || 0);
+  const remainingAmount = parseFloat(row.remainingAmount || 0);
   return {
     id:              Number(row.id),
     orderCode:       row.orderCode ?? null,
@@ -32,9 +36,10 @@ function fmtBookingRow(row: any) {
     customerPhone:   row.customerPhone ?? "",
     customerCode:    row.customerCode ?? null,
     packageType:     row.packageType ?? "",
-    totalAmount:     parseFloat(row.totalAmount     || 0),
-    paidAmount:      parseFloat(row.paidAmount      || 0),
-    remainingAmount: parseFloat(row.remainingAmount || 0),
+    totalAmount,
+    discountAmount,
+    paidAmount,
+    remainingAmount,
     status:          row.status ?? "",
     shootDate:       row.shootDate ?? null,
     createdAt:       row.createdAt ?? null,
@@ -52,20 +57,21 @@ function fmtBookingRow(row: any) {
 const BOOKING_JOIN_SQL = `
   SELECT
     b.id,
-    b.order_code              AS "orderCode",
-    b.customer_id             AS "customerId",
-    c.name                    AS "customerName",
-    c.phone                   AS "customerPhone",
-    c.custom_code             AS "customerCode",
-    b.package_type            AS "packageType",
-    b.total_amount::numeric   AS "totalAmount",
-    b.paid_amount::numeric    AS "paidAmount",
-    GREATEST(0, (b.total_amount - b.paid_amount)::numeric) AS "remainingAmount",
+    b.order_code                  AS "orderCode",
+    b.customer_id                 AS "customerId",
+    c.name                        AS "customerName",
+    c.phone                       AS "customerPhone",
+    c.custom_code                 AS "customerCode",
+    b.package_type                AS "packageType",
+    b.total_amount::numeric       AS "totalAmount",
+    b.discount_amount::numeric    AS "discountAmount",
+    b.paid_amount::numeric        AS "paidAmount",
+    GREATEST(0, (b.total_amount - COALESCE(b.discount_amount, 0) - b.paid_amount)::numeric) AS "remainingAmount",
     b.status,
-    b.shoot_date              AS "shootDate",
-    b.created_at              AS "createdAt",
+    b.shoot_date                  AS "shootDate",
+    b.created_at                  AS "createdAt",
     b.notes,
-    b.is_parent_contract      AS "isParentContract",
+    b.is_parent_contract          AS "isParentContract",
     (SELECT COUNT(*) FROM bookings ch WHERE ch.parent_id = b.id) AS "serviceCount"
   FROM bookings b
   LEFT JOIN customers c ON b.customer_id = c.id
@@ -79,7 +85,7 @@ router.get("/payments/suggestions", async (req, res) => {
     pool.query(`${BOOKING_JOIN_SQL}
       AND b.status NOT IN ('cancelled')
       ORDER BY b.created_at DESC
-      LIMIT 50`),
+      LIMIT 200`),
     pool.query(`
       SELECT booking_id, MAX(paid_at) AS latest_paid_at
       FROM payments
@@ -104,7 +110,7 @@ router.get("/payments/suggestions", async (req, res) => {
     const aTime = String(a.latestPaymentAt ?? a.createdAt ?? "");
     const bTime = String(b.latestPaymentAt ?? b.createdAt ?? "");
     return bTime > aTime ? 1 : -1;
-  }).slice(0, 15);
+  });
 
   res.json(sorted);
   } catch (err) {
@@ -147,9 +153,10 @@ router.get("/payments/recent", async (req, res) => {
       c.phone              AS "customerPhone",
       b.order_code         AS "orderCode",
       b.package_type       AS "packageType",
-      b.total_amount::numeric  AS "totalAmount",
-      b.paid_amount::numeric   AS "paidAmount",
-      GREATEST(0, (b.total_amount - b.paid_amount)::numeric) AS "remainingAmount",
+      b.total_amount::numeric       AS "totalAmount",
+      b.discount_amount::numeric    AS "discountAmount",
+      b.paid_amount::numeric        AS "paidAmount",
+      GREATEST(0, (b.total_amount - COALESCE(b.discount_amount, 0) - b.paid_amount)::numeric) AS "remainingAmount",
       b.status             AS "status",
       b.is_parent_contract AS "isParentContract",
       (SELECT COUNT(*) FROM payments pp WHERE pp.booking_id = b.id) AS "paymentCount"
@@ -190,10 +197,11 @@ router.get("/payments/recent", async (req, res) => {
     customerPhone: p.customerPhone ?? null,
     orderCode:    p.orderCode ?? null,
     packageType:  p.packageType ?? null,
-    totalAmount:  parseFloat(p.totalAmount || 0),
-    paidAmount:   parseFloat(p.paidAmount  || 0),
+    totalAmount:     parseFloat(p.totalAmount    || 0),
+    discountAmount:  parseFloat(p.discountAmount || 0),
+    paidAmount:      parseFloat(p.paidAmount     || 0),
     remainingAmount: parseFloat(p.remainingAmount || 0),
-    status:       p.status ?? null,
+    status:          p.status ?? null,
     isParentContract: Boolean(p.isParentContract),
     paymentCount: Number(p.paymentCount ?? 0),
   }));
@@ -269,7 +277,9 @@ router.post("/payments", async (req, res) => {
     const allPaid = await db.select().from(paymentsTable).where(eq(paymentsTable.bookingId, bookingId));
     const totalPaid = allPaid.reduce((s, p) => s + parseFloat(p.amount), 0);
     const [bk] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId));
-    const remaining = Math.max(0, parseFloat(String(bk?.totalAmount || 0)) - totalPaid);
+    const bkTotal    = parseFloat(String(bk?.totalAmount    || 0));
+    const bkDiscount = parseFloat(String(bk?.discountAmount || 0));
+    const remaining  = Math.max(0, bkTotal - bkDiscount - totalPaid);
     await db.update(bookingsTable)
       .set({ paidAmount: String(totalPaid), remainingAmount: String(remaining) })
       .where(eq(bookingsTable.id, bookingId));
@@ -334,23 +344,21 @@ router.post("/payments/sync-deposits", async (_req, res) => {
     }
   }
 
-  // Tính lại paid_amount cho tất cả booking bị ảnh hưởng
+  // Tính lại paid_amount và remaining_amount cho tất cả booking bị ảnh hưởng
   const uniqueIds = [...new Set(affectedBookingIds)];
   for (const bkId of uniqueIds) {
-    const sumResult = await pool.query(`
-      SELECT COALESCE(SUM(amount::numeric), 0) AS total_paid,
-             (SELECT total_amount::numeric FROM bookings WHERE id = $1) AS total_amount
-      FROM payments WHERE booking_id = $1
-    `, [bkId]);
-    const totalPaid   = parseFloat(sumResult.rows[0].total_paid);
-    const totalAmount = parseFloat(sumResult.rows[0].total_amount);
-    const remaining   = Math.max(0, totalAmount - totalPaid);
+    const [paidResult, bkResult] = await Promise.all([
+      pool.query(`SELECT COALESCE(SUM(amount::numeric), 0) AS total_paid FROM payments WHERE booking_id = $1`, [bkId]),
+      pool.query(`SELECT total_amount::numeric AS total_amount, COALESCE(discount_amount::numeric, 0) AS discount_amount FROM bookings WHERE id = $1`, [bkId]),
+    ]);
+    const totalPaid      = parseFloat(paidResult.rows[0]?.total_paid    || 0);
+    const totalAmount    = parseFloat(bkResult.rows[0]?.total_amount    || 0);
+    const discountAmount = parseFloat(bkResult.rows[0]?.discount_amount || 0);
+    const remaining      = Math.max(0, totalAmount - discountAmount - totalPaid);
     await pool.query(`
-      UPDATE bookings SET paid_amount = $1 WHERE id = $2
-    `, [String(totalPaid), bkId]);
+      UPDATE bookings SET paid_amount = $1, remaining_amount = $2 WHERE id = $3
+    `, [String(totalPaid), String(remaining), bkId]);
     report.recalculated++;
-    // suppress unused variable
-    void remaining;
   }
 
   res.json({
@@ -373,7 +381,9 @@ router.delete("/payments/:id", async (req, res) => {
     const remaining = await db.select().from(paymentsTable).where(eq(paymentsTable.bookingId, payment.bookingId));
     const totalPaid = remaining.reduce((s, p) => s + parseFloat(p.amount), 0);
     const [bk] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, payment.bookingId));
-    const rem = Math.max(0, parseFloat(String(bk?.totalAmount || 0)) - totalPaid);
+    const bkTotal    = parseFloat(String(bk?.totalAmount    || 0));
+    const bkDiscount = parseFloat(String(bk?.discountAmount || 0));
+    const rem = Math.max(0, bkTotal - bkDiscount - totalPaid);
     await db.update(bookingsTable)
       .set({ paidAmount: String(totalPaid), remainingAmount: String(rem) })
       .where(eq(bookingsTable.id, payment.bookingId));

@@ -29,6 +29,7 @@ type Booking = {
   customerCode?: string;
   packageType: string;
   totalAmount: number;
+  discountAmount?: number;
   paidAmount: number;
   remainingAmount: number;
   status: string;
@@ -72,6 +73,7 @@ type RecentPaymentItem = {
   orderCode: string | null;
   packageType: string | null;
   totalAmount: number;
+  discountAmount: number;
   paidAmount: number;
   remainingAmount: number;
   status: string | null;
@@ -104,11 +106,13 @@ function BookingRow({
   b,
   selected,
   onClick,
+  onQuickPay,
   showTag,
 }: {
   b: Booking;
   selected: boolean;
   onClick: () => void;
+  onQuickPay?: (b: Booking) => void;
   showTag?: "new" | "owed" | "deposited" | "recent";
 }) {
   const TAG: Record<string, { label: string; cls: string }> = {
@@ -120,6 +124,18 @@ function BookingRow({
 
   const tag = showTag ? TAG[showTag] : null;
   const statusCfg = STATUS_CFG[b.status];
+
+  const isPaid        = b.remainingAmount <= 0;
+  const isPartialPaid = !isPaid && b.paidAmount > 0;
+  const isUnpaid      = !isPaid && b.paidAmount <= 0;
+
+  const avatarCls = selected
+    ? "bg-primary text-primary-foreground"
+    : isPaid
+      ? "bg-green-100 text-green-700"
+      : isPartialPaid
+        ? "bg-amber-100 text-amber-700"
+        : "bg-red-100 text-red-600";
 
   return (
     <button
@@ -136,7 +152,7 @@ function BookingRow({
         <div className="flex items-center gap-2.5 min-w-0">
           <div className={cn(
             "w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0",
-            selected ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary"
+            avatarCls
           )}>
             {b.customerName?.[0]?.toUpperCase() ?? "?"}
           </div>
@@ -149,9 +165,19 @@ function BookingRow({
                   {tag.label}
                 </span>
               )}
-              {b.remainingAmount <= 0 && (
+              {isPaid && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-green-100 text-green-700">
                   ✓ Đủ
+                </span>
+              )}
+              {isPartialPaid && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-amber-100 text-amber-700">
+                  ½ Một phần
+                </span>
+              )}
+              {isUnpaid && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-red-100 text-red-600">
+                  ✗ Chưa thu
                 </span>
               )}
             </div>
@@ -185,22 +211,30 @@ function BookingRow({
           </div>
         </div>
 
-        {/* Số tiền + ngày */}
-        <div className="text-right flex-shrink-0">
-          {b.remainingAmount > 0 ? (
-            <p className="text-sm font-bold text-red-600">−{fmtVND(b.remainingAmount)}</p>
-          ) : (
+        {/* Số tiền + ngày + nút thu nhanh */}
+        <div className="text-right flex-shrink-0 flex flex-col items-end gap-0.5">
+          {isPaid ? (
             <p className="text-sm font-bold text-green-600">{fmtVND(b.totalAmount)}</p>
+          ) : (
+            <p className="text-sm font-bold text-red-600">−{fmtVND(b.remainingAmount)}</p>
           )}
-          <p className="text-[10px] text-muted-foreground mt-0.5">
+          <p className="text-[10px] text-muted-foreground">
             {b.latestPaymentAt
               ? fmtDate(b.latestPaymentAt)
               : fmtDate(b.createdAt ?? b.shootDate)}
           </p>
-          <div className="flex items-center justify-end gap-1 mt-0.5">
+          <div className="flex items-center justify-end gap-1">
             <span className={cn("w-1.5 h-1.5 rounded-full", statusCfg?.dot ?? "bg-gray-300")} />
             <span className="text-[9px] text-muted-foreground">{statusCfg?.label ?? b.status}</span>
           </div>
+          {!isPaid && onQuickPay && (
+            <button
+              onMouseDown={(e) => { e.stopPropagation(); onQuickPay(b); }}
+              className="mt-1 text-[10px] px-2 py-0.5 rounded-full bg-primary text-primary-foreground font-semibold hover:bg-primary/90 active:scale-95 transition-all"
+            >
+              Thu thêm ›
+            </button>
+          )}
         </div>
       </div>
     </button>
@@ -345,6 +379,7 @@ function SmartSearchBox({
                   b={b}
                   selected={selectedId === b.id}
                   onClick={() => handleSelect(b)}
+                  onQuickPay={(bk) => handleSelect(bk)}
                   showTag={mode === "suggestions" ? getSuggestionTag(b) : undefined}
                 />
               ))
@@ -408,6 +443,7 @@ export default function PaymentsPage() {
       customerPhone:   p.customerPhone ?? "",
       packageType:     p.packageType ?? "",
       totalAmount:     p.totalAmount,
+      discountAmount:  p.discountAmount,
       paidAmount:      p.paidAmount,
       remainingAmount: p.remainingAmount,
       status:          p.status ?? "",
@@ -511,9 +547,19 @@ export default function PaymentsPage() {
     },
   });
 
-  const amtNum   = parseFloat(form.amount) || 0;
-  const isOverpaid = amtNum > (selectedBooking?.remainingAmount ?? 0);
-  const afterPay   = Math.max(0, (selectedBooking?.remainingAmount ?? 0) - amtNum);
+  const amtNum = parseFloat(form.amount) || 0;
+
+  /* Fallback: tính lại safeRemaining nếu API trả lệch */
+  const safeRemaining = selectedBooking
+    ? Math.max(
+        0,
+        (selectedBooking.totalAmount - (selectedBooking.discountAmount ?? 0)) - selectedBooking.paidAmount
+      )
+    : 0;
+  const effectiveRemaining = selectedBooking?.remainingAmount ?? safeRemaining;
+
+  const isOverpaid = amtNum > effectiveRemaining;
+  const afterPay   = Math.max(0, effectiveRemaining - amtNum);
 
   /* Đồng bộ dữ liệu cọc cũ */
   const [syncing, setSyncing] = useState(false);
@@ -814,15 +860,29 @@ export default function PaymentsPage() {
                   <span className="text-muted-foreground">Tổng đơn</span>
                   <span className="font-bold">{fmtVND(selectedBooking.totalAmount)}</span>
                 </div>
+                {(selectedBooking.discountAmount ?? 0) > 0 && (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Giảm giá</span>
+                      <span className="text-orange-600 font-semibold">−{fmtVND(selectedBooking.discountAmount ?? 0)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Sau giảm giá</span>
+                      <span className="font-semibold text-primary">
+                        {fmtVND(selectedBooking.totalAmount - (selectedBooking.discountAmount ?? 0))}
+                      </span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Đã thu</span>
                   <span className="text-green-600 font-semibold">{fmtVND(selectedBooking.paidAmount)}</span>
                 </div>
                 <div className="flex justify-between text-base">
                   <span className="font-semibold">Còn lại</span>
-                  <span className={cn("font-bold", selectedBooking.remainingAmount > 0 ? "text-red-600" : "text-green-600")}>
-                    {selectedBooking.remainingAmount > 0
-                      ? fmtVND(selectedBooking.remainingAmount)
+                  <span className={cn("font-bold", effectiveRemaining > 0 ? "text-red-600" : "text-green-600")}>
+                    {effectiveRemaining > 0
+                      ? fmtVND(effectiveRemaining)
                       : "✓ Đã thu đủ"}
                   </span>
                 </div>
@@ -851,11 +911,11 @@ export default function PaymentsPage() {
                     {(amt / 1000).toFixed(0)}k
                   </button>
                 ))}
-                {selectedBooking.remainingAmount > 0 && (
+                {effectiveRemaining > 0 && (
                   <button type="button"
-                    onClick={() => setForm(f => ({ ...f, amount: String(selectedBooking.remainingAmount) }))}
+                    onClick={() => setForm(f => ({ ...f, amount: String(effectiveRemaining) }))}
                     className="text-xs px-2.5 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 rounded-lg font-semibold transition-colors">
-                    Thu đủ ({fmtVND(selectedBooking.remainingAmount)})
+                    Thu đủ ({fmtVND(effectiveRemaining)})
                   </button>
                 )}
               </div>
@@ -1097,10 +1157,10 @@ export default function PaymentsPage() {
                   <span className="text-muted-foreground">Còn lại</span>
                   <span className={cn(
                     "font-bold",
-                    selectedBooking.remainingAmount > 0 ? "text-red-600" : "text-green-600"
+                    effectiveRemaining > 0 ? "text-red-600" : "text-green-600"
                   )}>
-                    {selectedBooking.remainingAmount > 0
-                      ? fmtVND(selectedBooking.remainingAmount)
+                    {effectiveRemaining > 0
+                      ? fmtVND(effectiveRemaining)
                       : "✓ Đã thu đủ"}
                   </span>
                 </div>
