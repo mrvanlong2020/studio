@@ -2,6 +2,11 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import runMigrations from "./migrations";
 
+// Prevent unhandled promise rejections (e.g. from streaming SDK errors) from crashing the process
+process.on("unhandledRejection", (reason) => {
+  logger.error({ err: reason }, "[unhandledRejection] Caught unhandled rejection — server will not crash");
+});
+
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {

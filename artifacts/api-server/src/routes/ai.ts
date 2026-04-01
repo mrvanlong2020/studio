@@ -1,21 +1,23 @@
 import { Router, type IRouter } from "express";
 import { pool } from "@workspace/db";
-import { GoogleGenAI } from "@google/genai";
 import { verifyToken } from "./auth";
 
 const router: IRouter = Router();
 
-function getGemini() {
+// Model priority list — gemini-2.0-flash first per spec, fall back if quota exceeded
+const GEMINI_MODELS = ["gemini-2.0-flash", "gemini-2.5-flash"];
+
+function getApiKey() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY chưa được cấu hình");
-  return new GoogleGenAI({ apiKey });
+  return apiKey;
 }
 
 async function fetchStudioContext(): Promise<string> {
   try {
     const now = new Date();
     const todayStr = now.toISOString().split("T")[0];
-    const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const in3Days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
     const bookingsR = await pool.query(
       `SELECT b.shoot_date, b.shoot_time, b.status, b.package_type, b.location,
@@ -23,9 +25,10 @@ async function fetchStudioContext(): Promise<string> {
        FROM bookings b
        LEFT JOIN customers c ON c.id = b.customer_id
        WHERE b.shoot_date BETWEEN $1 AND $2 AND b.status != 'cancelled'
+         AND (b.parent_id IS NULL OR b.is_parent_contract = true)
        ORDER BY b.shoot_date, b.shoot_time
        LIMIT 20`,
-      [todayStr, in7Days]
+      [todayStr, in3Days]
     );
 
     const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
@@ -85,7 +88,7 @@ async function fetchStudioContext(): Promise<string> {
 === DỮ LIỆU THẬT CỦA AMAZING STUDIO (cập nhật ngay lúc hỏi) ===
 📅 Hôm nay: ${formatDate(todayStr)}
 
-🗓️ Lịch chụp 7 ngày tới:
+🗓️ Lịch chụp hôm nay và 3 ngày tới:
 ${bookingLines}
 
 💰 Doanh thu tháng ${now.getMonth() + 1}/${now.getFullYear()}: ${formatVND(revenue)}
@@ -101,6 +104,28 @@ ${debtorLines}
   }
 }
 
+type GeminiContent = { role: string; parts: Array<{ text: string }> };
+
+async function callGeminiStream(
+  apiKey: string,
+  model: string,
+  systemInstruction: string,
+  history: GeminiContent[],
+  userMessage: string
+): Promise<Response> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+  const body = {
+    system_instruction: { parts: [{ text: systemInstruction }] },
+    contents: [...history, { role: "user", parts: [{ text: userMessage }] }],
+    generationConfig: { maxOutputTokens: 2048 },
+  };
+  return fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 router.post("/ai/chat", async (req, res) => {
   try {
     const callerId = verifyToken(req.headers.authorization);
@@ -111,6 +136,7 @@ router.post("/ai/chat", async (req, res) => {
       return res.status(400).json({ error: "Thiếu nội dung tin nhắn" });
     }
 
+    const apiKey = getApiKey();
     const studioContext = await fetchStudioContext();
 
     const systemInstruction = `Bạn là trợ lý AI của Amazing Studio — một studio chụp ảnh cưới và cho thuê váy cưới tại Việt Nam.
@@ -124,32 +150,74 @@ Quy tắc:
 
 ${studioContext}`;
 
-    const ai = getGemini();
-
-    const history = messages.slice(0, -1).map(m => ({
+    const history: GeminiContent[] = messages.slice(0, -1).map(m => ({
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text: m.content }],
     }));
-
     const lastMsg = messages[messages.length - 1];
 
-    const chat = ai.chats.create({
-      model: "gemini-2.5-flash",
-      config: { systemInstruction, maxOutputTokens: 2048 },
-      history,
-    });
+    // Try each model in order, fall back if quota exceeded
+    let geminiResponse: Response | null = null;
+    let usedModel = GEMINI_MODELS[0];
+
+    for (let i = 0; i < GEMINI_MODELS.length; i++) {
+      const model = GEMINI_MODELS[i];
+      const r = await callGeminiStream(apiKey, model, systemInstruction, history, lastMsg.content);
+      if (r.status === 429 && i < GEMINI_MODELS.length - 1) {
+        console.warn(`[ai] Model ${model} quota exceeded (429), falling back to ${GEMINI_MODELS[i + 1]}`);
+        continue;
+      }
+      geminiResponse = r;
+      usedModel = model;
+      break;
+    }
+
+    if (!geminiResponse) {
+      return res.status(429).json({ error: "API quota đã hết. Vui lòng thử lại sau ít phút." });
+    }
+
+    if (!geminiResponse.ok) {
+      const errText = await geminiResponse.text().catch(() => "");
+      console.error(`[ai] Gemini error ${geminiResponse.status} (${usedModel}):`, errText);
+      return res.status(500).json({ error: "Lỗi kết nối AI. Vui lòng thử lại." });
+    }
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
 
-    const stream = await chat.sendMessageStream({ message: lastMsg.content });
+    const reader = geminiResponse.body?.getReader();
+    if (!reader) {
+      return res.status(500).json({ error: "Không nhận được stream từ AI" });
+    }
 
-    for await (const chunk of stream) {
-      const text = chunk.text;
-      if (text) {
-        res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const data = line.slice(6).trim();
+        if (!data || data === "[DONE]") continue;
+        try {
+          const parsed = JSON.parse(data) as Record<string, unknown>;
+          const candidates = parsed.candidates as Array<Record<string, unknown>> | undefined;
+          if (!candidates?.length) continue;
+          const parts = (candidates[0].content as Record<string, unknown>)?.parts as Array<Record<string, unknown>> | undefined;
+          if (!parts?.length) continue;
+          const text = parts[0].text as string | undefined;
+          if (text) {
+            res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+          }
+        } catch { /* skip malformed chunk */ }
       }
     }
 
@@ -157,11 +225,15 @@ ${studioContext}`;
     res.end();
   } catch (err: unknown) {
     console.error("POST /ai/chat error:", err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const isQuota = errMsg.includes("429") || errMsg.toLowerCase().includes("quota");
+    const userMsg = isQuota
+      ? "API quota đã hết. Vui lòng thử lại sau ít phút."
+      : "Lỗi kết nối AI. Vui lòng thử lại.";
     if (!res.headersSent) {
-      const msg = err instanceof Error ? err.message : "Lỗi kết nối AI";
-      res.status(500).json({ error: msg.includes("quota") || msg.includes("429") ? "API quota đã hết. Vui lòng thử lại sau ít phút." : "Lỗi kết nối AI. Vui lòng thử lại." });
+      res.status(500).json({ error: userMsg });
     } else {
-      res.write(`data: ${JSON.stringify({ error: "Lỗi kết nối AI" })}\n\n`);
+      res.write(`data: ${JSON.stringify({ error: userMsg })}\n\n`);
       res.end();
     }
   }
