@@ -1,11 +1,9 @@
 import { Router, type IRouter } from "express";
 import { pool } from "@workspace/db";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { verifyToken } from "./auth";
 
 const router: IRouter = Router();
-
-// Model per spec: gemini-2.0-flash
-const GEMINI_MODEL = "gemini-2.0-flash";
 
 // Rate limiting: 1 request per 3 seconds per user (protect API quota)
 const rateLimitMap = new Map<number, number>();
@@ -19,10 +17,10 @@ function checkRateLimit(callerId: number): boolean {
   return true;
 }
 
-function getApiKey() {
+function getGemini() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY chưa được cấu hình");
-  return apiKey;
+  return new GoogleGenerativeAI(apiKey);
 }
 
 async function fetchStudioContext(): Promise<string> {
@@ -51,12 +49,10 @@ async function fetchStudioContext(): Promise<string> {
       `SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE paid_at >= $1 AND paid_at <= $2`,
       [monthStart, monthEnd]
     );
-
     const ordersR = await pool.query(
       `SELECT COUNT(*) AS cnt FROM bookings WHERE shoot_date >= $1 AND shoot_date <= $2 AND status != 'cancelled'`,
       [monthStart, monthEnd]
     );
-
     const debtorsR = await pool.query(
       `SELECT c.name, c.phone,
               SUM(GREATEST(0, CAST(b.total_amount AS numeric) - CAST(b.discount_amount AS numeric) - CAST(b.paid_amount AS numeric))) AS debt
@@ -69,11 +65,8 @@ async function fetchStudioContext(): Promise<string> {
        LIMIT 5`
     );
 
-    const custR = await pool.query(`SELECT COUNT(*) AS cnt FROM customers`);
-
     const revenue = Number((revenueR.rows[0] as Record<string, unknown>)?.total ?? 0);
     const orderCount = Number((ordersR.rows[0] as Record<string, unknown>)?.cnt ?? 0);
-    const customerCount = Number((custR.rows[0] as Record<string, unknown>)?.cnt ?? 0);
 
     const formatVND = (n: number) => n.toLocaleString("vi-VN") + " đ";
     const formatDate = (d: string) => {
@@ -96,45 +89,21 @@ async function fetchStudioContext(): Promise<string> {
       `  - ${d.name} (${d.phone}): còn nợ ${formatVND(Number(d.debt))}`
     ).join("\n") || "  (Không có khách nợ tiền)";
 
-    return `
-=== DỮ LIỆU THẬT CỦA AMAZING STUDIO (cập nhật ngay lúc hỏi) ===
-📅 Hôm nay: ${formatDate(todayStr)}
+    return `=== DỮ LIỆU THẬT CỦA AMAZING STUDIO ===
+Hôm nay: ${formatDate(todayStr)}
 
-🗓️ Lịch chụp hôm nay và 3 ngày tới:
+Lịch chụp hôm nay và 3 ngày tới:
 ${bookingLines}
 
-💰 Doanh thu tháng ${now.getMonth() + 1}/${now.getFullYear()}: ${formatVND(revenue)}
-📋 Số đơn hàng tháng này: ${orderCount} đơn
-👥 Tổng số khách hàng: ${customerCount} khách
+Doanh thu tháng ${now.getMonth() + 1}/${now.getFullYear()}: ${formatVND(revenue)}
+Số đơn hàng tháng này: ${orderCount} đơn
 
-💳 Top 5 khách còn nợ nhiều nhất:
-${debtorLines}
-`;
+Top 5 khách còn nợ nhiều nhất:
+${debtorLines}`;
   } catch (err) {
     console.error("fetchStudioContext error:", err);
     return "(Không lấy được dữ liệu studio)";
   }
-}
-
-type GeminiContent = { role: string; parts: Array<{ text: string }> };
-
-async function callGeminiStream(
-  apiKey: string,
-  systemInstruction: string,
-  history: GeminiContent[],
-  userMessage: string
-): Promise<Response> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${apiKey}`;
-  const body = {
-    system_instruction: { parts: [{ text: systemInstruction }] },
-    contents: [...history, { role: "user", parts: [{ text: userMessage }] }],
-    generationConfig: { maxOutputTokens: 2048 },
-  };
-  return fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
 }
 
 router.post("/ai/chat", async (req, res) => {
@@ -142,9 +111,8 @@ router.post("/ai/chat", async (req, res) => {
     const callerId = verifyToken(req.headers.authorization);
     if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập hoặc phiên hết hạn" });
 
-    // Rate limit: 1 request per 3 seconds per user
     if (!checkRateLimit(callerId)) {
-      return res.status(429).json({ error: "Đừng spam API! Chờ 3 giây rồi hãy gọi lại." });
+      return res.status(429).json({ error: "Chờ 3 giây rồi hãy gọi lại." });
     }
 
     const { messages } = req.body as { messages?: Array<{ role: string; content: string }> };
@@ -152,71 +120,42 @@ router.post("/ai/chat", async (req, res) => {
       return res.status(400).json({ error: "Thiếu nội dung tin nhắn" });
     }
 
-    const apiKey = getApiKey();
     const studioContext = await fetchStudioContext();
-
-    const systemInstruction = `Bạn là trợ lý AI của Amazing Studio — một studio chụp ảnh cưới và cho thuê váy cưới tại Việt Nam.
-Nhiệm vụ: giúp quản lý và nhân viên tra cứu thông tin nhanh về lịch chụp, khách hàng, công nợ, doanh thu, vận hành studio.
+    const systemInstruction = `Bạn là trợ lý AI của Amazing Studio — studio chụp ảnh cưới và cho thuê váy cưới tại Việt Nam.
+Nhiệm vụ: giúp quản lý và nhân viên tra cứu lịch chụp, khách hàng, công nợ, doanh thu, vận hành studio.
 
 Quy tắc:
-- Luôn trả lời bằng TIẾNG VIỆT, thân thiện, ngắn gọn, rõ ràng.
-- Chỉ dùng dữ liệu được cung cấp bên dưới. KHÔNG bịa số liệu.
-- Nếu không có thông tin, nói thẳng "Hệ thống không có dữ liệu về điều này".
-- Khi nêu số tiền, dùng định dạng "X.XXX.XXX đ" hoặc "X triệu đ".
+- Trả lời bằng TIẾNG VIỆT, thân thiện, ngắn gọn, rõ ràng.
+- Chỉ dùng dữ liệu bên dưới. KHÔNG bịa số liệu.
+- Nếu không có dữ liệu thì nói rõ là chưa có.
+- Số tiền dùng định dạng "X.XXX.XXX đ".
 
 ${studioContext}`;
 
-    const history: GeminiContent[] = messages.slice(0, -1).map(m => ({
+    // Build contents array from conversation history
+    const contents = messages.map(m => ({
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text: m.content }],
     }));
-    const lastMsg = messages[messages.length - 1];
 
-    const geminiResponse = await callGeminiStream(apiKey, systemInstruction, history, lastMsg.content);
+    const genAI = getGemini();
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      systemInstruction,
+    });
 
-    if (!geminiResponse.ok) {
-      const errText = await geminiResponse.text().catch(() => "");
-      console.error(`[ai] Gemini error ${geminiResponse.status}:`, errText);
-      const statusMsg = geminiResponse.status === 429 ? "API quota đã hết. Vui lòng thử lại sau ít phút." : "Lỗi kết nối AI. Vui lòng thử lại.";
-      return res.status(geminiResponse.status >= 500 ? 500 : geminiResponse.status).json({ error: statusMsg });
-    }
+    // generateContentStream makes the HTTP call at await-time — errors caught by outer try/catch
+    const result = await model.generateContentStream({ contents });
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
 
-    const reader = geminiResponse.body?.getReader();
-    if (!reader) {
-      return res.status(500).json({ error: "Không nhận được stream từ AI" });
-    }
-
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const data = line.slice(6).trim();
-        if (!data || data === "[DONE]") continue;
-        try {
-          const parsed = JSON.parse(data) as Record<string, unknown>;
-          const candidates = parsed.candidates as Array<Record<string, unknown>> | undefined;
-          if (!candidates?.length) continue;
-          const parts = (candidates[0].content as Record<string, unknown>)?.parts as Array<Record<string, unknown>> | undefined;
-          if (!parts?.length) continue;
-          const text = parts[0].text as string | undefined;
-          if (text) {
-            res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
-          }
-        } catch { /* skip malformed chunk */ }
+    for await (const chunk of result.stream) {
+      const text = chunk.text();
+      if (text) {
+        res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
       }
     }
 
@@ -224,13 +163,11 @@ ${studioContext}`;
     res.end();
   } catch (err: unknown) {
     console.error("POST /ai/chat error:", err);
-    const errMsg = err instanceof Error ? err.message : String(err);
-    const isQuota = errMsg.includes("429") || errMsg.toLowerCase().includes("quota");
-    const userMsg = isQuota
-      ? "API quota đã hết. Vui lòng thử lại sau ít phút."
-      : "Lỗi kết nối AI. Vui lòng thử lại.";
+    const msg = err instanceof Error ? err.message : String(err);
+    const isQuota = msg.includes("429") || msg.toLowerCase().includes("quota");
+    const userMsg = isQuota ? "API quota đã hết. Vui lòng thử lại sau ít phút." : "Lỗi kết nối AI. Vui lòng thử lại.";
     if (!res.headersSent) {
-      res.status(500).json({ error: userMsg });
+      res.status(isQuota ? 429 : 500).json({ error: userMsg });
     } else {
       res.write(`data: ${JSON.stringify({ error: userMsg })}\n\n`);
       res.end();

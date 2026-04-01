@@ -21,7 +21,8 @@
     "google-auth-library": "^10.6.2",
     "pino": "^9",
     "pino-http": "^10",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@google/generative-ai": "^0.24.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",

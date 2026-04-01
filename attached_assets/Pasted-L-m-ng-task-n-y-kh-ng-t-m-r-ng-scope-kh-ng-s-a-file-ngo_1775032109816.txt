@@ -1,0 +1,116 @@
+Làm đúng task này, không tự ý mở rộng scope, không sửa file ngoài danh sách, không build tính năng khác.
+
+Mục tiêu:
+Kết nối Google Gemini Flash thật vào trang Trợ lý AI để thay placeholder hiện tại. AI dùng API key riêng của user, đọc dữ liệu thật của studio, trả lời tiếng Việt tự nhiên, stream từng chữ, giữ context trong session. Chỉ đọc dữ liệu, không ghi.
+
+Yêu cầu hoàn thành:
+1. Vào trang Trợ lý AI, gõ câu hỏi bất kỳ → Gemini trả lời thật bằng tiếng Việt.
+2. AI biết dữ liệu thật của studio:
+   - lịch chụp hôm nay và 3 ngày tới
+   - top 5 khách còn nợ nhiều nhất
+   - doanh thu tháng này
+   - số đơn hàng tháng này
+3. Response phải stream từng phần ra frontend, không chờ xong mới hiện.
+4. Các câu hỏi gợi ý phải hoạt động với dữ liệu thật.
+5. Giữ lịch sử hội thoại trong session hiện tại.
+6. Dùng model gemini-2.0-flash.
+7. Không dùng mock data.
+8. Không dùng placeholder response.
+
+Out of scope:
+- Không lưu lịch sử giữa các lần đăng nhập
+- Không cho AI sửa dữ liệu
+- Không làm phân quyền AI theo nhân viên
+
+Làm theo đúng các bước sau:
+
+Bước 1: API key
+- Kiểm tra GEMINI_API_KEY đã tồn tại chưa.
+- Nếu chưa có thì dùng requestEnvVar để hiện popup yêu cầu user nhập GEMINI_API_KEY.
+- Gợi ý cho user lấy key từ aistudio.google.com/apikey.
+- Không hardcode key.
+- Không commit key vào code.
+
+Bước 2: Cài package
+- Cài @google/generative-ai trong artifacts/api-server/package.json
+- Chạy pnpm install
+
+Bước 3: Backend route
+Tạo file mới:
+artifacts/api-server/src/routes/ai.ts
+
+Yêu cầu route:
+- Endpoint: POST /api/ai/chat
+- Chỉ cho user đã đăng nhập, verify token, không có token trả 401
+- Nhận body:
+  {
+    "messages": [
+      { "role": "user" | "assistant", "content": "string" }
+    ]
+  }
+
+Trước khi gọi Gemini, lấy dữ liệu thật từ DB:
+- Lịch chụp hôm nay và 3 ngày tới: bookingDate, customerName, status
+- Top 5 khách còn nợ nhiều nhất: tên, số nợ
+- Doanh thu tháng này: tổng payments
+- Số đơn hàng tháng này
+
+Tạo system prompt tiếng Việt:
+- Vai trò: trợ lý Amazing Studio
+- Trả lời ngắn gọn, thân thiện, rõ ràng
+- Chỉ dùng dữ liệu được cung cấp
+- Không bịa số liệu
+- Nếu thiếu dữ liệu thì nói rõ là chưa có dữ liệu
+
+Dùng Gemini:
+- model: gemini-2.0-flash
+- dùng stream response
+- stream SSE về frontend
+- format SSE ổn định, frontend đọc được từng chunk
+
+Mount route trong:
+artifacts/api-server/src/index.ts
+
+Bước 4: Frontend
+Chỉnh file:
+artifacts/amazing-studio/src/pages/ai-assistant.tsx
+
+Yêu cầu:
+- Giữ nguyên UI hiện tại
+- Chỉ thay logic mock bằng gọi API thật
+- Gọi POST /api/ai/chat
+- Gửi Authorization: Bearer token
+- Parse SSE chunks
+- Append từng chunk vào tin nhắn assistant đang hiển thị
+- Có trạng thái “AI đang gõ...” khi đang chờ
+- Giữ lịch sử hội thoại trong session của trang hiện tại
+- Các câu hỏi gợi ý đổi thành câu thực tế hơn, ví dụ:
+  - Hôm nay studio có lịch chụp nào?
+  - Tuần này có bao nhiêu lịch chụp?
+  - 5 khách nào còn nợ nhiều nhất?
+  - Doanh thu tháng này bao nhiêu?
+  - Tháng này có bao nhiêu đơn hàng?
+
+Bước 5: Auth token
+Dùng token từ:
+artifacts/amazing-studio/src/contexts/StaffAuthContext.tsx
+
+Chỉ sửa các file sau:
+- artifacts/amazing-studio/src/pages/ai-assistant.tsx
+- artifacts/api-server/src/routes/ai.ts
+- artifacts/api-server/src/index.ts
+- artifacts/api-server/package.json
+
+Khi xong:
+1. Báo rõ đã sửa file nào
+2. Báo rõ API route đã mount chưa
+3. Báo rõ requestEnvVar đã hoạt động chưa
+4. Báo rõ frontend đã stream từng chunk chưa
+5. Nếu có lỗi build hoặc thiếu type/schema thì tự sửa gọn trong phạm vi liên quan
+6. Dừng lại sau khi hoàn tất, không tự ý làm thêm
+
+Sau khi làm xong, chỉ trả lời tôi theo mẫu này:
+- Đã xong / Chưa xong
+- Files đã sửa
+- Cách test ngắn gọn
+- Còn lỗi gì nếu có
