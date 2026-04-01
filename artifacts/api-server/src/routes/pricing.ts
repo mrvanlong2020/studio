@@ -1100,10 +1100,10 @@ router.put("/service-packages/:id", async (req, res) => {
         await db.insert(packageItemsTable).values(
           items.map((item: { name: string; quantity?: string; unit?: string; notes?: string; sortOrder?: number }, idx: number) => ({
             packageId: id,
-            name: item.name || "",
+            name: item.name,
             quantity: String(item.quantity ?? "1"),
-            unit: item.unit ?? "lần",
-            notes: item.notes ?? null,
+            unit: item.unit,
+            notes: item.notes,
             sortOrder: item.sortOrder ?? idx,
           }))
         );
@@ -1114,9 +1114,8 @@ router.put("/service-packages/:id", async (req, res) => {
       .where(eq(packageItemsTable.packageId, id)).orderBy(asc(packageItemsTable.sortOrder));
     res.json({ ...fmtPkg(pkg), items: savedItems });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("PUT /service-packages/:id error:", msg);
-    res.status(500).json({ error: "Lỗi lưu gói dịch vụ: " + msg });
+    console.error("PUT /service-packages/:id error:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Lỗi lưu gói dịch vụ, vui lòng thử lại" });
   }
 });
 
