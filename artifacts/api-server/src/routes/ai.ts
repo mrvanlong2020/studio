@@ -4,8 +4,8 @@ import { verifyToken } from "./auth";
 
 const router: IRouter = Router();
 
-// Model priority list — gemini-2.0-flash first per spec, fall back if quota exceeded
-const GEMINI_MODELS = ["gemini-2.0-flash", "gemini-2.5-flash"];
+// Model per spec: gemini-2.0-flash
+const GEMINI_MODEL = "gemini-2.0-flash";
 
 function getApiKey() {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -108,12 +108,11 @@ type GeminiContent = { role: string; parts: Array<{ text: string }> };
 
 async function callGeminiStream(
   apiKey: string,
-  model: string,
   systemInstruction: string,
   history: GeminiContent[],
   userMessage: string
 ): Promise<Response> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${apiKey}`;
   const body = {
     system_instruction: { parts: [{ text: systemInstruction }] },
     contents: [...history, { role: "user", parts: [{ text: userMessage }] }],
@@ -156,30 +155,13 @@ ${studioContext}`;
     }));
     const lastMsg = messages[messages.length - 1];
 
-    // Try each model in order, fall back if quota exceeded
-    let geminiResponse: Response | null = null;
-    let usedModel = GEMINI_MODELS[0];
-
-    for (let i = 0; i < GEMINI_MODELS.length; i++) {
-      const model = GEMINI_MODELS[i];
-      const r = await callGeminiStream(apiKey, model, systemInstruction, history, lastMsg.content);
-      if (r.status === 429 && i < GEMINI_MODELS.length - 1) {
-        console.warn(`[ai] Model ${model} quota exceeded (429), falling back to ${GEMINI_MODELS[i + 1]}`);
-        continue;
-      }
-      geminiResponse = r;
-      usedModel = model;
-      break;
-    }
-
-    if (!geminiResponse) {
-      return res.status(429).json({ error: "API quota đã hết. Vui lòng thử lại sau ít phút." });
-    }
+    const geminiResponse = await callGeminiStream(apiKey, systemInstruction, history, lastMsg.content);
 
     if (!geminiResponse.ok) {
       const errText = await geminiResponse.text().catch(() => "");
-      console.error(`[ai] Gemini error ${geminiResponse.status} (${usedModel}):`, errText);
-      return res.status(500).json({ error: "Lỗi kết nối AI. Vui lòng thử lại." });
+      console.error(`[ai] Gemini error ${geminiResponse.status}:`, errText);
+      const statusMsg = geminiResponse.status === 429 ? "API quota đã hết. Vui lòng thử lại sau ít phút." : "Lỗi kết nối AI. Vui lòng thử lại.";
+      return res.status(geminiResponse.status >= 500 ? 500 : geminiResponse.status).json({ error: statusMsg });
     }
 
     res.setHeader("Content-Type", "text/event-stream");
