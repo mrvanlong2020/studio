@@ -21,6 +21,7 @@ import { Button, Input } from "@/components/ui";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { ServiceSearchBox } from "@/components/service-search-box";
 import { SurchargeEditor, type SurchargeItem } from "@/components/surcharge-editor";
+import { DeductionEditor, type DeductionItem } from "@/components/deduction-editor";
 import { StaffAssignmentEditor, type StaffAssignment, newStaffAssignment } from "@/components/staff-assignment-editor";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -78,6 +79,7 @@ type OrderLine = {
   basePrice: number;
   selectedAddons: string[];
   surcharges: SurchargeItem[];
+  deductions: DeductionItem[];
   baseJobType: string; // Base job type key from BASE_TASKS (e.g., "chup_cong", "chup_album")
   photoId: number | null; photoName: string; photoTask: string;
   makeupId: number | null; makeupName: string; makeupTask: string;
@@ -247,9 +249,11 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
   
   // Phí phát sinh cho gói này
   const surchargesTotal = (line.surcharges || []).reduce((s, i) => s + (i.amount || 0), 0);
+  const deductionsTotal = (line.deductions || []).reduce((s, d) => s + (d.amount || 0), 0);
   
   const totalCost = ptsCast + printCost + operatingCost + saleAmt + photoCast + makeupCast + surchargesTotal;
-  const profit = line.price - totalCost;
+  const effectiveRevenue = Math.max(0, line.price - deductionsTotal);
+  const profit = effectiveRevenue - totalCost;
 
   // Addon state — computed from line.selectedAddons + selectedSvc.addons
   const availableAddons: Addon[] = selectedSvc?.addons || [];
@@ -432,6 +436,12 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
         onChange={newSurcharges => onChange({ ...line, surcharges: newSurcharges })} 
       />
 
+      {/* Giảm trừ dịch vụ — Deductions per package */}
+      <DeductionEditor
+        deductions={line.deductions || []}
+        onChange={newDeductions => onChange({ ...line, deductions: newDeductions })}
+      />
+
       {/* Addon */}
       {isPkg && availableAddons.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
@@ -578,6 +588,16 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
             <div className="flex justify-between font-semibold text-emerald-700 text-[10px]">
               <span>💵 Doanh thu</span><span>{fmtVND(line.price)}</span>
             </div>
+            {deductionsTotal > 0 && (
+              <div className="flex justify-between text-red-600 text-[10px]">
+                <span>⬇ Giảm trừ dịch vụ</span><span>−{fmtVND(deductionsTotal)}</span>
+              </div>
+            )}
+            {deductionsTotal > 0 && (
+              <div className="flex justify-between font-semibold text-emerald-700 text-[10px] border-t border-emerald-100 pt-0.5">
+                <span>= Thực thu</span><span>{fmtVND(effectiveRevenue)}</span>
+              </div>
+            )}
           </div>
           <div className="bg-red-50 px-3 py-1.5 space-y-0.5 text-[10px]">
             <p className="font-semibold text-red-800">(-) Chi phí sản xuất</p>
@@ -673,7 +693,7 @@ function ShowFormPanel({
   // ── Service blocks (unified: single or multi-service) ────────────────────
   const emptyOrderLine = (): OrderLine => ({
     tempId: genId(), serviceName: "", serviceId: null, serviceKey: "",
-    price: 0, basePrice: 0, selectedAddons: [], surcharges: [],
+    price: 0, basePrice: 0, selectedAddons: [], surcharges: [], deductions: [],
     baseJobType: "mac_dinh", // Default job type for staff rates lookup
     photoId: null, photoName: "", photoTask: "",
     makeupId: null, makeupName: "", makeupTask: "",
@@ -741,7 +761,8 @@ function ShowFormPanel({
 
   const subDraftsTotal = subDrafts.reduce((s, sub) => s + sub.items.reduce((si, l) => {
     const lineSurchTotal = (l.surcharges || []).reduce((ls, sc) => ls + (sc.amount || 0), 0);
-    return si + (l.price || 0) + lineSurchTotal;
+    const lineDeductTotal = (l.deductions || []).reduce((ld, d) => ld + (d.amount || 0), 0);
+    return si + Math.max(0, (l.price || 0) + lineSurchTotal - lineDeductTotal);
   }, 0), 0);
   const surchargesTotal = surcharges.reduce((s, i) => s + (i.amount || 0), 0);
   const totalAmount = subDraftsTotal + surchargesTotal;
@@ -814,8 +835,13 @@ function ShowFormPanel({
           const validItems = sub.items.filter(l => l.serviceName || l.serviceId);
           const subTotal = sub.items.reduce((s, l) => {
             const lineSurchTotal = (l.surcharges || []).reduce((ls, sc) => ls + (sc.amount || 0), 0);
-            return s + (l.price || 0) + lineSurchTotal;
+            const lineDeductTotal = (l.deductions || []).reduce((ld, d) => ld + (d.amount || 0), 0);
+            return s + Math.max(0, (l.price || 0) + lineSurchTotal - lineDeductTotal);
           }, 0);
+          const subDeductions = validItems
+            .flatMap(l => (l.deductions || []))
+            .filter(d => d.label?.trim() && d.amount > 0)
+            .map(({ label, amount }) => ({ label, amount }));
           const subAssigned: Record<string, unknown> = {};
           if (sub.photoId) { subAssigned.photo = sub.photoId; subAssigned.photoTask = sub.photoTask || "mac_dinh"; }
           if (sub.makeupId) { subAssigned.makeup = sub.makeupId; subAssigned.makeupTask = sub.makeupTask || "mac_dinh"; }
@@ -824,6 +850,7 @@ function ShowFormPanel({
             shootDate: sub.shootDate || shootDate,
             shootTime: sub.shootTime || "08:00",
             items: validItems.map(({ tempId: _t, ...rest }) => rest),
+            deductions: subDeductions,
             totalAmount: subTotal,
             assignedStaff: subAssigned,
             notes: sub.notes || null,
@@ -881,6 +908,11 @@ function ShowFormPanel({
         .filter(s => s.name.trim() && s.amount > 0)
         .map(({ name, amount }) => ({ name, amount }));
 
+      const cleanedDeductions = validLines
+        .flatMap(l => (l.deductions || []))
+        .filter(d => d.label?.trim() && d.amount > 0)
+        .map(({ label, amount }) => ({ label, amount }));
+
       // Task #24: trích servicePackageId từ service line có serviceKey "pkg-{id}"
       // Khi sửa đơn: nếu không có dòng nào là package → giữ nguyên packageId cũ (tránh unlink)
       const pkgLine = validLines.find(l => (l.serviceKey ?? "").startsWith("pkg-"));
@@ -897,6 +929,7 @@ function ShowFormPanel({
         discountAmount: discountNum,
         items: hasServices ? validLines.map(({ tempId: _t, ...rest }) => rest) : [],
         surcharges: cleanedSurcharges,
+        deductions: hasServices ? cleanedDeductions : [],
         assignedStaff, notes: notes || null,
         photoCount: photoCount !== "" ? parseInt(photoCount) : null,
       };
@@ -1450,6 +1483,18 @@ function generateContractHTML(
            </div>`
         : "";
 
+      const lineDeductions = (line.deductions || []) as { label: string; amount: number }[];
+      const lineDeductHTML = lineDeductions.length > 0
+        ? `<div style="margin-top:10px;padding:8px 12px;background:#fff5f5;border-radius:8px;border:1px solid #fce4e4;">
+             <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#c0392b;margin-bottom:6px;">⬇ Giảm trừ dịch vụ:</div>
+             ${lineDeductions.map(d => `
+               <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;">
+                 <span style="color:#c0392b;">− ${d.label}</span>
+                 <span style="font-weight:600;color:#c0392b;">−${fmtVNDStr(d.amount)}</span>
+               </div>`).join("")}
+           </div>`
+        : "";
+
       return `
         <div style="border:1px solid #e0d0e8;border-radius:10px;padding:16px;margin-bottom:12px;background:#fff;">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;">
@@ -1463,6 +1508,7 @@ function generateContractHTML(
           ${includesHTML}
           ${productsHTML}
           ${lineSurchHTML}
+          ${lineDeductHTML}
         </div>
       `;
     }).join("");
@@ -1513,7 +1559,10 @@ function generateContractHTML(
   const allBookingSurcharges = allServices.flatMap(b => (b.surcharges || []) as { name: string; amount: number }[]);
   const allSurchargesFlat = [...allLineSurcharges, ...allBookingSurcharges];
   const totalSurchargesAmount = allSurchargesFlat.reduce((s, i) => s + (Number(i.amount) || 0), 0);
-  const baseServicesAmount = Math.max(0, totalAmount - totalSurchargesAmount);
+  // ── Tổng hợp tất cả giảm trừ (per-line) ────────────────────────────────────
+  const allLineDeductions = allServices.flatMap(b => (b.items || []).flatMap(l => (l.deductions || []) as { label: string; amount: number }[]));
+  const totalDeductionsAmount = allLineDeductions.reduce((s, d) => s + (Number(d.amount) || 0), 0);
+  const baseServicesAmount = Math.max(0, totalAmount - totalSurchargesAmount + totalDeductionsAmount);
 
   return `<!DOCTYPE html>
 <html lang="vi">
@@ -1600,13 +1649,14 @@ function generateContractHTML(
       <span>Tổng giá trị hợp đồng</span>
       <span style="font-size:22px;font-weight:800;">${fmtVNDStr(totalAmount)}</span>
     </div>
-    ${totalSurchargesAmount > 0 ? `
+    ${(totalSurchargesAmount > 0 || totalDeductionsAmount > 0) ? `
     <div style="height:1px;background:rgba(255,255,255,0.2);margin:4px 0 8px;"></div>
     <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.8px;opacity:0.65;margin-bottom:6px;">Chi tiết cấu thành:</div>
     <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px;">
       <span style="opacity:0.85;">Giá dịch vụ gốc</span>
       <span>${fmtVNDStr(baseServicesAmount)}</span>
     </div>
+    ${totalSurchargesAmount > 0 ? `
     <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px;">
       <span style="color:#ffb3b3;">⚡ Phụ thu / Phát sinh</span>
       <span style="color:#ffb3b3;font-weight:700;">+${fmtVNDStr(totalSurchargesAmount)}</span>
@@ -1616,6 +1666,16 @@ function generateContractHTML(
       <span style="color:#ffd6d6;">· ${s.name}</span>
       <span style="color:#ffd6d6;">${fmtVNDStr(s.amount)}</span>
     </div>`).join("")}` : ""}
+    ${totalDeductionsAmount > 0 ? `
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px;">
+      <span style="color:#ffb3b3;">⬇ Giảm trừ dịch vụ</span>
+      <span style="color:#ffb3b3;font-weight:700;">−${fmtVNDStr(totalDeductionsAmount)}</span>
+    </div>
+    ${allLineDeductions.map(d => `
+    <div style="display:flex;justify-content:space-between;padding:1px 0 1px 12px;font-size:11.5px;opacity:0.8;">
+      <span style="color:#ffd6d6;">· ${d.label}</span>
+      <span style="color:#ffd6d6;">−${fmtVNDStr(d.amount)}</span>
+    </div>`).join("")}` : ""}` : ""}
     ${discountAmount > 0 ? `
     <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13.5px;">
       <span style="opacity:0.9;">🎁 Khuyến mãi / Giảm giá</span>
@@ -2170,6 +2230,21 @@ function ShowDetailPanel({
                             <span className="font-medium">{item.makeupName}</span>
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {/* Giảm trừ dịch vụ per line */}
+                    {item.deductions && (item.deductions as { label: string; amount: number }[]).length > 0 && (
+                      <div className="px-3 py-2 bg-red-50/40 dark:bg-red-950/10 border-t border-border/30">
+                        <p className="text-[10px] font-bold text-red-600 dark:text-red-400 mb-1.5">⬇ Giảm trừ dịch vụ</p>
+                        <div className="space-y-0.5">
+                          {(item.deductions as { label: string; amount: number }[]).map((d, i) => (
+                            <div key={i} className="flex justify-between text-xs text-red-600 dark:text-red-400">
+                              <span>− {d.label}</span>
+                              <span className="font-semibold">−{fmtVND(d.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
 
