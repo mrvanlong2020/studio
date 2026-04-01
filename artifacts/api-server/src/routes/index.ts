@@ -30,6 +30,7 @@ import bookingExtrasRouter from "./booking-extras";
 import attendanceRouter from "./attendance";
 import crmLeadsRouter from "./crm-leads";
 import webhookFacebookRouter from "./webhook-facebook";
+import aiRouter from "./ai";
 
 const router: IRouter = Router();
 
@@ -64,5 +65,6 @@ router.use(bookingExtrasRouter);
 router.use(attendanceRouter);
 router.use(crmLeadsRouter);
 router.use(webhookFacebookRouter);
+router.use(aiRouter);
 
 export default router;
