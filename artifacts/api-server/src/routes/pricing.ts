@@ -1054,56 +1054,70 @@ router.post("/service-packages", async (req, res) => {
 
 router.put("/service-packages/:id", async (req, res) => {
   if (!await requireAdmin(req, res)) return;
-  const id = parseInt(req.params.id);
-  const {
-    groupId, code, name, price,
-    printCost, operatingCost, salePercent,
-    description, notes, addons, products, isActive, sortOrder, items,
-    serviceType, photoCount, includesMakeup, includedRetouchedPhotos,
-  } = req.body;
+  try {
+    const id = parseInt(req.params.id);
+    const {
+      groupId, code, name, price,
+      printCost, operatingCost, salePercent,
+      description, notes, addons, products, isActive, sortOrder, items,
+      serviceType, photoCount, includesMakeup, includedRetouchedPhotos,
+    } = req.body;
 
-  const update: Record<string, unknown> = {};
-  if (groupId !== undefined) update.groupId = groupId ? parseInt(groupId) : null;
-  if (code !== undefined) update.code = code;
-  if (name !== undefined) update.name = name;
-  if (price !== undefined) update.price = String(price);
-  if (printCost !== undefined) update.printCost = String(printCost ?? 0);
-  if (operatingCost !== undefined) update.operatingCost = String(operatingCost ?? 0);
-  if (salePercent !== undefined) update.salePercent = String(salePercent);
-  if (description !== undefined) update.description = description;
-  if (notes !== undefined) update.notes = notes;
-  if (addons !== undefined) update.addons = addons ? (typeof addons === "string" ? addons : JSON.stringify(addons)) : null;
-  if (products !== undefined) update.products = products ? (typeof products === "string" ? products : JSON.stringify(products)) : null;
-  if (isActive !== undefined) update.isActive = isActive ? 1 : 0;
-  if (sortOrder !== undefined) update.sortOrder = sortOrder;
-  if (serviceType !== undefined) update.serviceType = serviceType ?? null;
-  if (photoCount !== undefined) update.photoCount = photoCount ? parseInt(photoCount) : 1;
-  if (includesMakeup !== undefined) update.includesMakeup = includesMakeup === false || includesMakeup === 0 ? 0 : 1;
-  if (includedRetouchedPhotos !== undefined) update.includedRetouchedPhotos = includedRetouchedPhotos ? parseInt(String(includedRetouchedPhotos)) : 0;
+    const update: Record<string, unknown> = {};
+    if (groupId !== undefined) update.groupId = groupId ? parseInt(groupId) : null;
+    if (code !== undefined) update.code = code;
+    if (name !== undefined) update.name = name;
+    if (price !== undefined) update.price = String(price);
+    if (printCost !== undefined) update.printCost = String(printCost ?? 0);
+    if (operatingCost !== undefined) update.operatingCost = String(operatingCost ?? 0);
+    if (salePercent !== undefined) update.salePercent = String(salePercent);
+    if (description !== undefined) update.description = description;
+    if (notes !== undefined) update.notes = notes;
+    if (addons !== undefined) update.addons = addons ? (typeof addons === "string" ? addons : JSON.stringify(addons)) : null;
+    if (products !== undefined) update.products = products ? (typeof products === "string" ? products : JSON.stringify(products)) : null;
+    if (isActive !== undefined) update.isActive = isActive ? 1 : 0;
+    if (sortOrder !== undefined) update.sortOrder = sortOrder;
+    if (serviceType !== undefined) update.serviceType = serviceType ?? null;
+    if (photoCount !== undefined) update.photoCount = photoCount ? parseInt(photoCount) : 1;
+    if (includesMakeup !== undefined) update.includesMakeup = includesMakeup === false || includesMakeup === 0 ? 0 : 1;
+    if (includedRetouchedPhotos !== undefined) update.includedRetouchedPhotos = includedRetouchedPhotos ? parseInt(String(includedRetouchedPhotos)) : 0;
 
-  const [pkg] = await db.update(servicePackagesTable).set(update)
-    .where(eq(servicePackagesTable.id, id)).returning();
-  if (!pkg) return res.status(404).json({ error: "Not found" });
-
-  if (Array.isArray(items)) {
-    await db.delete(packageItemsTable).where(eq(packageItemsTable.packageId, id));
-    if (items.length > 0) {
-      await db.insert(packageItemsTable).values(
-        items.map((item: { name: string; quantity?: string; unit?: string; notes?: string; sortOrder?: number }, idx: number) => ({
-          packageId: id,
-          name: item.name,
-          quantity: String(item.quantity ?? "1"),
-          unit: item.unit,
-          notes: item.notes,
-          sortOrder: item.sortOrder ?? idx,
-        }))
-      );
+    let pkg: (typeof servicePackagesTable.$inferSelect) | undefined;
+    if (Object.keys(update).length > 0) {
+      const [updated] = await db.update(servicePackagesTable).set(update)
+        .where(eq(servicePackagesTable.id, id)).returning();
+      pkg = updated;
+    } else {
+      const [existing] = await db.select().from(servicePackagesTable)
+        .where(eq(servicePackagesTable.id, id));
+      pkg = existing;
     }
-  }
+    if (!pkg) return res.status(404).json({ error: "Không tìm thấy gói dịch vụ" });
 
-  const savedItems = await db.select().from(packageItemsTable)
-    .where(eq(packageItemsTable.packageId, id)).orderBy(asc(packageItemsTable.sortOrder));
-  res.json({ ...fmtPkg(pkg), items: savedItems });
+    if (Array.isArray(items)) {
+      await db.delete(packageItemsTable).where(eq(packageItemsTable.packageId, id));
+      if (items.length > 0) {
+        await db.insert(packageItemsTable).values(
+          items.map((item: { name: string; quantity?: string; unit?: string; notes?: string; sortOrder?: number }, idx: number) => ({
+            packageId: id,
+            name: item.name || "",
+            quantity: String(item.quantity ?? "1"),
+            unit: item.unit ?? "lần",
+            notes: item.notes ?? null,
+            sortOrder: item.sortOrder ?? idx,
+          }))
+        );
+      }
+    }
+
+    const savedItems = await db.select().from(packageItemsTable)
+      .where(eq(packageItemsTable.packageId, id)).orderBy(asc(packageItemsTable.sortOrder));
+    res.json({ ...fmtPkg(pkg), items: savedItems });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("PUT /service-packages/:id error:", msg);
+    res.status(500).json({ error: "Lỗi lưu gói dịch vụ: " + msg });
+  }
 });
 
 router.delete("/service-packages/:id", async (req, res) => {

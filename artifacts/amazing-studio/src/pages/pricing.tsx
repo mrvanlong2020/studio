@@ -162,7 +162,14 @@ export default function PricingPage() {
         method: "PUT", headers: authHeaders,
         body: JSON.stringify(data),
       }).then(async r => {
-        if (!r.ok) throw new Error((await r.json()).error ?? "Lỗi lưu gói");
+        if (!r.ok) {
+          const ct = r.headers.get("content-type") ?? "";
+          if (ct.includes("application/json")) {
+            const body = await r.json().catch(() => ({})) as Record<string, unknown>;
+            throw new Error((body.error as string) ?? "Lỗi lưu gói");
+          }
+          throw new Error(`Lỗi lưu gói (${r.status})`);
+        }
         return r.json();
       });
     },
@@ -874,7 +881,14 @@ function PackageModal({
         headers,
         body: JSON.stringify(body),
       });
-      if (!resp.ok) throw new Error("Lỗi lưu gói");
+      if (!resp.ok) {
+        const ct = resp.headers.get("content-type") ?? "";
+        if (ct.includes("application/json")) {
+          const body2 = await resp.json().catch(() => ({})) as Record<string, unknown>;
+          throw new Error((body2.error as string) ?? "Lỗi lưu gói");
+        }
+        throw new Error(`Lỗi lưu gói (${resp.status})`);
+      }
       const saved = await resp.json();
       onSaved(saved);
     } catch (e: unknown) {
@@ -1107,7 +1121,14 @@ function SurchargeModal({ surcharge, onClose, onSaved }: {
         headers,
         body: JSON.stringify({ ...form, price: parseFloat(form.price) || 0 }),
       });
-      if (!resp.ok) throw new Error("Lỗi lưu phụ phí");
+      if (!resp.ok) {
+        const ct2 = resp.headers.get("content-type") ?? "";
+        if (ct2.includes("application/json")) {
+          const errBody = await resp.json().catch(() => ({})) as Record<string, unknown>;
+          throw new Error((errBody.error as string) ?? "Lỗi lưu phụ phí");
+        }
+        throw new Error(`Lỗi lưu phụ phí (${resp.status})`);
+      }
       onSaved();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Có lỗi xảy ra");
