@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { formatVND, formatDate } from "@/lib/utils";
+import { useStaffAuth } from "@/contexts/StaffAuthContext";
 import { Button, Input, Select, Textarea, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui";
 import {
   Search, Plus, Phone, MapPin, Edit, Trash2, Users, Facebook,
@@ -100,6 +101,7 @@ function AvatarCircle({ name, avatar, size = "md" }: { name: string; avatar?: st
 
 export default function CustomersPage() {
   const qc = useQueryClient();
+  const { isAdmin, token } = useStaffAuth();
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -158,7 +160,11 @@ export default function CustomersPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => fetchJson<void>(`/api/customers/${id}`, { method: "DELETE" }),
+    mutationFn: (id: number) =>
+      fetchJson<void>(`/api/customers/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["customers"] });
       setSelectedId(null);
@@ -334,9 +340,11 @@ export default function CustomersPage() {
                       <button onClick={e => { e.stopPropagation(); openEdit(c); }} className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-primary transition-colors">
                         <Edit className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={e => { e.stopPropagation(); if (confirm("Xóa khách hàng này?")) deleteMutation.mutate(c.id); }} className="p-1.5 hover:bg-destructive/10 rounded-lg text-muted-foreground hover:text-destructive transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {isAdmin && (
+                        <button onClick={e => { e.stopPropagation(); if (confirm("Xóa khách hàng này?")) deleteMutation.mutate(c.id); }} className="p-1.5 hover:bg-destructive/10 rounded-lg text-muted-foreground hover:text-destructive transition-colors">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40 hidden sm:block" />
                     </div>
                   </div>

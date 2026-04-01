@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, pool } from "@workspace/db";
 import { customersTable, bookingsTable, paymentsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { verifyToken } from "./auth";
 
 const router: IRouter = Router();
 
@@ -179,6 +180,14 @@ router.put("/customers/:id", async (req, res) => {
 
 router.delete("/customers/:id", async (req, res) => {
   try {
+  // Admin-only: verify token and check role
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập hoặc phiên hết hạn" });
+  const callerR = await pool.query(`SELECT role, roles FROM staff WHERE id = $1 AND is_active = 1`, [callerId]);
+  const caller = callerR.rows[0] as Record<string, unknown> | undefined;
+  const callerIsAdmin = caller && (caller.role === "admin" || (Array.isArray(caller.roles) && caller.roles.includes("admin")));
+  if (!callerIsAdmin) return res.status(403).json({ error: "Không có quyền xóa khách hàng" });
+
   const id = parseInt(req.params.id);
   await db.delete(customersTable).where(eq(customersTable.id, id));
   res.status(204).send();
