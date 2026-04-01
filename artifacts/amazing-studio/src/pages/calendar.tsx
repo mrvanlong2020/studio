@@ -283,6 +283,7 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
       basePrice: svc?.price ?? 0,
       selectedAddons: [],
       surcharges: [],
+      deductions: [],
       baseJobType: "mac_dinh", // Reset to default when selecting new service
       // Tự xóa makeup khi chọn gói không có makeup
       ...(noMakeup ? { makeupId: null, makeupName: "", makeupTask: "" } : {}),
