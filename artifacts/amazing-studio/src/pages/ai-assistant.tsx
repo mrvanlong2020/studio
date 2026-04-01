@@ -17,6 +17,7 @@ export default function AiAssistantPage() {
   ]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [keyConfigured, setKeyConfigured] = useState<boolean | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -35,8 +36,15 @@ export default function AiAssistantPage() {
     scrollToBottom();
   }, [messages]);
 
+  useEffect(() => {
+    fetch(`${BASE}/api/health/check-ai-key`)
+      .then(r => r.json())
+      .then(data => setKeyConfigured(data.configured))
+      .catch(() => setKeyConfigured(false));
+  }, []);
+
   const handleSend = async (text: string) => {
-    if (!text.trim() || isStreaming) return;
+    if (!text.trim() || isStreaming || !keyConfigured) return;
 
     const userMsg: Message = { role: "user", content: text };
     setMessages(prev => [...prev, userMsg]);
@@ -142,6 +150,16 @@ export default function AiAssistantPage() {
         <h1 className="text-3xl font-bold tracking-tight">Trợ lý AI</h1>
         <p className="text-muted-foreground mt-1">Phân tích dữ liệu và gợi ý thông minh cho studio của bạn</p>
       </div>
+
+      {keyConfigured === false && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+          <Sparkles className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-amber-900">Cấu hình GEMINI_API_KEY</p>
+            <p className="text-sm text-amber-800 mt-1">Vui lòng cấu hình GEMINI_API_KEY trong Replit Secrets để dùng Trợ lý AI.</p>
+          </div>
+        </div>
+      )}
 
       <Card className="flex-1 flex flex-col overflow-hidden border-primary/20 shadow-lg shadow-primary/5">
         <div className="p-4 border-b bg-primary/5 flex items-center gap-3">

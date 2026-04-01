@@ -8,4 +8,8 @@ router.get("/healthz", (_req, res) => {
   res.json(data);
 });
 
+router.get("/check-ai-key", (_req, res) => {
+  res.json({ configured: !!process.env["GEMINI_API_KEY"] });
+});
+
 export default router;
