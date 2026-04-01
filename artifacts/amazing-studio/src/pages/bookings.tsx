@@ -964,7 +964,7 @@ function CreateBookingForm({ customers, onSuccess, onCancel }: {
           ...form,
           packageType: packageName,
           customerId: parseInt(form.customerId),
-          totalAmount: displayTotal,
+          totalAmount: Math.max(0, displayTotal),
           depositAmount: parseFloat(form.depositAmount || "0"),
           discountAmount: parseFloat(form.discountAmount || "0"),
           surcharges: cleanedSurcharges,
@@ -1132,10 +1132,19 @@ function EditBookingModal({ booking, onSuccess, onCancel }: {
     (booking.surcharges ?? []).map((s, i) => ({ id: String(i), name: s.name, amount: s.amount }))
   );
   const [deductions, setDeductions] = useState<DeductionItem[]>(booking.deductions ?? []);
+  const [manualTotalOverride, setManualTotalOverride] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
+  // Calculate base amount: original totalAmount − original surcharges + original deductions
+  const originalSurchargesTotal = (booking.surcharges ?? []).reduce((s, i) => s + (i.amount || 0), 0);
+  const originalDeductionsTotal = (booking.deductions ?? []).reduce((s, d) => s + (d.amount || 0), 0);
+  const baseAmount = booking.totalAmount - originalSurchargesTotal + originalDeductionsTotal;
+
+  // Recalculate total when surcharges or deductions change
   const surchargesTotal = surcharges.reduce((s, i) => s + (i.amount || 0), 0);
   const deductionsTotal = deductions.reduce((s, d) => s + (d.amount || 0), 0);
+  const autoTotal = Math.max(0, baseAmount + surchargesTotal - deductionsTotal);
+  const displayTotal = manualTotalOverride !== "" ? parseFloat(manualTotalOverride) || 0 : autoTotal;
 
   const handleSubmit = async () => {
     if (!form.shootDate) return alert("Vui lòng chọn ngày chụp");
@@ -1147,7 +1156,7 @@ function EditBookingModal({ booking, onSuccess, onCancel }: {
       const cleanedDeductions = deductions
         .filter(d => d.label.trim() && d.amount > 0)
         .map(({ label, amount }) => ({ label, amount }));
-      const totalAmount = parseFloat(form.totalAmount) || 0;
+      const totalAmount = Math.max(0, displayTotal);
       const res = await fetch(`${BASE}/api/bookings/${booking.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -1220,10 +1229,17 @@ function EditBookingModal({ booking, onSuccess, onCancel }: {
           <Input
             type="number"
             className="h-8 w-40 text-right text-sm font-bold"
-            value={form.totalAmount}
-            onChange={e => setForm(f => ({ ...f, totalAmount: e.target.value }))}
+            placeholder={String(autoTotal > 0 ? autoTotal : "")}
+            value={manualTotalOverride !== "" ? manualTotalOverride : autoTotal > 0 ? String(autoTotal) : ""}
+            onChange={e => setManualTotalOverride(e.target.value)}
           />
         </div>
+        {manualTotalOverride !== "" && autoTotal > 0 && parseFloat(manualTotalOverride) !== autoTotal && (
+          <p className="text-[10px] text-amber-600 text-right">
+            Tự nhập. Tự động: {formatVND(autoTotal)}
+            <button className="ml-1.5 underline" onClick={() => setManualTotalOverride("")}>Khôi phục</button>
+          </p>
+        )}
         <div className="flex justify-between items-center">
           <span className="text-sm text-muted-foreground">Giảm giá</span>
           <Input type="number" className="h-8 w-40 text-right text-sm" placeholder="0" value={form.discountAmount} onChange={e => setForm(f => ({ ...f, discountAmount: e.target.value }))} />

@@ -493,9 +493,11 @@ router.put("/bookings/:id", async (req, res) => {
   if (!oldBooking) return res.status(404).json({ error: "Không tìm thấy đơn hàng" });
   const oldStatus = oldBooking.status;
 
-  // Task #55: enforce deductions = [] for parent contracts (checked from DB, not body)
-  if (deductions !== undefined) {
-    updateData.deductions = oldBooking.isParentContract ? [] : sanitizeDeductions(deductions);
+  // Task #55: enforce deductions = [] for parent contracts (always, regardless of body)
+  if (oldBooking.isParentContract) {
+    updateData.deductions = [];
+  } else if (deductions !== undefined) {
+    updateData.deductions = sanitizeDeductions(deductions);
   }
 
   // Run all changes in a single DB transaction: deposit payment upsert + booking update + recalculate
