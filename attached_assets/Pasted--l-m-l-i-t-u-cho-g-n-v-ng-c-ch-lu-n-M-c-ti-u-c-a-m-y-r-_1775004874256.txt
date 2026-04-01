@@ -1,0 +1,197 @@
+Ừ, làm lại từ đầu cho gọn và đúng cách luôn.
+Mục tiêu của mày rất rõ rồi:
+	•	Admin vào
+	•	chọn nhân viên để đóng vai
+	•	mô đun nào muốn cho xem thì bật con mắt
+	•	mô đun nào không cho xem thì tắt con mắt
+	•	xong
+
+👉 Tao chốt luôn: đây là layout đẹp nhất và dễ dùng nhất cho block “đóng vai nhân viên + phân quyền”.
+
+Cách làm đúng nhất
+
+Chia làm 2 khu rõ ràng
+
+Khu 1: Chọn nhân viên để đóng vai
+
+Nằm ngay dưới avatar admin.
+
+Hiển thị như này:
+
+Đang đăng nhập: Admin
+Đang xem với vai trò: Admin
+
+Bên dưới có nút lớn:
+
+Chọn nhân viên để xem thử
+
+Bấm vào mở 1 danh sách:
+	•	ô tìm kiếm tên nhân viên
+	•	danh sách xếp theo tên A-Z
+	•	mỗi dòng:
+	•	tên nhân viên
+	•	vai trò nhỏ bên dưới
+	•	trạng thái đang làm / nghỉ
+
+Ví dụ:
+	•	Lý Phước Trung — Chụp ảnh
+	•	Diệu Mai — Makeup
+	•	Hằng — Sale
+	•	Phúc — Photoshop
+
+Khi bấm vào ai:
+	•	chuyển sang chế độ giả lập người đó
+	•	hiện dòng:
+Đang xem với vai trò: Lý Phước Trung
+	•	có nút:
+Thoát giả lập
+
+⸻
+
+Khu 2: Phân quyền bằng con mắt
+
+Ngay dưới phần chọn nhân viên.
+
+Tên block nên là:
+
+Phân quyền mô đun cho nhân viên này
+
+Mỗi mô đun là 1 dòng, cực đơn giản:
+	•	Tổng quan …….. 👁
+	•	Lịch chụp …….. 👁
+	•	Khách hàng ……. 👁
+	•	CRM Leads …….. 👁
+	•	Đơn hàng ……… 👁
+	•	Thu tiền ……… 👁
+	•	Chi tiền ……… 👁
+	•	Doanh thu & Lợi nhuận …. 👁
+	•	Kho váy ………. 👁
+	•	Hợp đồng ……… 👁
+	•	Bảng giá ……… 👁
+	•	Nhân viên …….. 👁
+	•	Chấm công …….. 👁
+	•	Photoshop Jobs … 👁
+
+Ý nghĩa:
+	•	mắt mở = được xem
+	•	mắt tắt = không được xem
+
+👉 Không cần giải thích nhiều, nhìn là hiểu.
+
+Cách dùng thực tế
+
+Luồng chuẩn
+
+Bước 1
+
+Admin vào tài khoản admin
+
+Bước 2
+
+Chọn nhân viên muốn kiểm tra
+Ví dụ: Trung
+
+Bước 3
+
+Bên dưới hiện danh sách mô đun
+Admin chỉ cần:
+	•	bật mắt module nào muốn cho Trung xem
+	•	tắt mắt module nào không muốn Trung xem
+
+Bước 4
+
+Bấm Lưu quyền
+
+Bước 5
+
+Nếu muốn test thật:
+vẫn đang ở chế độ giả lập Trung, nhìn sidebar là biết ngay Trung thấy cái gì
+
+👉 Đây là cách nhanh nhất, trực quan nhất, không lú.
+
+Layout tao khuyên
+
+Trên mobile
+
+Làm theo thứ tự dọc:
+	1.	Card tài khoản hiện tại
+	2.	Card chọn nhân viên để giả lập
+	3.	Card phân quyền mô đun
+	4.	Nút Lưu quyền
+
+Trên desktop
+
+Chia 2 cột:
+
+Cột trái
+	•	chọn nhân viên
+	•	thông tin nhân viên đang giả lập
+
+Cột phải
+	•	danh sách mô đun + icon con mắt
+
+👉 Desktop nhìn sẽ sang hơn, mobile vẫn dễ bấm.
+
+Quan trọng: đừng làm rối
+
+Không nên
+	•	chia theo role trước
+	•	nhóm “nhân viên chụp / makeup / sale” ở menu giả lập
+	•	bắt admin đi qua nhiều bước
+	•	dùng checkbox chữ nhỏ khó bấm
+
+Nên
+	•	chọn người trước
+	•	bật tắt mô đun sau
+	•	nhìn một phát hiểu ngay
+
+Tao chốt UI chuẩn cho mày
+
+Phần đầu
+
+Chế độ quản trị
+Admin đang dùng
+
+Xem thử vai trò nhân viên
+[ Ô tìm tên nhân viên… ]
+
+Danh sách:
+	•	Trung — Chụp ảnh
+	•	Mai — Makeup
+	•	Hằng — Sale
+
+Khi chọn xong:
+
+Đang xem với vai trò: Trung — Chụp ảnh
+[ Thoát giả lập ]
+
+⸻
+
+Phần dưới
+
+Phân quyền mô đun cho Trung
+	•	Tổng quan …….. 👁
+	•	Lịch chụp …….. 👁
+	•	Khách hàng ……. 👁
+	•	CRM Leads …….. 🚫
+	•	Đơn hàng ……… 👁
+	•	Thu tiền ……… 🚫
+	•	Chi tiền ……… 🚫
+	•	Doanh thu & Lợi nhuận …. 🚫
+	•	Hợp đồng ……… 👁
+
+[ Lưu quyền ]
+
+Rule backend phải đi kèm
+
+Cái này tao nhắc mạnh:
+	•	không chỉ ẩn menu
+	•	mà phải chặn luôn API
+
+Ví dụ tắt mắt payments
+thì:
+	•	không thấy menu Thu tiền
+	•	vào URL cũng bị chặn
+	•	gọi API payments cũng bị 403
+
+Không là nhân viên vẫn lách được.
