@@ -1,0 +1,52 @@
+booking
+#52 - Giảm trừ dịch vụ (Deductions) — Booking Level
+
+What & Why
+
+Thêm trường "Giảm trừ dịch vụ" (deductions) vào mỗi booking — là danh sách nhiều dòng {label, amount}, lưu số dương nhưng được TRỪ ra khi tính toán. Phân biệt rõ với discountAmount (giảm giá chung).
+
+Lưu ý quan trọng về công thức: Hệ thống hiện tại đã lưu totalAmount = basePrice + surcharges trong DB. Vì vậy khi thêm deductions không được cộng lại surcharges, tránh tính hai lần.
+
+Công thức đúng:
+
+effectiveTotal = totalAmount - sum(deductions)
+remaining = max(0, totalAmount - sum(deductions) - discountAmount - paidAmount)
+grossProfit / estimatedProfit dùng (totalAmount - sum(deductions)) làm doanh thu
+Done looks like
+
+Booking form và booking detail có block "Giảm trừ dịch vụ": danh sách dòng {nhãn, số tiền}, hiển thị số âm (màu đỏ), nút thêm/xoá.
+effectiveTotal = totalAmount - sum(deductions) — KHÔNG cộng lại surcharges.
+remaining = max(0, effectiveTotal - discountAmount - paidAmount) đúng ở cả frontend và backend.
+grossProfit / estimatedProfit phản ánh effectiveTotal mới.
+Booking cũ không có deductions mặc định [], không vỡ dữ liệu cũ.
+Hóa đơn / PDF liệt kê từng dòng deduction với dấu trừ và tổng giảm trừ rõ ràng.
+Dashboard và revenue tính toán đúng với công thức mới.
+Out of scope
+
+Deductions ở cấp từng service item — chỉ làm ở booking-level để tránh vỡ logic multi-service.
+Thay đổi logic discountAmount — vẫn là giảm giá riêng, không gộp vào deductions.
+Thay đổi UI trang payments (chỉ cần tính đúng remaining, không thêm UI mới ở đó).
+Migration dữ liệu cũ ngoài việc default deductions = [].
+Tasks
+
+DB schema — thêm cột deductions — Thêm cột deductions kiểu JSONB vào bookingsTable trong schema Drizzle, default []. Chạy migration. Cập nhật các Zod/type liên quan trong lib/db.
+API — xử lý deductions trong create/update/get — Cập nhật POST /bookings và PUT /bookings/:id để nhận, lưu và trả về deductions. Cập nhật công thức tính remainingAmount trong backend: remaining = max(0, totalAmount - sum(deductions) - discountAmount - paidAmount) Lưu ý: totalAmount đã bao gồm surcharges, tuyệt đối không cộng lại. Cập nhật các route dashboard và revenue nếu chúng tính effectiveTotal hay profit.
+UI — DeductionEditor component — Tạo component deduction-editor.tsx tương tự surcharge-editor.tsx: danh sách dòng {label, amount}, hiển thị amount dạng số âm (màu đỏ), nút thêm/xoá dòng, tổng giảm trừ ở dưới. Tích hợp vào booking form (tạo/sửa) và booking detail panel.
+Frontend — cập nhật tất cả công thức tính — Trong bookings.tsx, sửa:
+effectiveTotal = totalAmount - sum(deductions) (KHÔNG cộng surcharges — totalAmount đã bao gồm rồi).
+effectiveRemaining = max(0, effectiveTotal - discountAmount - paidAmount).
+grossProfit tính từ effectiveTotal. Đảm bảo tổng aggregate trong danh sách booking (cột "Còn nợ", "Tổng") cũng đúng.
+Hóa đơn / PDF / Contract — Trong contracts.tsx và template PDF, thêm phần "Giảm trừ dịch vụ" liệt kê từng dòng deduction (hiển thị âm), tổng giảm trừ, và cập nhật tổng cuối cùng theo công thức mới.
+Relevant files
+
+lib/db/src/schema/bookings.ts
+artifacts/api-server/src/routes/bookings.ts
+artifacts/api-server/src/routes/dashboard.ts
+artifacts/api-server/src/routes/revenue.ts
+artifacts/api-server/src/routes/contracts.ts
+artifacts/amazing-studio/src/pages/bookings.tsx
+artifacts/amazing-studio/src/pages/revenue.tsx
+artifacts/amazing-studio/src/pages/dashboard.tsx
+artifacts/amazing-studio/src/pages/contracts.tsx
+artifacts/amazing-studio/src/pages/payments.tsx
+artifacts/amazing-studio/src/components/surcharge-editor.tsx
