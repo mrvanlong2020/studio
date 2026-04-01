@@ -101,7 +101,7 @@ function AvatarCircle({ name, avatar, size = "md" }: { name: string; avatar?: st
 
 export default function CustomersPage() {
   const qc = useQueryClient();
-  const { isAdmin, token } = useStaffAuth();
+  const { effectiveIsAdmin, token } = useStaffAuth();
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -340,7 +340,7 @@ export default function CustomersPage() {
                       <button onClick={e => { e.stopPropagation(); openEdit(c); }} className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-primary transition-colors">
                         <Edit className="w-3.5 h-3.5" />
                       </button>
-                      {isAdmin && (
+                      {effectiveIsAdmin && (
                         <button onClick={e => { e.stopPropagation(); if (confirm("Xóa khách hàng này?")) deleteMutation.mutate(c.id); }} className="p-1.5 hover:bg-destructive/10 rounded-lg text-muted-foreground hover:text-destructive transition-colors">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
