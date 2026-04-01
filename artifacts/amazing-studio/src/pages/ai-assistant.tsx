@@ -88,22 +88,35 @@ export default function AiAssistantPage() {
           if (!line.startsWith("data: ")) continue;
           const data = line.slice(6).trim();
           if (!data) continue;
+          let parsed: Record<string, unknown> | null = null;
           try {
-            const parsed = JSON.parse(data) as Record<string, unknown>;
-            if (parsed.done) break;
-            if (parsed.error) throw new Error(parsed.error as string);
-            if (parsed.content) {
-              const chunk = parsed.content as string;
-              setMessages(prev => {
-                const updated = [...prev];
-                const last = updated[updated.length - 1];
-                if (last.role === "ai") {
-                  updated[updated.length - 1] = { ...last, content: last.content + chunk };
-                }
-                return updated;
-              });
-            }
-          } catch { /* skip malformed chunk */ }
+            parsed = JSON.parse(data) as Record<string, unknown>;
+          } catch { continue; } // skip malformed JSON
+          if (!parsed) continue;
+          if (parsed.done) break;
+          if (parsed.error) {
+            // Surface server-side errors in the assistant bubble
+            setMessages(prev => {
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
+              if (last.role === "ai") {
+                updated[updated.length - 1] = { ...last, content: `❌ ${parsed!.error as string}` };
+              }
+              return updated;
+            });
+            break;
+          }
+          if (parsed.content) {
+            const chunk = parsed.content as string;
+            setMessages(prev => {
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
+              if (last.role === "ai") {
+                updated[updated.length - 1] = { ...last, content: last.content + chunk };
+              }
+              return updated;
+            });
+          }
         }
       }
     } catch (err: unknown) {
