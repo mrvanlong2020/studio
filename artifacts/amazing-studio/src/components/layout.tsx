@@ -15,7 +15,7 @@ import StaffAvatar from "./StaffAvatar";
 
 // ─── Navigation Items ──────────────────────────────────────────────────────────
 const ALL_NAV_ITEMS = [
-  { href: "/",                label: "Tổng quan",           icon: LayoutDashboard, adminOnly: true  },
+  { href: "/dashboard",       label: "Tổng quan",           icon: LayoutDashboard, adminOnly: true  },
   { href: "/my-profile",      label: "Hồ sơ của tôi",       icon: User,            adminOnly: false },
   { href: "/calendar",        label: "Lịch chụp",            icon: CalendarDays,    adminOnly: false },
   { href: "/customers",       label: "Khách hàng",           icon: Users,           adminOnly: false },

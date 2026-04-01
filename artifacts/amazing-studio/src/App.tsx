@@ -52,7 +52,8 @@ function Router() {
   return (
     <Layout>
       <Switch>
-        <Route path="/" component={() => <AdminRoute component={Dashboard} />} />
+        <Route path="/" component={() => <Redirect to="/calendar" />} />
+        <Route path="/dashboard" component={() => <AdminRoute component={Dashboard} />} />
         <Route path="/calendar" component={CalendarPage} />
         <Route path="/tasks" component={TasksPage} />
         <Route path="/customers" component={CustomersPage} />
