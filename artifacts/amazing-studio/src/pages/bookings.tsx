@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { ServiceSearchBox, type ServiceOption } from "@/components/service-search-box";
 import { SurchargeEditor, type SurchargeItem } from "@/components/surcharge-editor";
+import { DeductionEditor, type DeductionItem } from "@/components/deduction-editor";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -45,6 +46,7 @@ type Booking = {
   totalAmount: number; depositAmount: number; paidAmount: number; discountAmount: number; remainingAmount: number;
   totalExpenses: number; grossProfit: number; internalNotes?: string; notes?: string;
   surcharges: { name: string; amount: number }[];
+  deductions: DeductionItem[];
   payments: Payment[]; expenses: Expense[]; tasks: Task[];
   assignedStaff: number[]; createdAt: string;
 };
@@ -82,6 +84,7 @@ export default function BookingsPage() {
   const [upgradeForm, setUpgradeForm] = useState({ newPackageName: "", newPrice: "", notes: "" });
   const [showReschedule, setShowReschedule] = useState(false);
   const [rescheduleForm, setRescheduleForm] = useState({ newDate: "", newTime: "", reason: "" });
+  const [showEditBooking, setShowEditBooking] = useState(false);
   const token = localStorage.getItem("amazingStudioToken_v2");
 
   const { data: bookings = [], isLoading } = useQuery<SimpleBooking[]>({
@@ -181,9 +184,8 @@ export default function BookingsPage() {
     count: bookings.length,
   };
 
-  const effectiveTotal = detail
-    ? detail.totalAmount + (detail.surcharges ?? []).reduce((s, i) => s + i.amount, 0)
-    : 0;
+  // totalAmount is already the final amount (base + surcharges − deductions), do NOT re-add surcharges
+  const effectiveTotal = detail ? detail.totalAmount : 0;
   const effectiveRemaining = detail
     ? Math.max(0, effectiveTotal - (detail.discountAmount ?? 0) - (detail.paidAmount ?? 0))
     : 0;
@@ -307,6 +309,9 @@ export default function BookingsPage() {
                         <Select value={detail.status} onChange={e => updateStatus.mutate({ id: detail.id, status: e.target.value })} className="text-xs h-8 py-1">
                           {Object.entries(STATUS_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                         </Select>
+                        <button onClick={() => setShowEditBooking(true)} className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-primary" title="Sửa đơn hàng">
+                          <Edit2 className="w-4 h-4" />
+                        </button>
                         <button onClick={() => setSelectedId(null)} className="lg:hidden p-1.5 hover:bg-muted rounded-lg">
                           <X className="w-4 h-4" />
                         </button>
@@ -611,14 +616,36 @@ export default function BookingsPage() {
                         {/* Debt summary */}
                         <div className="rounded-xl border p-3 bg-muted/20">
                           <div className="space-y-1.5 text-sm">
-                            <div className="flex justify-between"><span className="text-muted-foreground">Tổng đơn hàng (gốc)</span><span className="font-semibold">{formatVND(detail.totalAmount)}</span></div>
-                            {(detail.surcharges ?? []).length > 0 && (detail.surcharges ?? []).map((sc, idx) => (
-                              <div key={idx} className="flex justify-between"><span className="text-muted-foreground">Phụ thu: {sc.name}</span><span>+{formatVND(sc.amount)}</span></div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Tổng đơn hàng</span>
+                              <span className="font-semibold">{formatVND(detail.totalAmount)}</span>
+                            </div>
+                            {(detail.deductions ?? []).map((d, idx) => (
+                              <div key={idx} className="flex justify-between">
+                                <span className="text-muted-foreground">Giảm trừ dịch vụ: {d.label}</span>
+                                <span className="text-red-500">−{formatVND(d.amount)}</span>
+                              </div>
                             ))}
-                            {(detail.surcharges ?? []).length > 0 && <div className="flex justify-between"><span className="text-muted-foreground font-medium">Tổng cộng</span><span className="font-semibold">{formatVND(effectiveTotal)}</span></div>}
-                            {detail.discountAmount > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Giảm giá</span><span className="text-green-600">-{formatVND(detail.discountAmount)}</span></div>}
-                            <div className="flex justify-between"><span className="text-muted-foreground">Đã thanh toán</span><span className="text-green-600 font-semibold">{formatVND(detail.paidAmount)}</span></div>
-                            <div className="flex justify-between border-t pt-1.5"><span className="font-bold">Còn lại</span><span className={`font-bold text-base ${effectiveRemaining > 0 ? "text-red-600" : "text-green-600"}`}>{formatVND(effectiveRemaining)}</span></div>
+                            {(detail.deductions ?? []).reduce((s, d) => s + (d.amount || 0), 0) > 0 && (
+                              <div className="flex justify-between font-medium">
+                                <span className="text-muted-foreground">Tổng giảm trừ dịch vụ</span>
+                                <span className="text-red-500">−{formatVND((detail.deductions ?? []).reduce((s, d) => s + (d.amount || 0), 0))}</span>
+                              </div>
+                            )}
+                            {detail.discountAmount > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Giảm giá</span>
+                                <span className="text-green-600">−{formatVND(detail.discountAmount)}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Đã thanh toán</span>
+                              <span className="text-green-600 font-semibold">{formatVND(detail.paidAmount)}</span>
+                            </div>
+                            <div className="flex justify-between border-t pt-1.5">
+                              <span className="font-bold">Còn lại</span>
+                              <span className={`font-bold text-base ${effectiveRemaining > 0 ? "text-red-600" : "text-green-600"}`}>{formatVND(effectiveRemaining)}</span>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -734,6 +761,26 @@ export default function BookingsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Booking Modal */}
+      {detail && (
+        <Dialog open={showEditBooking} onOpenChange={setShowEditBooking}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Sửa đơn hàng — {detail.orderCode}</DialogTitle>
+            </DialogHeader>
+            <EditBookingModal
+              booking={detail}
+              onSuccess={() => {
+                setShowEditBooking(false);
+                qc.invalidateQueries({ queryKey: ["booking", selectedId] });
+                qc.invalidateQueries({ queryKey: ["bookings"] });
+              }}
+              onCancel={() => setShowEditBooking(false)}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Lightbox — ảnh concept */}
       {previewImg && (
@@ -884,13 +931,15 @@ function CreateBookingForm({ customers, onSuccess, onCancel }: {
   });
   const [selectedService, setSelectedService] = useState<ServiceOption | null>(null);
   const [surcharges, setSurcharges] = useState<SurchargeItem[]>([]);
+  const [deductions, setDeductions] = useState<DeductionItem[]>([]);
   const [manualTotal, setManualTotal] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [showNewCustomer, setShowNewCustomer] = useState(false);
 
-  // Auto-compute total from service price + surcharges
+  // Auto-compute total from service price + surcharges − deductions
   const surchargesTotal = surcharges.reduce((s, i) => s + (i.amount || 0), 0);
-  const autoTotal = (selectedService?.price ?? 0) + surchargesTotal;
+  const deductionsTotal = deductions.reduce((s, d) => s + (d.amount || 0), 0);
+  const autoTotal = Math.max(0, (selectedService?.price ?? 0) + surchargesTotal - deductionsTotal);
   const displayTotal = manualTotal !== "" ? parseFloat(manualTotal) || 0 : autoTotal;
 
   // When service changes, clear manual total so auto takes over
@@ -905,6 +954,9 @@ function CreateBookingForm({ customers, onSuccess, onCancel }: {
       const cleanedSurcharges = surcharges
         .filter(s => s.name.trim() && s.amount > 0)
         .map(({ name, amount }) => ({ name, amount }));
+      const cleanedDeductions = deductions
+        .filter(d => d.label.trim() && d.amount > 0)
+        .map(({ label, amount }) => ({ label, amount }));
       await fetch(`${BASE}/api/bookings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -916,6 +968,7 @@ function CreateBookingForm({ customers, onSuccess, onCancel }: {
           depositAmount: parseFloat(form.depositAmount || "0"),
           discountAmount: parseFloat(form.discountAmount || "0"),
           surcharges: cleanedSurcharges,
+          deductions: cleanedDeductions,
           includedRetouchedPhotosSnapshot: selectedService?.includedRetouchedPhotos ?? 0,
         }),
       });
@@ -987,6 +1040,11 @@ function CreateBookingForm({ customers, onSuccess, onCancel }: {
         <SurchargeEditor value={surcharges} onChange={setSurcharges} />
       </div>
 
+      {/* Giảm trừ dịch vụ */}
+      <div className="p-3 bg-red-50/40 border border-red-200/60 rounded-xl">
+        <DeductionEditor deductions={deductions} onChange={setDeductions} />
+      </div>
+
       {/* Địa điểm */}
       <div><label className="text-xs font-medium text-muted-foreground">Địa điểm</label><Input placeholder="Địa điểm chụp..." value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} /></div>
 
@@ -1002,6 +1060,12 @@ function CreateBookingForm({ customers, onSuccess, onCancel }: {
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Phụ thu / phát sinh</span>
             <span className="font-medium text-amber-600">+{formatVND(surchargesTotal)}</span>
+          </div>
+        )}
+        {deductionsTotal > 0 && (
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Giảm trừ dịch vụ</span>
+            <span className="font-medium text-red-600">−{formatVND(deductionsTotal)}</span>
           </div>
         )}
         <div className="flex justify-between items-center border-t border-border/50 pt-2">
@@ -1042,6 +1106,141 @@ function CreateBookingForm({ customers, onSuccess, onCancel }: {
 
       <div className="flex gap-2 pt-1">
         <Button onClick={handleSubmit} disabled={loading} className="flex-1">{loading ? "Đang tạo..." : "Tạo đơn hàng"}</Button>
+        <Button variant="outline" onClick={onCancel}>Hủy</Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── EditBookingModal ─────────────────────────────────────────────────────────
+function EditBookingModal({ booking, onSuccess, onCancel }: {
+  booking: Booking;
+  onSuccess: () => void;
+  onCancel: () => void;
+}) {
+  const [form, setForm] = useState({
+    shootDate: booking.shootDate || "",
+    shootTime: booking.shootTime?.slice(0, 5) || "08:00",
+    location: booking.location || "",
+    packageType: booking.packageType || "",
+    totalAmount: String(booking.totalAmount),
+    discountAmount: String(booking.discountAmount || 0),
+    notes: booking.notes || "",
+    internalNotes: booking.internalNotes || "",
+  });
+  const [surcharges, setSurcharges] = useState<SurchargeItem[]>(
+    (booking.surcharges ?? []).map((s, i) => ({ id: String(i), name: s.name, amount: s.amount }))
+  );
+  const [deductions, setDeductions] = useState<DeductionItem[]>(booking.deductions ?? []);
+  const [loading, setLoading] = useState(false);
+
+  const surchargesTotal = surcharges.reduce((s, i) => s + (i.amount || 0), 0);
+  const deductionsTotal = deductions.reduce((s, d) => s + (d.amount || 0), 0);
+
+  const handleSubmit = async () => {
+    if (!form.shootDate) return alert("Vui lòng chọn ngày chụp");
+    setLoading(true);
+    try {
+      const cleanedSurcharges = surcharges
+        .filter(s => s.name.trim() && s.amount > 0)
+        .map(({ name, amount }) => ({ name, amount }));
+      const cleanedDeductions = deductions
+        .filter(d => d.label.trim() && d.amount > 0)
+        .map(({ label, amount }) => ({ label, amount }));
+      const totalAmount = parseFloat(form.totalAmount) || 0;
+      const res = await fetch(`${BASE}/api/bookings/${booking.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          totalAmount,
+          discountAmount: parseFloat(form.discountAmount || "0"),
+          surcharges: cleanedSurcharges,
+          deductions: cleanedDeductions,
+        }),
+      });
+      if (!res.ok) {
+        const err = res.headers.get("content-type")?.includes("application/json")
+          ? (await res.json()).error : "Lỗi cập nhật đơn hàng";
+        return alert(err);
+      }
+      onSuccess();
+    } catch { alert("Lỗi cập nhật đơn hàng"); } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="space-y-3.5 max-h-[75vh] overflow-y-auto pr-1">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-medium text-muted-foreground">Ngày chụp *</label>
+          <Input type="date" value={form.shootDate} onChange={e => setForm(f => ({ ...f, shootDate: e.target.value }))} />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground">Giờ chụp</label>
+          <Input type="time" value={form.shootTime} onChange={e => setForm(f => ({ ...f, shootTime: e.target.value }))} />
+        </div>
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-muted-foreground">Gói dịch vụ</label>
+        <Input placeholder="Tên gói dịch vụ..." value={form.packageType} onChange={e => setForm(f => ({ ...f, packageType: e.target.value }))} />
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-muted-foreground">Địa điểm</label>
+        <Input placeholder="Địa điểm chụp..." value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} />
+      </div>
+
+      {/* Phụ thu */}
+      <div className="p-3 bg-amber-50/60 border border-amber-200/60 rounded-xl">
+        <SurchargeEditor value={surcharges} onChange={setSurcharges} />
+      </div>
+
+      {/* Giảm trừ dịch vụ */}
+      <div className="p-3 bg-red-50/40 border border-red-200/60 rounded-xl">
+        <DeductionEditor deductions={deductions} onChange={setDeductions} />
+      </div>
+
+      {/* Tổng tiền */}
+      <div className="bg-muted/30 rounded-xl p-3 space-y-2 border border-border/50">
+        {surchargesTotal > 0 && (
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Phụ thu</span>
+            <span className="font-medium text-amber-600">+{formatVND(surchargesTotal)}</span>
+          </div>
+        )}
+        {deductionsTotal > 0 && (
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Giảm trừ dịch vụ</span>
+            <span className="font-medium text-red-600">−{formatVND(deductionsTotal)}</span>
+          </div>
+        )}
+        <div className="flex justify-between items-center border-t border-border/50 pt-2">
+          <span className="text-sm font-semibold">Tổng tiền *</span>
+          <Input
+            type="number"
+            className="h-8 w-40 text-right text-sm font-bold"
+            value={form.totalAmount}
+            onChange={e => setForm(f => ({ ...f, totalAmount: e.target.value }))}
+          />
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-muted-foreground">Giảm giá</span>
+          <Input type="number" className="h-8 w-40 text-right text-sm" placeholder="0" value={form.discountAmount} onChange={e => setForm(f => ({ ...f, discountAmount: e.target.value }))} />
+        </div>
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-muted-foreground">Ghi chú khách</label>
+        <Textarea rows={2} placeholder="Ghi chú cho khách..." value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+      </div>
+      <div>
+        <label className="text-xs font-medium text-muted-foreground">Ghi chú nội bộ</label>
+        <Textarea rows={2} placeholder="Ghi chú nội bộ..." value={form.internalNotes} onChange={e => setForm(f => ({ ...f, internalNotes: e.target.value }))} />
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <Button onClick={handleSubmit} disabled={loading} className="flex-1">{loading ? "Đang lưu..." : "Lưu thay đổi"}</Button>
         <Button variant="outline" onClick={onCancel}>Hủy</Button>
       </div>
     </div>

@@ -22,9 +22,12 @@ router.get("/contracts", async (req, res) => {
       expiresAt: contractsTable.expiresAt,
       notes: contractsTable.notes,
       createdAt: contractsTable.createdAt,
+      bookingDeductions: bookingsTable.deductions,
+      bookingSurcharges: bookingsTable.surcharges,
     })
     .from(contractsTable)
     .innerJoin(customersTable, eq(contractsTable.customerId, customersTable.id))
+    .leftJoin(bookingsTable, eq(contractsTable.bookingId, bookingsTable.id))
     .orderBy(desc(contractsTable.createdAt));
 
   let filtered = rows;
@@ -63,9 +66,12 @@ router.get("/contracts/:id", async (req, res) => {
       fileUrl: contractsTable.fileUrl,
       notes: contractsTable.notes,
       createdAt: contractsTable.createdAt,
+      bookingDeductions: bookingsTable.deductions,
+      bookingSurcharges: bookingsTable.surcharges,
     })
     .from(contractsTable)
     .innerJoin(customersTable, eq(contractsTable.customerId, customersTable.id))
+    .leftJoin(bookingsTable, eq(contractsTable.bookingId, bookingsTable.id))
     .where(eq(contractsTable.id, id));
   if (!row) return res.status(404).json({ error: "Không tìm thấy hợp đồng" });
   res.json(row);

@@ -6,6 +6,15 @@ import { computeBookingEarnings } from "./job-earnings";
 
 const router: IRouter = Router();
 
+// ─── Task #55: Sanitize deductions ───────────────────────────────────────────
+type DeductionItem = { label: string; amount: number };
+function sanitizeDeductions(raw: unknown): DeductionItem[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as DeductionItem[])
+    .filter(d => d?.label?.trim() && d.amount > 0)
+    .map(({ label, amount }) => ({ label: String(label).trim(), amount: Number(amount) }));
+}
+
 // ─── Select fields shared across GET queries ──────────────────────────────────
 const bookingFields = {
   id: bookingsTable.id,
@@ -35,6 +44,7 @@ const bookingFields = {
   includedRetouchedPhotosSnapshot: bookingsTable.includedRetouchedPhotosSnapshot,
   servicePackageId: bookingsTable.servicePackageId,
   requiredRoles: bookingsTable.requiredRoles,
+  deductions: bookingsTable.deductions,
   createdAt: bookingsTable.createdAt,
 };
 
@@ -158,6 +168,8 @@ router.post("/bookings", async (req, res) => {
     subServices,
     // Task #24: link to package (tracking only)
     servicePackageId,
+    // Task #55: deductions
+    deductions,
   } = req.body;
 
   const depMethod    = depositPaymentMethod || "cash";
@@ -185,6 +197,7 @@ router.post("/bookings", async (req, res) => {
         paidAmount: String(depositAmount || 0),
         items: [],
         surcharges: surcharges || [],
+        deductions: [],
         notes: notes || null,
         internalNotes: internalNotes || null,
         assignedStaff: assignedStaff || {},
@@ -227,6 +240,7 @@ router.post("/bookings", async (req, res) => {
           paidAmount: "0",
           items: sub.items || [],
           surcharges: sub.surcharges || [],
+          deductions: sanitizeDeductions(sub.deductions),
           notes: sub.notes || null,
           internalNotes: null,
           assignedStaff: sub.assignedStaff || {},
@@ -285,6 +299,7 @@ router.post("/bookings", async (req, res) => {
       paidAmount: String(depositAmount || 0),
       items: snapshotItems,
       surcharges: surcharges || [],
+      deductions: isParentContract ? [] : sanitizeDeductions(deductions),
       notes,
       internalNotes,
       assignedStaff: assignedStaff || [],
@@ -444,6 +459,8 @@ router.put("/bookings/:id", async (req, res) => {
     totalAmount, depositAmount, discountAmount, items, surcharges, notes, internalNotes,
     assignedStaff, parentId, serviceLabel, isParentContract, photoCount, includedRetouchedPhotosSnapshot,
     servicePackageId,
+    // Task #55: deductions
+    deductions,
   } = req.body;
 
   const updateData: Record<string, unknown> = {};
@@ -468,13 +485,18 @@ router.put("/bookings/:id", async (req, res) => {
   if (includedRetouchedPhotosSnapshot !== undefined) updateData.includedRetouchedPhotosSnapshot = parseInt(String(includedRetouchedPhotosSnapshot)) || 0;
   if (servicePackageId !== undefined) updateData.servicePackageId = servicePackageId ? parseInt(String(servicePackageId)) : null;
 
-  // Check booking exists and get current status
+  // Check booking exists and get current status + isParentContract
   const [oldBooking] = await db
-    .select({ status: bookingsTable.status, customerId: bookingsTable.customerId })
+    .select({ status: bookingsTable.status, customerId: bookingsTable.customerId, isParentContract: bookingsTable.isParentContract })
     .from(bookingsTable)
     .where(eq(bookingsTable.id, id));
   if (!oldBooking) return res.status(404).json({ error: "Không tìm thấy đơn hàng" });
   const oldStatus = oldBooking.status;
+
+  // Task #55: enforce deductions = [] for parent contracts (checked from DB, not body)
+  if (deductions !== undefined) {
+    updateData.deductions = oldBooking.isParentContract ? [] : sanitizeDeductions(deductions);
+  }
 
   // Run all changes in a single DB transaction: deposit payment upsert + booking update + recalculate
   const client = await pool.connect();
@@ -537,7 +559,7 @@ router.put("/bookings/:id", async (req, res) => {
 
     // ── 4. Build and execute booking UPDATE inside the same transaction ──
     const camelToSnake = (s: string) => s.replace(/([A-Z])/g, "_$1").toLowerCase();
-    const jsonbColumns = new Set(["items", "surcharges", "assigned_staff", "required_roles"]);
+    const jsonbColumns = new Set(["items", "surcharges", "assigned_staff", "required_roles", "deductions"]);
     const entries = Object.entries(updateData);
     const setClauses = entries.map(([k], i) => {
       const col = camelToSnake(k);

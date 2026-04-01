@@ -36,6 +36,8 @@ export const bookingsTable = pgTable("bookings", {
   servicePackageId: integer("service_package_id").references(() => servicePackagesTable.id, { onDelete: "set null" }),
   // Task #22: vai trò bắt buộc cho buổi chụp (VD: ["photographer","makeup","videographer"])
   requiredRoles: jsonb("required_roles").notNull().default([]),
+  // Task #55: Giảm trừ dịch vụ — array of { label: string, amount: number }, amount always positive in DB
+  deductions: jsonb("deductions").notNull().default([]),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

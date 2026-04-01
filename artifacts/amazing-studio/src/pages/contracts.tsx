@@ -46,11 +46,15 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   cancelled: { label: "Đã hủy",      color: "text-red-700",    bg: "bg-red-100 border-red-200",     icon: AlertCircle },
 };
 
+type DeductionItem = { label: string; amount: number };
+
 type Contract = {
   id: number; contractCode: string; bookingId?: number; customerId?: number;
   customerName?: string; bookingCode?: string; title: string; content?: string;
   totalValue: number; status: string; signedAt?: string; expiresAt?: string; notes?: string;
   createdAt: string;
+  bookingDeductions?: DeductionItem[];
+  bookingSurcharges?: { name: string; amount: number }[];
 };
 
 const EMPTY_FORM = {
@@ -124,10 +128,30 @@ function printInvoice(contract: Contract) {
 
   <div style="background:linear-gradient(135deg,#8B1A6B 0%,#6c3483 100%);border-radius:12px;padding:20px 24px;margin-bottom:24px;color:#fff;">
     <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;opacity:0.8;margin-bottom:14px;">💰 Thanh toán</div>
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <span>Tổng giá trị dịch vụ</span>
-      <span style="font-size:22px;font-weight:800;">${fmtVND(contract.totalValue || 0)}</span>
-    </div>
+    ${(() => {
+      const deductions = (contract.bookingDeductions ?? []).filter(d => d.amount > 0);
+      const deductionsTotal = deductions.reduce((s, d) => s + d.amount, 0);
+      if (deductions.length === 0) {
+        return `<div style="display:flex;justify-content:space-between;align-items:center;">
+          <span>Tổng giá trị dịch vụ</span>
+          <span style="font-size:22px;font-weight:800;">${fmtVND(contract.totalValue || 0)}</span>
+        </div>`;
+      }
+      return `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <span>Tổng giá trị dịch vụ</span>
+        <span style="font-size:22px;font-weight:800;">${fmtVND(contract.totalValue || 0)}</span>
+      </div>
+      <div style="border-top:1px solid rgba(255,255,255,0.3);padding-top:10px;margin-top:4px;">
+        ${deductions.map(d => `<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;opacity:0.9;">
+          <span>Giảm trừ dịch vụ: ${d.label}</span>
+          <span>−${fmtVND(d.amount)}</span>
+        </div>`).join("")}
+        <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-top:4px;">
+          <span>Tổng giảm trừ dịch vụ</span>
+          <span>−${fmtVND(deductionsTotal)}</span>
+        </div>
+      </div>`;
+    })()}
   </div>
 
   ${contract.content ? `
