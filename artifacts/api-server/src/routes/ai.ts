@@ -7,6 +7,18 @@ const router: IRouter = Router();
 // Model per spec: gemini-2.0-flash
 const GEMINI_MODEL = "gemini-2.0-flash";
 
+// Rate limiting: 1 request per 3 seconds per user (protect API quota)
+const rateLimitMap = new Map<number, number>();
+const RATE_LIMIT_MS = 3000;
+
+function checkRateLimit(callerId: number): boolean {
+  const now = Date.now();
+  const lastCall = rateLimitMap.get(callerId) ?? 0;
+  if (now - lastCall < RATE_LIMIT_MS) return false;
+  rateLimitMap.set(callerId, now);
+  return true;
+}
+
 function getApiKey() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY chưa được cấu hình");
@@ -129,6 +141,11 @@ router.post("/ai/chat", async (req, res) => {
   try {
     const callerId = verifyToken(req.headers.authorization);
     if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập hoặc phiên hết hạn" });
+
+    // Rate limit: 1 request per 3 seconds per user
+    if (!checkRateLimit(callerId)) {
+      return res.status(429).json({ error: "Đừng spam API! Chờ 3 giây rồi hãy gọi lại." });
+    }
 
     const { messages } = req.body as { messages?: Array<{ role: string; content: string }> };
     if (!Array.isArray(messages) || messages.length === 0) {
