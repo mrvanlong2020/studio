@@ -557,7 +557,6 @@ router.put("/bookings/:id", async (req, res) => {
     const remainingAmount = Math.max(0, effectiveTotalAmount - effectiveDiscountAmount - paidAmount);
 
     updateData.paidAmount    = String(paidAmount);
-    updateData.remainingAmount = String(remainingAmount);
 
     // ── 4. Build and execute booking UPDATE inside the same transaction ──
     const camelToSnake = (s: string) => s.replace(/([A-Z])/g, "_$1").toLowerCase();
