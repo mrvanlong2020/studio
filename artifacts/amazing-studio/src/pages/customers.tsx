@@ -168,7 +168,10 @@ export default function CustomersPage() {
         method: "DELETE",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       }),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
+      qc.setQueryData(["customers", search, sourceFilter], (old: Customer[] | undefined) =>
+        old?.filter(c => c.id !== id) ?? []
+      );
       qc.invalidateQueries({ queryKey: ["customers"] });
       setSelectedId(null);
       setDeleteTarget(null);
@@ -191,7 +194,10 @@ export default function CustomersPage() {
         method: "DELETE",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       }),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
+      qc.setQueryData(["customers", search, sourceFilter], (old: Customer[] | undefined) =>
+        old?.filter(c => c.id !== id) ?? []
+      );
       qc.invalidateQueries({ queryKey: ["customers"] });
       setSelectedId(null);
       setDeleteTarget(null);
