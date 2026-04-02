@@ -173,6 +173,7 @@ export default function CustomersPage() {
         old?.filter(c => c.id !== id) ?? []
       );
       qc.invalidateQueries({ queryKey: ["customers"] });
+      qc.invalidateQueries({ queryKey: ["bookings"] });
       setSelectedId(null);
       setDeleteTarget(null);
       toast.success("Đã xóa khách hàng");
@@ -199,6 +200,7 @@ export default function CustomersPage() {
         old?.filter(c => c.id !== id) ?? []
       );
       qc.invalidateQueries({ queryKey: ["customers"] });
+      qc.invalidateQueries({ queryKey: ["bookings"] });
       setSelectedId(null);
       setDeleteTarget(null);
       setDeleteNeedsForce(false);
