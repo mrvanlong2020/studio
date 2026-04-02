@@ -2879,7 +2879,7 @@ class CalendarErrorBoundary extends Component<{ children: ReactNode }, EBState> 
     return { hasError: true, error };
   }
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("[CalendarPage crash]", error.message, "\n", info.componentStack);
+    console.error("CalendarPage crash:", error, info.componentStack);
   }
   render() {
     if (this.state.hasError) {
