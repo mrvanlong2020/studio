@@ -2924,7 +2924,7 @@ function CalendarPageInner() {
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
   const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
-  const firstDayOfMonth = monthStart.getDay();
+  const firstDayOfMonth = (monthStart.getDay() + 6) % 7;
 
   const monthLunar = useMemo(() => convertSolarToLunar(1, currentDate.getMonth() + 1, currentDate.getFullYear()), [currentDate]);
 
@@ -3143,8 +3143,8 @@ function CalendarPageInner() {
 
         {/* Day-of-week headers */}
         <div className="grid grid-cols-7 border-b border-border/50">
-          {["CN", "T2", "T3", "T4", "T5", "T6", "T7"].map((d, i) => (
-            <div key={d} className={`text-center text-xs font-bold py-2 border-r border-border/50 last:border-r-0 ${i === 0 ? "text-red-500" : i === 6 ? "text-blue-600" : "text-muted-foreground"}`}>{d}</div>
+          {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((d, i) => (
+            <div key={d} className={`text-center text-xs font-bold py-2 border-r border-border/50 last:border-r-0 ${i === 5 ? "text-blue-600" : i === 6 ? "text-red-500" : "text-muted-foreground"}`}>{d}</div>
           ))}
         </div>
 
