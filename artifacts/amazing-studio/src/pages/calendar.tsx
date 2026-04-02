@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect, Component } from "react";
+import type { ReactNode, ErrorInfo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   convertSolarToLunar, getCanChi, getLunarMonthName, getTietKhi,
@@ -185,8 +186,8 @@ function PhoneAutocomplete({ value, onChange, onSelect }: {
 }
 
 // ─── Order line row ────────────────────────────────────────────────────────────
-function fmtVND(n: number) {
-  return n.toLocaleString("vi-VN") + "đ";
+function fmtVND(n: number | null | undefined) {
+  return ((n ?? 0) || 0).toLocaleString("vi-VN") + "đ";
 }
 
 type StaffRate = { staffId: number; role: string; taskKey: string; rate: number | null; rateType: string };
@@ -2699,7 +2700,7 @@ function DayView({
   useEffect(() => {
     const firstBooking = bookings.slice().sort((a, b) => (a.shootTime ?? "").localeCompare(b.shootTime ?? ""))[0];
     const scrollHour = firstBooking
-      ? Math.max(0, parseInt(firstBooking.shootTime ?? "06") - 1)
+      ? Math.max(0, (parseInt(firstBooking.shootTime ?? "06") || 6) - 1)
       : 6;
     scrollRef.current?.scrollTo({ top: scrollHour * HOUR_PX, behavior: "smooth" });
   }, [date, bookings]);
@@ -2867,7 +2868,43 @@ function useViewMode() {
   return { isAdmin, toggle };
 }
 
-export default function CalendarPage() {
+// ─── Error boundary: catches render crashes in CalendarPage, logs stack ────────
+interface EBState { hasError: boolean; error: Error | null }
+class CalendarErrorBoundary extends Component<{ children: ReactNode }, EBState> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error): EBState {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[CalendarPage crash]", error.message, "\n", info.componentStack);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full gap-4 p-8 text-center">
+          <p className="text-destructive font-semibold text-base">Đã có lỗi xảy ra, vui lòng tải lại trang.</p>
+          <button
+            className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold"
+            onClick={() => this.setState({ hasError: false, error: null })}
+          >
+            Thử lại
+          </button>
+          {import.meta.env.DEV && this.state.error && (
+            <pre className="text-left text-xs text-muted-foreground bg-muted rounded p-3 max-w-full overflow-auto max-h-48">
+              {this.state.error.message}
+            </pre>
+          )}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function CalendarPageInner() {
   const [calView, setCalView] = useState<CalView>("month");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -3144,5 +3181,13 @@ export default function CalendarPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function CalendarPage() {
+  return (
+    <CalendarErrorBoundary>
+      <CalendarPageInner />
+    </CalendarErrorBoundary>
   );
 }
