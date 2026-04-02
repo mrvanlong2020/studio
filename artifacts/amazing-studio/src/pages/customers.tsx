@@ -22,6 +22,7 @@ async function fetchJson<T = unknown>(url: string, opts?: RequestInit): Promise<
     try { const j = await res.json(); msg = j.error ?? j.message ?? msg; } catch { /* ignore */ }
     throw new Error(msg);
   }
+  if (res.status === 204 || res.headers.get("content-length") === "0") return undefined as T;
   return res.json() as Promise<T>;
 }
 
@@ -114,6 +115,7 @@ export default function CustomersPage() {
   const phoneDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [phoneDuplicate, setPhoneDuplicate] = useState<{ id: number; name: string; customCode?: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
+  const [deleteNeedsForce, setDeleteNeedsForce] = useState(false);
 
   // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: customers = [], isLoading } = useQuery<Customer[]>({
@@ -169,10 +171,17 @@ export default function CustomersPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["customers"] });
       setSelectedId(null);
+      setDeleteTarget(null);
       toast.success("Đã xóa khách hàng");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Không thể xóa khách hàng");
+      // FK constraint (409) → escalate to force-delete warning inside existing dialog
+      if (error.message.includes("liên kết") || error.message.includes("409")) {
+        setDeleteNeedsForce(true);
+      } else {
+        setDeleteTarget(null);
+        toast.error(error.message || "Không thể xóa khách hàng");
+      }
     },
   });
 
@@ -186,10 +195,12 @@ export default function CustomersPage() {
       qc.invalidateQueries({ queryKey: ["customers"] });
       setSelectedId(null);
       setDeleteTarget(null);
+      setDeleteNeedsForce(false);
       toast.success("Đã xóa khách hàng và toàn bộ dữ liệu liên kết");
     },
     onError: (error: Error) => {
       setDeleteTarget(null);
+      setDeleteNeedsForce(false);
       toast.error(error.message || "Không thể xóa khách hàng");
     },
   });
@@ -653,49 +664,57 @@ export default function CustomersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Cascade delete confirmation dialog ──────────────────────────────── */}
-      <Dialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null); }}>
+      {/* ── Delete confirmation dialog ────────────────────────────────────────── */}
+      <Dialog open={!!deleteTarget} onOpenChange={open => { if (!open) { setDeleteTarget(null); setDeleteNeedsForce(false); } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="text-destructive flex items-center gap-2">
               <Trash2 className="w-5 h-5" /> Xóa khách hàng
             </DialogTitle>
           </DialogHeader>
-          {deleteTarget && (
-            <div className="space-y-4">
-              {(deleteTarget.totalBookings ?? 0) > 0 ? (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 space-y-1">
-                  <p className="font-semibold">Cảnh báo: không thể hoàn tác!</p>
-                  <p>
-                    Khách hàng <span className="font-semibold">{deleteTarget.name}</span> có{" "}
-                    <span className="font-semibold">{deleteTarget.totalBookings} đơn chụp</span> liên kết.
+          {deleteTarget && (() => {
+            const hasLinked = (deleteTarget.totalBookings ?? 0) > 0 || deleteNeedsForce;
+            const isPending = forceDeleteMutation.isPending || deleteMutation.isPending;
+            return (
+              <div className="space-y-4">
+                {hasLinked ? (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 space-y-1">
+                    <p className="font-semibold">Cảnh báo: không thể hoàn tác!</p>
+                    <p>
+                      Khách hàng <span className="font-semibold">{deleteTarget.name}</span>
+                      {(deleteTarget.totalBookings ?? 0) > 0
+                        ? <> có <span className="font-semibold">{deleteTarget.totalBookings} đơn chụp</span> liên kết.</>
+                        : <> có dữ liệu liên kết.</>}
+                    </p>
+                    <p>Xóa sẽ xóa toàn bộ đơn chụp, hợp đồng, thanh toán và lịch sử liên quan.</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Bạn có chắc muốn xóa khách hàng <span className="font-semibold">{deleteTarget.name}</span>?
                   </p>
-                  <p>Xóa sẽ xóa toàn bộ đơn chụp, hợp đồng, thanh toán và lịch sử liên quan.</p>
+                )}
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" size="sm" disabled={isPending} onClick={() => { setDeleteTarget(null); setDeleteNeedsForce(false); }}>
+                    Hủy
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={isPending}
+                    onClick={() => {
+                      if (hasLinked) {
+                        forceDeleteMutation.mutate(deleteTarget.id);
+                      } else {
+                        deleteMutation.mutate(deleteTarget.id);
+                      }
+                    }}
+                  >
+                    {isPending ? "Đang xóa..." : hasLinked ? "Xóa tất cả" : "Xóa"}
+                  </Button>
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Bạn có chắc muốn xóa khách hàng <span className="font-semibold">{deleteTarget.name}</span>?
-                </p>
-              )}
-              <div className="flex gap-2 justify-end">
-                <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)}>
-                  Hủy
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  disabled={forceDeleteMutation.isPending}
-                  onClick={() => forceDeleteMutation.mutate(deleteTarget.id)}
-                >
-                  {forceDeleteMutation.isPending
-                    ? "Đang xóa..."
-                    : (deleteTarget.totalBookings ?? 0) > 0
-                      ? "Xóa tất cả"
-                      : "Xóa"}
-                </Button>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
