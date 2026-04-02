@@ -189,7 +189,39 @@ router.delete("/customers/:id", async (req, res) => {
   if (!callerIsAdmin) return res.status(403).json({ error: "Không có quyền xóa khách hàng" });
 
   const id = parseInt(req.params.id);
-  await db.delete(customersTable).where(eq(customersTable.id, id));
+  const force = req.query.force === "true";
+
+  if (force) {
+    // Cascade delete: remove all linked data in dependency order, then delete customer
+    await pool.query("BEGIN");
+    try {
+      // Children of bookings
+      await pool.query(`DELETE FROM attendance_logs    WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
+      await pool.query(`DELETE FROM booking_change_log WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
+      await pool.query(`DELETE FROM booking_items      WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
+      await pool.query(`DELETE FROM expenses           WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
+      await pool.query(`DELETE FROM payments           WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
+      await pool.query(`DELETE FROM photoshop_jobs     WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
+      await pool.query(`DELETE FROM staff_job_earnings WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
+      await pool.query(`DELETE FROM tasks              WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
+      await pool.query(`DELETE FROM contracts          WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
+      // Children of rentals
+      await pool.query(`DELETE FROM payments           WHERE rental_id  IN (SELECT id FROM rentals  WHERE customer_id = $1)`, [id]);
+      // Direct customer relations
+      await pool.query(`DELETE FROM bookings  WHERE customer_id = $1`, [id]);
+      await pool.query(`DELETE FROM rentals   WHERE customer_id = $1`, [id]);
+      await pool.query(`DELETE FROM contracts WHERE customer_id = $1`, [id]);
+      await pool.query(`DELETE FROM quotes    WHERE customer_id = $1`, [id]);
+      await pool.query(`DELETE FROM customers WHERE id = $1`, [id]);
+      await pool.query("COMMIT");
+    } catch (txErr) {
+      await pool.query("ROLLBACK");
+      throw txErr;
+    }
+  } else {
+    await db.delete(customersTable).where(eq(customersTable.id, id));
+  }
+
   res.status(204).send();
   } catch (err: unknown) {
     // Drizzle wraps PG errors in .cause; check for FK constraint (code 23503)
