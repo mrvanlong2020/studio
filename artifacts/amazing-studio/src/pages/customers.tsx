@@ -684,17 +684,10 @@ export default function CustomersPage() {
                 <Button
                   variant="destructive"
                   size="sm"
-                  disabled={forceDeleteMutation.isPending || deleteMutation.isPending}
-                  onClick={() => {
-                    if ((deleteTarget.totalBookings ?? 0) > 0) {
-                      forceDeleteMutation.mutate(deleteTarget.id);
-                    } else {
-                      deleteMutation.mutate(deleteTarget.id);
-                      setDeleteTarget(null);
-                    }
-                  }}
+                  disabled={forceDeleteMutation.isPending}
+                  onClick={() => forceDeleteMutation.mutate(deleteTarget.id)}
                 >
-                  {(forceDeleteMutation.isPending || deleteMutation.isPending)
+                  {forceDeleteMutation.isPending
                     ? "Đang xóa..."
                     : (deleteTarget.totalBookings ?? 0) > 0
                       ? "Xóa tất cả"

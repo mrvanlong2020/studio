@@ -192,31 +192,34 @@ router.delete("/customers/:id", async (req, res) => {
   const force = req.query.force === "true";
 
   if (force) {
-    // Cascade delete: remove all linked data in dependency order, then delete customer
-    await pool.query("BEGIN");
+    // Cascade delete in a true single-connection transaction
+    const client = await pool.connect();
     try {
+      await client.query("BEGIN");
       // Children of bookings
-      await pool.query(`DELETE FROM attendance_logs    WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
-      await pool.query(`DELETE FROM booking_change_log WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
-      await pool.query(`DELETE FROM booking_items      WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
-      await pool.query(`DELETE FROM expenses           WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
-      await pool.query(`DELETE FROM payments           WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
-      await pool.query(`DELETE FROM photoshop_jobs     WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
-      await pool.query(`DELETE FROM staff_job_earnings WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
-      await pool.query(`DELETE FROM tasks              WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
-      await pool.query(`DELETE FROM contracts          WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
+      await client.query(`DELETE FROM attendance_logs    WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
+      await client.query(`DELETE FROM booking_change_log WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
+      await client.query(`DELETE FROM booking_items      WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
+      await client.query(`DELETE FROM expenses           WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
+      await client.query(`DELETE FROM payments           WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
+      await client.query(`DELETE FROM photoshop_jobs     WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
+      await client.query(`DELETE FROM staff_job_earnings WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
+      await client.query(`DELETE FROM tasks              WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
+      await client.query(`DELETE FROM contracts          WHERE booking_id IN (SELECT id FROM bookings WHERE customer_id = $1)`, [id]);
       // Children of rentals
-      await pool.query(`DELETE FROM payments           WHERE rental_id  IN (SELECT id FROM rentals  WHERE customer_id = $1)`, [id]);
+      await client.query(`DELETE FROM payments           WHERE rental_id  IN (SELECT id FROM rentals  WHERE customer_id = $1)`, [id]);
       // Direct customer relations
-      await pool.query(`DELETE FROM bookings  WHERE customer_id = $1`, [id]);
-      await pool.query(`DELETE FROM rentals   WHERE customer_id = $1`, [id]);
-      await pool.query(`DELETE FROM contracts WHERE customer_id = $1`, [id]);
-      await pool.query(`DELETE FROM quotes    WHERE customer_id = $1`, [id]);
-      await pool.query(`DELETE FROM customers WHERE id = $1`, [id]);
-      await pool.query("COMMIT");
+      await client.query(`DELETE FROM bookings  WHERE customer_id = $1`, [id]);
+      await client.query(`DELETE FROM rentals   WHERE customer_id = $1`, [id]);
+      await client.query(`DELETE FROM contracts WHERE customer_id = $1`, [id]);
+      await client.query(`DELETE FROM quotes    WHERE customer_id = $1`, [id]);
+      await client.query(`DELETE FROM customers WHERE id = $1`, [id]);
+      await client.query("COMMIT");
     } catch (txErr) {
-      await pool.query("ROLLBACK");
+      await client.query("ROLLBACK");
       throw txErr;
+    } finally {
+      client.release();
     }
   } else {
     await db.delete(customersTable).where(eq(customersTable.id, id));
