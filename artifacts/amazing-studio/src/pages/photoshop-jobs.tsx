@@ -1,602 +1,681 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Plus, Search, X, Check, AlertTriangle, Clock, ChevronDown,
-  Edit2, Trash2, Film, Camera, User, Calendar, SortAsc,
-  CheckCircle2, Circle, Loader, AlertCircle, RefreshCw
+  Search, CheckCircle2, AlertTriangle, UserCheck, Camera, Calendar,
+  Clock, User, X, ChevronRight, Loader2, ImageIcon, BarChart3
 } from "lucide-react";
-import { Button, Input, Badge } from "@/components/ui";
+import { useStaffAuth } from "@/contexts/StaffAuthContext";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-type PhotoshopJob = {
-  id: number;
-  jobCode: string;
-  bookingId: number | null;
-  customerName: string;
-  customerPhone: string;
-  serviceName: string;
-  assignedStaffId: number | null;
-  assignedStaffName: string;
-  shootDate: string;
+const token = () => localStorage.getItem("amazingStudioToken_v2");
+const authHeaders = () => ({
+  "Content-Type": "application/json",
+  ...(token() ? { Authorization: `Bearer ${token()}` } : {}),
+});
+const fetchAuth = (url: string, opts?: RequestInit) =>
+  fetch(url, { headers: authHeaders(), ...opts });
+
+type BookingEditRow = {
+  booking_id: number;
+  order_code: string;
+  shoot_date: string;
+  booking_created_at: string;
+  package_type: string;
+  service_label: string;
+  customer_name: string;
+  customer_phone: string;
+  job_id: number | null;
+  job_code: string | null;
+  status: string | null;
+  assigned_staff_id: number | null;
+  assigned_staff_name: string | null;
+  received_file_date: string | null;
+  internal_deadline: string | null;
+  customer_deadline: string | null;
+  total_photos: number | null;
+  done_photos: number | null;
+  progress_percent: number | null;
+  notes: string | null;
+};
+
+type Stats = { myActive: number; myDoneThisMonth: number; unassigned: number };
+type StaffItem = { id: number; name: string; role: string };
+
+type DetailForm = {
+  totalPhotos: string;
+  donePhotos: string;
   receivedFileDate: string;
   internalDeadline: string;
   customerDeadline: string;
-  status: string;
-  progressPercent: number;
-  totalPhotos: number;
-  donePhotos: number;
   notes: string;
-  isActive: boolean;
-  createdAt: string;
-  includedCount: number | null;
-  extraCount: number | null;
-  extraFeeUnitPrice: number;
-  extraFeeTotal: number;
+  assignedStaffId: string;
+  assignedStaffName: string;
 };
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
-  chua_nhan:    { label: "Chưa nhận",     color: "text-slate-600",   bg: "bg-slate-100 dark:bg-slate-800",    icon: Circle },
-  dang_xu_ly:   { label: "Đang xử lý",   color: "text-blue-600",    bg: "bg-blue-100 dark:bg-blue-900/40",   icon: Loader },
-  cho_duyet:    { label: "Chờ duyệt",     color: "text-amber-600",   bg: "bg-amber-100 dark:bg-amber-900/40", icon: Clock },
-  hoan_thanh:   { label: "Hoàn thành",   color: "text-emerald-600", bg: "bg-emerald-100 dark:bg-emerald-900/40", icon: CheckCircle2 },
-};
+// ── Shared helper: định nghĩa "Chưa nhận" dùng thống nhất ở 3 nơi ────────────
+function isUnassigned(row: BookingEditRow): boolean {
+  return !row.job_id || !row.assigned_staff_id || row.status === "chua_nhan";
+}
 
-const ALL_STATUSES = Object.keys(STATUS_CONFIG);
-
-function getDeadlineInfo(deadline: string): { label: string; cls: string } {
-  if (!deadline) return { label: "", cls: "" };
+function getCardUrgency(row: BookingEditRow): "red" | "yellow" | "done" | "normal" {
+  if (row.status === "hoan_thanh") return "done";
+  if (isUnassigned(row)) return "red";
+  if (!row.internal_deadline) return "normal";
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const d = new Date(deadline);
-  const diff = Math.ceil((d.getTime() - today.getTime()) / 86400000);
-  if (diff < 0) return { label: `Trễ ${-diff} ngày`, cls: "text-red-600 bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800" };
-  if (diff === 0) return { label: "Hôm nay!", cls: "text-orange-600 bg-orange-50 border-orange-200 dark:bg-orange-950/30 dark:border-orange-800" };
-  if (diff <= 2) return { label: `Còn ${diff} ngày`, cls: "text-amber-600 bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800" };
-  if (diff <= 5) return { label: `Còn ${diff} ngày`, cls: "text-yellow-600 bg-yellow-50 border-yellow-200" };
-  return { label: `Còn ${diff} ngày`, cls: "text-muted-foreground" };
+  const dl = new Date(row.internal_deadline);
+  const days = Math.ceil((dl.getTime() - today.getTime()) / 86400000);
+  if (days <= 3) return "red";
+  if (days <= 5) return "yellow";
+  return "normal";
 }
 
-function formatDate(s: string) {
-  if (!s) return "—";
-  try { return new Date(s).toLocaleDateString("vi-VN"); } catch { return s; }
-}
-
-const EMPTY_FORM = {
-  jobCode: "", customerName: "", customerPhone: "", serviceName: "",
-  assignedStaffName: "", shootDate: "", receivedFileDate: "",
-  internalDeadline: "", customerDeadline: "", status: "chua_nhan",
-  progressPercent: 0, totalPhotos: 0, donePhotos: 0, notes: ""
+const URGENCY_STYLE: Record<string, string> = {
+  red:    "border-l-4 border-l-red-400 bg-red-50/40 dark:bg-red-900/10",
+  yellow: "border-l-4 border-l-amber-400 bg-amber-50/40 dark:bg-amber-900/10",
+  done:   "border-l-4 border-l-emerald-400 bg-emerald-50/40 dark:bg-emerald-900/10",
+  normal: "border-l-4 border-l-slate-200 dark:border-l-slate-700 bg-card",
 };
 
-export default function PhotoshopJobsPage() {
+function formatDate(d: string | null | undefined): string {
+  if (!d) return "—";
+  try {
+    return new Date(d).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+  } catch { return d; }
+}
+
+function daysLeft(deadline: string | null | undefined): string {
+  if (!deadline) return "";
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const dl = new Date(deadline);
+  const days = Math.ceil((dl.getTime() - today.getTime()) / 86400000);
+  if (days < 0) return `Trễ ${Math.abs(days)} ngày`;
+  if (days === 0) return "Hôm nay";
+  return `Còn ${days} ngày`;
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  chua_nhan:  "Chưa nhận",
+  dang_xu_ly: "Đang làm",
+  cho_duyet:  "Chờ duyệt",
+  hoan_thanh: "Hoàn thành",
+};
+
+const TABS = [
+  { key: "all",        label: "Tất cả" },
+  { key: "mine",       label: "Của tôi" },
+  { key: "chua_nhan",  label: "Chưa nhận" },
+  { key: "dang_xu_ly", label: "Đang làm" },
+  { key: "hoan_thanh", label: "Hoàn thành" },
+];
+
+// ── Stat card component ───────────────────────────────────────────────────────
+function StatCard({
+  label, value, icon: Icon, color,
+}: { label: string; value: number; icon: React.ElementType; color: "blue" | "green" | "red" }) {
+  const colors = {
+    blue:  "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400",
+    green: "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400",
+    red:   "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400",
+  };
+  return (
+    <div className="rounded-xl border border-border bg-card p-3 flex flex-col gap-1 shadow-sm">
+      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${colors[color]}`}>
+        <Icon size={16} />
+      </div>
+      <div className="text-2xl font-bold">{value}</div>
+      <div className="text-xs text-muted-foreground leading-tight">{label}</div>
+    </div>
+  );
+}
+
+// ── Progress bar ──────────────────────────────────────────────────────────────
+function ProgressBar({ percent }: { percent: number }) {
+  const pct = Math.min(100, Math.max(0, percent || 0));
+  const color = pct >= 100 ? "bg-emerald-500" : pct >= 70 ? "bg-blue-500" : pct >= 40 ? "bg-amber-500" : "bg-slate-400";
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-xs font-medium text-muted-foreground w-8 text-right">{Math.round(pct)}%</span>
+    </div>
+  );
+}
+
+// ── Detail Modal ──────────────────────────────────────────────────────────────
+function DetailModal({
+  row, onClose, staffList, isAdmin, viewerId, viewerName,
+}: {
+  row: BookingEditRow;
+  onClose: () => void;
+  staffList: StaffItem[];
+  isAdmin: boolean;
+  viewerId: number | null;
+  viewerName: string;
+}) {
   const qc = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [editingJob, setEditingJob] = useState<PhotoshopJob | null>(null);
-  const [form, setForm] = useState({ ...EMPTY_FORM });
-  const [sortBy, setSortBy] = useState<"deadline" | "created" | "status" | "progress">("deadline");
-  const [bookingSearch, setBookingSearch] = useState("");
-  const [showBookingDrop, setShowBookingDrop] = useState(false);
-  const [linkedBookingId, setLinkedBookingId] = useState<number | null>(null);
-  const bookingSearchRef = useRef<HTMLDivElement>(null);
-
-  const { data: jobs = [], isLoading } = useQuery<PhotoshopJob[]>({
-    queryKey: ["photoshop-jobs"],
-    queryFn: () => fetch(`${BASE}/api/photoshop-jobs`).then(r => r.ok ? r.json() : []).catch(() => []).then(d => Array.isArray(d) ? d : []),
-    refetchInterval: 30000,
+  const [form, setForm] = useState<DetailForm>({
+    totalPhotos: String(row.total_photos ?? ""),
+    donePhotos: String(row.done_photos ?? ""),
+    receivedFileDate: row.received_file_date ?? "",
+    internalDeadline: row.internal_deadline ?? "",
+    customerDeadline: row.customer_deadline ?? "",
+    notes: row.notes ?? "",
+    assignedStaffId: row.assigned_staff_id != null ? String(row.assigned_staff_id) : "",
+    assignedStaffName: row.assigned_staff_name ?? "",
   });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
 
-  // Booking search for modal — enabled as soon as dropdown is shown
-  const { data: bookingResults = [] } = useQuery<any[]>({
-    queryKey: ["bookings-search", bookingSearch],
-    queryFn: () => fetch(`${BASE}/api/bookings?q=${encodeURIComponent(bookingSearch.trim())}`).then(r => r.ok ? r.json() : []).catch(() => []).then(d => Array.isArray(d) ? d : []),
-    enabled: showBookingDrop,
-    staleTime: 10_000,
-  });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["photoshop-booking-view"] });
+    qc.invalidateQueries({ queryKey: ["photoshop-stats"] });
+  };
 
-  // Close booking dropdown on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (bookingSearchRef.current && !bookingSearchRef.current.contains(e.target as Node)) {
-        setShowBookingDrop(false);
+  const claimJob = async () => {
+    setSaving(true); setErr("");
+    try {
+      if (!row.job_id) {
+        const r = await fetchAuth(`${BASE}/api/photoshop-jobs`, {
+          method: "POST",
+          body: JSON.stringify({
+            bookingId: row.booking_id,
+            customerName: row.customer_name,
+            customerPhone: row.customer_phone,
+            serviceName: row.service_label || row.package_type,
+            shootDate: row.shoot_date,
+            assignedStaffId: viewerId,
+            assignedStaffName: viewerName,
+            status: "dang_xu_ly",
+            receivedFileDate: new Date().toISOString().split("T")[0],
+          }),
+        });
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          throw new Error(e.error || "Lỗi nhận việc");
+        }
+      } else {
+        const r = await fetchAuth(`${BASE}/api/photoshop-jobs/${row.job_id}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            assignedStaffId: viewerId,
+            assignedStaffName: viewerName,
+            status: "dang_xu_ly",
+            receivedFileDate: new Date().toISOString().split("T")[0],
+          }),
+        });
+        if (!r.ok) throw new Error("Lỗi nhận việc");
       }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
+      invalidate();
+      onClose();
+    } catch (e) {
+      setErr(String(e instanceof Error ? e.message : e));
+    } finally { setSaving(false); }
+  };
 
-  const createJob = useMutation({
-    mutationFn: (data: typeof EMPTY_FORM) => fetch(`${BASE}/api/photoshop-jobs`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
-    }).then(r => r.json()),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["photoshop-jobs"] }); closeModal(); },
-  });
+  const save = async (extraFields?: Record<string, unknown>) => {
+    setSaving(true); setErr("");
+    try {
+      const done = Number(form.donePhotos) || 0;
+      const total = Number(form.totalPhotos) || 0;
+      const progress = total > 0 ? Math.round((done / total) * 100) : 0;
 
-  const updateJob = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: typeof EMPTY_FORM }) =>
-      fetch(`${BASE}/api/photoshop-jobs/${id}`, {
-        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
-      }).then(r => r.json()),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["photoshop-jobs"] }); closeModal(); },
-  });
-
-  const deleteJob = useMutation({
-    mutationFn: (id: number) => fetch(`${BASE}/api/photoshop-jobs/${id}`, { method: "DELETE" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["photoshop-jobs"] }),
-  });
-
-  const quickStatus = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: string }) =>
-      fetch(`${BASE}/api/photoshop-jobs/${id}`, {
-        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status })
-      }).then(r => r.json()),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["photoshop-jobs"] }),
-  });
-
-  const quickProgress = useMutation({
-    mutationFn: ({ id, progressPercent }: { id: number; progressPercent: number }) =>
-      fetch(`${BASE}/api/photoshop-jobs/${id}`, {
-        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ progressPercent })
-      }).then(r => r.json()),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["photoshop-jobs"] }),
-  });
-
-  function openCreate() {
-    setEditingJob(null);
-    const today = new Date().toISOString().split("T")[0];
-    setForm({ ...EMPTY_FORM, jobCode: `JOB-${Date.now().toString().slice(-6)}`, receivedFileDate: today });
-    setLinkedBookingId(null);
-    setBookingSearch("");
-    setShowModal(true);
-  }
-
-  function openEdit(j: PhotoshopJob) {
-    setEditingJob(j);
-    setForm({
-      jobCode: j.jobCode, customerName: j.customerName, customerPhone: j.customerPhone,
-      serviceName: j.serviceName, assignedStaffName: j.assignedStaffName,
-      shootDate: j.shootDate ?? "", receivedFileDate: j.receivedFileDate ?? "",
-      internalDeadline: j.internalDeadline ?? "", customerDeadline: j.customerDeadline ?? "",
-      status: j.status, progressPercent: j.progressPercent,
-      totalPhotos: j.totalPhotos ?? 0, donePhotos: j.donePhotos ?? 0, notes: j.notes ?? ""
-    });
-    setLinkedBookingId(j.bookingId ?? null);
-    setBookingSearch(j.bookingId ? `Đơn #${j.bookingId}` : "");
-    setShowModal(true);
-  }
-
-  function closeModal() {
-    setShowModal(false);
-    setEditingJob(null);
-    setLinkedBookingId(null);
-    setBookingSearch("");
-    setShowBookingDrop(false);
-  }
-
-  function selectBooking(b: any) {
-    setLinkedBookingId(b.id);
-    setBookingSearch(`${b.orderCode ?? `#${b.id}`} — ${b.customerName}`);
-    setShowBookingDrop(false);
-    // Auto-fill form fields
-    setForm(f => ({
-      ...f,
-      customerName: b.customerName ?? f.customerName,
-      customerPhone: b.customerPhone ?? f.customerPhone,
-      serviceName: b.serviceLabel ?? b.packageType ?? f.serviceName,
-      shootDate: b.shootDate ? b.shootDate.split("T")[0] : f.shootDate,
-      assignedStaffName: Array.isArray(b.assignedStaff) && b.assignedStaff.length > 0
-        ? b.assignedStaff.map((s: any) => s.name ?? s).join(", ")
-        : f.assignedStaffName,
-    }));
-  }
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const data = { ...form, ...(linkedBookingId ? { bookingId: linkedBookingId } : {}) };
-    if (editingJob) updateJob.mutate({ id: editingJob.id, data: data as any });
-    else createJob.mutate(data as any);
-  }
-
-  const filtered = useMemo(() => {
-    let list = jobs.filter(j => j.isActive);
-    if (filterStatus) list = list.filter(j => j.status === filterStatus);
-    if (search) {
-      const q = search.toLowerCase();
-      list = list.filter(j =>
-        j.jobCode.toLowerCase().includes(q) ||
-        j.customerName.toLowerCase().includes(q) ||
-        (j.assignedStaffName ?? "").toLowerCase().includes(q) ||
-        (j.serviceName ?? "").toLowerCase().includes(q)
-      );
-    }
-    return list.sort((a, b) => {
-      if (sortBy === "deadline") {
-        if (!a.customerDeadline && !b.customerDeadline) return 0;
-        if (!a.customerDeadline) return 1;
-        if (!b.customerDeadline) return -1;
-        return a.customerDeadline.localeCompare(b.customerDeadline);
+      let staffId = form.assignedStaffId ? Number(form.assignedStaffId) : null;
+      let staffName = form.assignedStaffName;
+      if (isAdmin && form.assignedStaffId) {
+        const found = staffList.find(s => String(s.id) === form.assignedStaffId);
+        if (found) staffName = found.name;
       }
-      if (sortBy === "progress") return a.progressPercent - b.progressPercent;
-      if (sortBy === "status") return a.status.localeCompare(b.status);
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-  }, [jobs, filterStatus, search, sortBy]);
 
-  const counts = useMemo(() => {
-    const active = jobs.filter(j => j.isActive);
-    return Object.fromEntries(ALL_STATUSES.map(s => [s, active.filter(j => j.status === s).length]));
-  }, [jobs]);
+      const payload: Record<string, unknown> = {
+        totalPhotos: total,
+        donePhotos: done,
+        progressPercent: progress,
+        receivedFileDate: form.receivedFileDate,
+        internalDeadline: form.internalDeadline,
+        customerDeadline: form.customerDeadline,
+        notes: form.notes,
+        ...(isAdmin ? { assignedStaffId: staffId, assignedStaffName: staffName } : {}),
+        ...extraFields,
+      };
 
-  const urgentCount = useMemo(() => {
-    return jobs.filter(j => j.isActive && j.status !== "hoan_thanh" && j.customerDeadline && (() => {
-      const diff = Math.ceil((new Date(j.customerDeadline).getTime() - Date.now()) / 86400000);
-      return diff <= 2;
-    })()).length;
-  }, [jobs]);
+      if (row.job_id) {
+        const r = await fetchAuth(`${BASE}/api/photoshop-jobs/${row.job_id}`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+        if (!r.ok) throw new Error("Lỗi lưu");
+      } else {
+        const r = await fetchAuth(`${BASE}/api/photoshop-jobs`, {
+          method: "POST",
+          body: JSON.stringify({
+            bookingId: row.booking_id,
+            customerName: row.customer_name,
+            customerPhone: row.customer_phone,
+            serviceName: row.service_label || row.package_type,
+            shootDate: row.shoot_date,
+            ...payload,
+          }),
+        });
+        if (!r.ok) throw new Error("Lỗi tạo job");
+      }
+      invalidate();
+      onClose();
+    } catch (e) {
+      setErr(String(e instanceof Error ? e.message : e));
+    } finally { setSaving(false); }
+  };
+
+  const markDone = () => save({ status: "hoan_thanh" });
+
+  const urgency = getCardUrgency(row);
+  const pct = form.totalPhotos && Number(form.totalPhotos) > 0
+    ? Math.round((Number(form.donePhotos) / Number(form.totalPhotos)) * 100)
+    : 0;
 
   return (
-    <div className="h-full flex flex-col bg-background">
-      {/* Header */}
-      <div className="flex-shrink-0 px-4 sm:px-6 py-4 border-b border-border bg-background">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center flex-shrink-0">
-            <Film className="w-5 h-5 text-violet-600" />
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div
+        className="bg-background rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className={`px-4 pt-4 pb-3 rounded-t-2xl sm:rounded-t-2xl ${urgency === "red" ? "bg-red-50 dark:bg-red-900/20" : urgency === "yellow" ? "bg-amber-50 dark:bg-amber-900/20" : urgency === "done" ? "bg-emerald-50 dark:bg-emerald-900/20" : "bg-muted/30"}`}>
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="text-xs text-muted-foreground mb-0.5">{row.order_code}</div>
+              <h2 className="font-semibold text-base leading-tight">{row.customer_name}</h2>
+              <div className="text-sm text-muted-foreground">{row.customer_phone}</div>
+            </div>
+            <button onClick={onClose} className="p-1 rounded-lg hover:bg-black/10"><X size={18} /></button>
           </div>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-bold">Tiến độ hậu kỳ</h1>
-            <p className="text-xs text-muted-foreground">{filtered.length} job {urgentCount > 0 && <span className="text-red-500 font-medium">· {urgentCount} cần gấp</span>}</p>
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            <span className="text-xs px-2 py-0.5 rounded-full bg-background/70 font-medium">{row.service_label || row.package_type || "—"}</span>
+            {row.status && (
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${row.status === "hoan_thanh" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40" : row.status === "dang_xu_ly" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40" : "bg-slate-100 text-slate-600 dark:bg-slate-800"}`}>
+                {STATUS_LABEL[row.status] || row.status}
+              </span>
+            )}
           </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative flex-1 min-w-0 sm:flex-none">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Tìm job, khách hàng..."
-              className="pl-9 pr-4 py-2 text-sm rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 w-full sm:w-52" />
-          </div>
-          <select value={sortBy} onChange={e => setSortBy(e.target.value as never)}
-            className="text-sm border border-border rounded-xl px-3 py-2 bg-background">
-            <option value="deadline">Theo deadline</option>
-            <option value="progress">Theo tiến độ</option>
-            <option value="status">Theo trạng thái</option>
-            <option value="created">Mới nhất</option>
-          </select>
-          <Button onClick={openCreate} size="sm" className="gap-1.5">
-            <Plus className="w-4 h-4" /> Thêm job
-          </Button>
         </div>
 
-        {/* Status filter tabs */}
-        <div className="flex gap-2 mt-3 flex-wrap">
-          <button
-            onClick={() => setFilterStatus(null)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterStatus === null ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"}`}>
-            Tất cả ({jobs.filter(j => j.isActive).length})
-          </button>
-          {ALL_STATUSES.map(s => {
-            const cfg = STATUS_CONFIG[s];
-            return (
-              <button key={s}
-                onClick={() => setFilterStatus(filterStatus === s ? null : s)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterStatus === s ? `${cfg.bg} ${cfg.color}` : "bg-muted text-muted-foreground hover:text-foreground"}`}>
-                {cfg.label} ({counts[s] ?? 0})
+        <div className="p-4 space-y-4">
+          {/* Info row */}
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div>
+              <div className="text-xs text-muted-foreground">Ngày chụp</div>
+              <div className="font-medium">{formatDate(row.shoot_date)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Người phụ trách</div>
+              <div className="font-medium">{row.assigned_staff_name || "—"}</div>
+            </div>
+          </div>
+
+          {/* Nhận việc button — show if unassigned (non-admin uses their own account) */}
+          {isUnassigned(row) && !saving && (
+            <button
+              onClick={claimJob}
+              className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-colors flex items-center justify-center gap-2"
+              disabled={saving}
+            >
+              <UserCheck size={16} />
+              {viewerName ? `Tôi nhận việc này (${viewerName})` : "Nhận việc"}
+            </button>
+          )}
+
+          {err && <div className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">{err}</div>}
+
+          {/* Assign staff (admin only) */}
+          {isAdmin && (
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Giao việc cho nhân viên</label>
+              <select
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                value={form.assignedStaffId}
+                onChange={e => {
+                  const found = staffList.find(s => String(s.id) === e.target.value);
+                  setForm(f => ({ ...f, assignedStaffId: e.target.value, assignedStaffName: found?.name ?? "" }));
+                }}
+              >
+                <option value="">— Chưa giao —</option>
+                {staffList.map(s => (
+                  <option key={s.id} value={String(s.id)}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Ngày bắt đầu */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Ngày bắt đầu hậu kỳ</label>
+            <input
+              type="date"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              value={form.receivedFileDate}
+              onChange={e => setForm(f => ({ ...f, receivedFileDate: e.target.value }))}
+            />
+          </div>
+
+          {/* Deadlines */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Deadline nội bộ</label>
+              <input
+                type="date"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                value={form.internalDeadline}
+                onChange={e => setForm(f => ({ ...f, internalDeadline: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Deadline khách</label>
+              <input
+                type="date"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                value={form.customerDeadline}
+                onChange={e => setForm(f => ({ ...f, customerDeadline: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          {/* Progress */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Tổng số ảnh</label>
+              <input
+                type="number" min="0"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                value={form.totalPhotos}
+                onChange={e => setForm(f => ({ ...f, totalPhotos: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Đã hậu kỳ xong</label>
+              <input
+                type="number" min="0"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                value={form.donePhotos}
+                onChange={e => setForm(f => ({ ...f, donePhotos: e.target.value }))}
+              />
+            </div>
+          </div>
+          {Number(form.totalPhotos) > 0 && (
+            <ProgressBar percent={pct} />
+          )}
+
+          {/* Notes */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Ghi chú</label>
+            <textarea
+              rows={2}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm resize-none"
+              value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              placeholder="Ghi chú nội bộ..."
+            />
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex gap-2 pt-1">
+            {row.status !== "hoan_thanh" && (
+              <button
+                onClick={markDone}
+                disabled={saving}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                <CheckCircle2 size={15} />
+                Hoàn thành
               </button>
-            );
-          })}
+            )}
+            <button
+              onClick={() => save()}
+              disabled={saving}
+              className="flex-1 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+            >
+              {saving ? <Loader2 size={15} className="animate-spin" /> : null}
+              Lưu tiến độ
+            </button>
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Body */}
-      <div className="flex-1 overflow-auto p-6">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-32 text-muted-foreground">
-            <RefreshCw className="w-5 h-5 animate-spin mr-2" /> Đang tải...
+// ── Booking card ──────────────────────────────────────────────────────────────
+function BookingCard({ row, onClick }: { row: BookingEditRow; onClick: () => void }) {
+  const urgency = getCardUrgency(row);
+  const pct = row.total_photos && row.total_photos > 0
+    ? Math.round(((row.done_photos ?? 0) / row.total_photos) * 100)
+    : (row.progress_percent ?? 0);
+
+  const dlDays = row.internal_deadline ? daysLeft(row.internal_deadline) : "";
+  const dlColor = urgency === "red" ? "text-red-500" : urgency === "yellow" ? "text-amber-500" : "text-muted-foreground";
+
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full text-left rounded-xl border shadow-sm p-3 transition-all hover:shadow-md ${URGENCY_STYLE[urgency]}`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="font-semibold text-sm truncate">{row.customer_name}</span>
+            {isUnassigned(row) ? (
+              <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 dark:bg-red-900/40 font-medium">Chưa nhận</span>
+            ) : row.status === "hoan_thanh" ? (
+              <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 font-medium">Hoàn thành</span>
+            ) : (
+              <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 font-medium">{STATUS_LABEL[row.status ?? ""] || "Đang làm"}</span>
+            )}
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
-            <Film className="w-12 h-12 mb-3 opacity-20" />
-            <p className="font-medium">Chưa có job hậu kỳ</p>
-            <p className="text-sm mt-1">Bấm "Thêm job" để tạo job mới</p>
+          <div className="text-xs text-muted-foreground mb-1">{row.customer_phone} • {row.service_label || row.package_type || "—"}</div>
+
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground mb-2">
+            <span className="flex items-center gap-1">
+              <Camera size={10} />
+              {formatDate(row.shoot_date)}
+            </span>
+            {row.internal_deadline && (
+              <span className={`flex items-center gap-1 font-medium ${dlColor}`}>
+                <Clock size={10} />
+                {dlDays} ({formatDate(row.internal_deadline)})
+              </span>
+            )}
+            {row.assigned_staff_name && (
+              <span className="flex items-center gap-1">
+                <User size={10} />
+                {row.assigned_staff_name}
+              </span>
+            )}
           </div>
-        ) : (
-          <div className="grid gap-3">
-            {filtered.map(job => {
-              const cfg = STATUS_CONFIG[job.status] ?? STATUS_CONFIG.chua_nhan;
-              const StIcon = cfg.icon;
-              const dlInfo = getDeadlineInfo(job.customerDeadline);
-              const intDlInfo = getDeadlineInfo(job.internalDeadline);
-              const isUrgent = dlInfo.cls.includes("red") || dlInfo.cls.includes("orange");
 
-              return (
-                <div key={job.id}
-                  className={`rounded-2xl border p-4 bg-card transition-all hover:shadow-sm ${isUrgent && job.status !== "hoan_thanh" ? "border-red-200 dark:border-red-800/50" : "border-border"}`}>
-                  <div className="flex items-start gap-4">
-                    {/* Left: status + code */}
-                    <div className="flex-shrink-0 text-center w-20">
-                      <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${cfg.bg} ${cfg.color}`}>
-                        <StIcon className="w-3.5 h-3.5" />
-                        {cfg.label}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1 font-mono">{job.jobCode}</p>
-                    </div>
+          {row.total_photos ? (
+            <div className="space-y-0.5">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span className="flex items-center gap-1"><ImageIcon size={10} />{row.done_photos ?? 0}/{row.total_photos} ảnh</span>
+                <span className="font-medium">{Math.round(pct)}%</span>
+              </div>
+              <ProgressBar percent={pct} />
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground italic">Chưa nhập số ảnh</div>
+          )}
+        </div>
+        <ChevronRight size={16} className="text-muted-foreground shrink-0 mt-1" />
+      </div>
+    </button>
+  );
+}
 
-                    {/* Middle: info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-sm">{job.customerName || "—"}</span>
-                        {job.customerPhone && <span className="text-xs text-muted-foreground">{job.customerPhone}</span>}
-                        {job.serviceName && <Badge variant="outline" className="text-xs">{job.serviceName}</Badge>}
-                      </div>
-                      <div className="flex items-center gap-3 mt-1.5 flex-wrap text-xs text-muted-foreground">
-                        {job.assignedStaffName && (
-                          <span className="flex items-center gap-1"><User className="w-3 h-3" />{job.assignedStaffName}</span>
-                        )}
-                        {job.shootDate && <span className="flex items-center gap-1"><Camera className="w-3 h-3" />Chụp: {formatDate(job.shootDate)}</span>}
-                        {job.receivedFileDate && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />Nhận file: {formatDate(job.receivedFileDate)}</span>}
-                      </div>
+// ── Main page ─────────────────────────────────────────────────────────────────
+export default function PhotoshopJobsPage() {
+  const { viewer, isAdmin } = useStaffAuth();
+  const qc = useQueryClient();
+  const [tab, setTab] = useState("all");
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<BookingEditRow | null>(null);
 
-                      {/* Progress bar */}
-                      <div className="mt-2.5">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                          <span>Tiến độ</span>
-                          <span className="font-medium text-foreground">{job.progressPercent}%</span>
-                        </div>
-                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all ${job.progressPercent >= 100 ? "bg-emerald-500" : job.progressPercent >= 60 ? "bg-blue-500" : job.progressPercent >= 30 ? "bg-amber-500" : "bg-rose-400"}`}
-                            style={{ width: `${Math.min(100, job.progressPercent)}%` }}
-                          />
-                        </div>
-                        {/* Quick progress buttons */}
-                        <div className="flex gap-1 mt-1.5">
-                          {[0, 25, 50, 75, 100].map(pct => (
-                            <button key={pct}
-                              onClick={() => quickProgress.mutate({ id: job.id, progressPercent: pct })}
-                              className={`text-xs px-1.5 py-0.5 rounded transition-colors ${job.progressPercent === pct ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80 text-muted-foreground"}`}>
-                              {pct}%
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+  const { data: rows = [], isLoading } = useQuery<BookingEditRow[]>({
+    queryKey: ["photoshop-booking-view"],
+    queryFn: () =>
+      fetchAuth(`${BASE}/api/photoshop-jobs/booking-view`)
+        .then(r => r.ok ? r.json() : []),
+    staleTime: 0,
+  });
 
-                      {/* Deadline badges */}
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {job.internalDeadline && (
-                          <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${intDlInfo.cls || "text-muted-foreground border-border"}`}>
-                            ⚡ Nội bộ: {formatDate(job.internalDeadline)} {intDlInfo.label && `(${intDlInfo.label})`}
-                          </span>
-                        )}
-                        {job.customerDeadline && (
-                          <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${dlInfo.cls || "text-muted-foreground border-border"}`}>
-                            👤 Khách: {formatDate(job.customerDeadline)} {dlInfo.label && `(${dlInfo.label})`}
-                          </span>
-                        )}
-                        {job.includedCount != null && (
-                          <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${job.includedCount > 0 ? "text-violet-600 bg-violet-50 border-violet-200 dark:bg-violet-950/30 dark:border-violet-800" : "text-muted-foreground border-border"}`}>
-                            🖼️ {job.includedCount > 0 ? `Gói gồm: ${job.includedCount} ảnh hậu kỳ` : "Chưa cấu hình ảnh hậu kỳ"}
-                          </span>
-                        )}
-                        {job.extraCount != null && job.extraCount > 0 && (
-                          <span className="text-xs px-2 py-0.5 rounded-full border font-medium text-orange-600 bg-orange-50 border-orange-200 dark:bg-orange-950/30 dark:border-orange-800">
-                            ⚠️ Vượt gói: {job.extraCount} ảnh
-                            {job.extraFeeTotal > 0 && ` · ${job.extraFeeTotal.toLocaleString("vi-VN")}đ`}
-                          </span>
-                        )}
-                      </div>
+  const { data: stats } = useQuery<Stats>({
+    queryKey: ["photoshop-stats"],
+    queryFn: () =>
+      fetchAuth(`${BASE}/api/photoshop-jobs/my-stats`)
+        .then(r => r.ok ? r.json() : { myActive: 0, myDoneThisMonth: 0, unassigned: 0 }),
+    staleTime: 0,
+  });
 
-                      {job.notes && <p className="text-xs text-muted-foreground mt-1.5 italic">{job.notes}</p>}
-                    </div>
+  const { data: staffList = [] } = useQuery<StaffItem[]>({
+    queryKey: ["staff"],
+    queryFn: () =>
+      fetchAuth(`${BASE}/api/staff`)
+        .then(r => r.ok ? r.json() : [])
+        .then((d: unknown) => Array.isArray(d) ? d : []),
+    enabled: isAdmin,
+  });
 
-                    {/* Right: actions */}
-                    <div className="flex flex-col gap-1.5 flex-shrink-0">
-                      {/* Quick status change */}
-                      <select
-                        value={job.status}
-                        onChange={e => quickStatus.mutate({ id: job.id, status: e.target.value })}
-                        className={`text-xs border rounded-lg px-2 py-1 ${cfg.bg} ${cfg.color} border-current/20 cursor-pointer focus:outline-none`}>
-                        {ALL_STATUSES.map(s => (
-                          <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
-                        ))}
-                      </select>
-                      <div className="flex gap-1">
-                        <button onClick={() => openEdit(job)}
-                          className="flex-1 p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-primary transition-colors" title="Sửa">
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => { if (confirm("Xoá job này?")) deleteJob.mutate(job.id); }}
-                          className="flex-1 p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors" title="Xoá">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+  const filtered = useMemo(() => {
+    let data = rows;
+
+    if (tab === "mine") {
+      data = data.filter(r => r.assigned_staff_id === viewer?.id);
+    } else if (tab === "chua_nhan") {
+      data = data.filter(r => isUnassigned(r));
+    } else if (tab === "dang_xu_ly") {
+      data = data.filter(r => r.status === "dang_xu_ly" || r.status === "cho_duyet");
+    } else if (tab === "hoan_thanh") {
+      data = data.filter(r => r.status === "hoan_thanh");
+    }
+
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      data = data.filter(r =>
+        (r.customer_name ?? "").toLowerCase().includes(q) ||
+        (r.customer_phone ?? "").toLowerCase().includes(q) ||
+        (r.shoot_date ?? "").includes(q) ||
+        (r.order_code ?? "").toLowerCase().includes(q)
+      );
+    }
+    return data;
+  }, [rows, tab, search, viewer?.id]);
+
+  const handleCardClick = (row: BookingEditRow) => {
+    // Always show latest data by refreshing from the list
+    setSelected(row);
+  };
+
+  const handleModalClose = () => {
+    setSelected(null);
+    qc.invalidateQueries({ queryKey: ["photoshop-booking-view"] });
+    qc.invalidateQueries({ queryKey: ["photoshop-stats"] });
+  };
+
+  return (
+    <div className="p-3 sm:p-4 max-w-2xl mx-auto space-y-4">
+      {/* Page header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold">Tiến độ Hậu kỳ</h1>
+          <p className="text-sm text-muted-foreground">Quản lý hậu kỳ theo đơn hàng</p>
+        </div>
+        <BarChart3 size={22} className="text-muted-foreground" />
+      </div>
+
+      {/* Stats boxes */}
+      <div className="grid grid-cols-3 gap-2.5">
+        <StatCard
+          label={isAdmin ? "Đang làm" : "Đơn của tôi"}
+          value={stats?.myActive ?? 0}
+          icon={UserCheck}
+          color="blue"
+        />
+        <StatCard
+          label="Xong tháng này"
+          value={stats?.myDoneThisMonth ?? 0}
+          icon={CheckCircle2}
+          color="green"
+        />
+        <StatCard
+          label="Chưa có ai nhận"
+          value={stats?.unassigned ?? 0}
+          icon={AlertTriangle}
+          color="red"
+        />
+      </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <input
+          className="w-full pl-9 pr-3 py-2 rounded-xl border border-border bg-background text-sm placeholder:text-muted-foreground"
+          placeholder="Tìm tên khách, số điện thoại, ngày chụp..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+        {search && (
+          <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-foreground">
+            <X size={14} />
+          </button>
         )}
       </div>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) closeModal(); }}>
-          <div className="bg-background rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between p-5 border-b border-border">
-              <h2 className="font-bold text-lg">{editingJob ? "Sửa job hậu kỳ" : "Thêm job hậu kỳ mới"}</h2>
-              <button onClick={closeModal} className="p-2 rounded-lg hover:bg-muted"><X className="w-4 h-4" /></button>
-            </div>
-            <form onSubmit={handleSubmit} className="flex-1 overflow-auto p-5 space-y-4">
+      {/* Tabs */}
+      <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none">
+        {TABS.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              tab === t.key
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/80"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-              {/* Booking search */}
-              {!editingJob && (
-                <div ref={bookingSearchRef} className="relative">
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                    Liên kết đơn hàng (tuỳ chọn)
-                  </label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                    <input
-                      value={bookingSearch}
-                      onChange={e => { setBookingSearch(e.target.value); setShowBookingDrop(true); if (!e.target.value) setLinkedBookingId(null); }}
-                      onFocus={() => setShowBookingDrop(true)}
-                      placeholder="Tìm tên khách, SĐT, mã đơn, dịch vụ..."
-                      className="w-full pl-9 pr-8 py-2 text-sm border border-border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    />
-                    {bookingSearch && (
-                      <button type="button" onClick={() => { setBookingSearch(""); setLinkedBookingId(null); setShowBookingDrop(false); }}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                  {linkedBookingId && (
-                    <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
-                      <Check className="w-3 h-3" /> Đã liên kết đơn #{linkedBookingId} · thông tin tự động điền bên dưới
-                    </p>
-                  )}
-                  {showBookingDrop && (
-                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-popover border border-border rounded-xl shadow-lg max-h-52 overflow-auto">
-                      <p className="text-xs font-medium text-muted-foreground px-3 py-1.5 border-b border-border sticky top-0 bg-popover">
-                        {bookingSearch.trim() ? "Kết quả tìm kiếm" : "Đơn gần nhất"}
-                      </p>
-                      {bookingResults.length === 0 ? (
-                        <p className="text-sm text-muted-foreground p-3 text-center">Không tìm thấy đơn hàng nào</p>
-                      ) : (
-                        bookingResults.slice(0, 10).map((b: any) => (
-                          <button key={b.id} type="button"
-                            onMouseDown={() => selectBooking(b)}
-                            className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted transition-colors flex items-start gap-2">
-                            <div className="min-w-0 flex-1">
-                              <p className="font-medium truncate">{b.customerName}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {b.orderCode ?? `#${b.id}`}
-                                {b.serviceLabel && ` · ${b.serviceLabel}`}
-                                {b.packageType && !b.serviceLabel && ` · ${b.packageType}`}
-                                {b.shootDate && ` · ${new Date(b.shootDate).toLocaleDateString("vi-VN")}`}
-                              </p>
-                            </div>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Mã job *</label>
-                  <input value={form.jobCode} onChange={e => setForm(f => ({ ...f, jobCode: e.target.value }))} required
-                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    placeholder="VD: JOB-001" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Trạng thái</label>
-                  <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
-                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none">
-                    {ALL_STATUSES.map(s => <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Tên khách hàng *</label>
-                  <input value={form.customerName} onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))} required
-                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    placeholder="Họ tên khách" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Số điện thoại</label>
-                  <input value={form.customerPhone} onChange={e => setForm(f => ({ ...f, customerPhone: e.target.value }))}
-                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    placeholder="0..." />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Dịch vụ</label>
-                  <input value={form.serviceName} onChange={e => setForm(f => ({ ...f, serviceName: e.target.value }))}
-                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    placeholder="VD: Album Studio" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Nhân viên phụ trách</label>
-                  <input value={form.assignedStaffName} onChange={e => setForm(f => ({ ...f, assignedStaffName: e.target.value }))}
-                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    placeholder="Tên nhân viên" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Ngày chụp</label>
-                  <input type="date" value={form.shootDate} onChange={e => setForm(f => ({ ...f, shootDate: e.target.value }))}
-                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Ngày nhận file raw</label>
-                  <input type="date" value={form.receivedFileDate} onChange={e => setForm(f => ({ ...f, receivedFileDate: e.target.value }))}
-                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Deadline nội bộ ⚡</label>
-                  <input type="date" value={form.internalDeadline} onChange={e => setForm(f => ({ ...f, internalDeadline: e.target.value }))}
-                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Deadline khách hàng 👤</label>
-                  <input type="date" value={form.customerDeadline} onChange={e => setForm(f => ({ ...f, customerDeadline: e.target.value }))}
-                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Tiến độ (%)</label>
-                  <input type="number" min={0} max={100} value={form.progressPercent}
-                    onChange={e => setForm(f => ({ ...f, progressPercent: +e.target.value }))}
-                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Tổng số ảnh</label>
-                  <input type="number" min={0} value={form.totalPhotos}
-                    onChange={e => setForm(f => ({ ...f, totalPhotos: +e.target.value }))}
-                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Đã làm xong</label>
-                  <input type="number" min={0} value={form.donePhotos}
-                    onChange={e => setForm(f => ({ ...f, donePhotos: +e.target.value }))}
-                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none" />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 block">Ghi chú</label>
-                <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                  rows={2} className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none resize-none"
-                  placeholder="Ghi chú thêm..." />
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button type="button" onClick={closeModal}
-                  className="flex-1 py-2.5 border border-border rounded-xl text-sm font-medium hover:bg-muted transition-colors">
-                  Hủy
-                </button>
-                <button type="submit" disabled={createJob.isPending || updateJob.isPending}
-                  className="flex-1 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50">
-                  {editingJob ? "Lưu thay đổi" : "Tạo job"}
-                </button>
-              </div>
-            </form>
-          </div>
+      {/* List */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+          <Loader2 size={20} className="animate-spin" />
+          <span>Đang tải...</span>
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <Calendar size={36} className="mx-auto mb-2 opacity-30" />
+          <div className="text-sm">Không có đơn hàng nào</div>
+          {search && <div className="text-xs mt-1 opacity-60">Thử xóa bộ lọc</div>}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="text-xs text-muted-foreground px-1">{filtered.length} đơn hàng</div>
+          {filtered.map(row => (
+            <BookingCard key={row.booking_id} row={row} onClick={() => handleCardClick(row)} />
+          ))}
+        </div>
+      )}
+
+      {/* Detail modal */}
+      {selected && (
+        <DetailModal
+          row={selected}
+          onClose={handleModalClose}
+          staffList={staffList}
+          isAdmin={isAdmin}
+          viewerId={viewer?.id ?? null}
+          viewerName={viewer?.name ?? ""}
+        />
       )}
     </div>
   );

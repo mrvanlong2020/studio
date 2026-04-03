@@ -1,7 +1,8 @@
 import { Router } from "express";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import { photoshopJobsTable, bookingsTable, bookingItemsTable } from "@workspace/db/schema";
 import { eq, desc, inArray, and } from "drizzle-orm";
+import { verifyToken } from "./auth";
 
 const router = Router();
 
@@ -64,6 +65,116 @@ async function syncExtraRetouchedItem(bookingId: number, donePhotos: number) {
   }
 }
 
+// ── NEW: Booking-centric view (MUST be before /:id) ───────────────────────────
+router.get("/photoshop-jobs/booking-view", async (req, res) => {
+  try {
+    const { search, status, staffId } = req.query as Record<string, string>;
+
+    const result = await pool.query(`
+      SELECT
+        b.id              AS booking_id,
+        b.order_code,
+        b.shoot_date,
+        b.created_at      AS booking_created_at,
+        b.package_type,
+        b.service_label,
+        c.name            AS customer_name,
+        c.phone           AS customer_phone,
+        pj.id             AS job_id,
+        pj.job_code,
+        pj.status,
+        pj.assigned_staff_id,
+        pj.assigned_staff_name,
+        pj.received_file_date,
+        pj.internal_deadline,
+        pj.customer_deadline,
+        pj.total_photos,
+        pj.done_photos,
+        pj.progress_percent,
+        pj.notes,
+        pj.updated_at     AS job_updated_at
+      FROM bookings b
+      JOIN customers c ON c.id = b.customer_id
+      LEFT JOIN photoshop_jobs pj
+        ON pj.booking_id = b.id AND pj.is_active = true
+      WHERE b.status NOT IN ('cancelled')
+        AND (b.parent_id IS NULL OR b.is_parent_contract = true)
+      ORDER BY b.created_at DESC
+    `);
+
+    let data = result.rows as Record<string, unknown>[];
+
+    if (status && status !== "all") {
+      if (status === "chua_nhan") {
+        data = data.filter(r => !r.job_id || !r.assigned_staff_id || r.status === "chua_nhan");
+      } else {
+        data = data.filter(r => r.status === status);
+      }
+    }
+
+    if (staffId) {
+      data = data.filter(r => String(r.assigned_staff_id) === staffId);
+    }
+
+    if (search) {
+      const q = search.toLowerCase();
+      data = data.filter(r =>
+        String(r.customer_name ?? "").toLowerCase().includes(q) ||
+        String(r.customer_phone ?? "").toLowerCase().includes(q) ||
+        String(r.shoot_date ?? "").includes(q) ||
+        String(r.order_code ?? "").toLowerCase().includes(q)
+      );
+    }
+
+    res.json(data);
+  } catch (e) { res.status(500).json({ error: String(e) }); }
+});
+
+// ── NEW: My stats (MUST be before /:id) ───────────────────────────────────────
+router.get("/photoshop-jobs/my-stats", async (req, res) => {
+  try {
+    const callerId = verifyToken(req.headers.authorization);
+    if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
+
+    const staffRow = await pool.query(`SELECT role FROM staff WHERE id = $1`, [callerId]);
+    const isAdmin = staffRow.rows[0]?.role === "admin";
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+    // Đơn đang làm (dang_xu_ly / cho_duyet)
+    const myActiveQ = isAdmin
+      ? await pool.query(`SELECT COUNT(*) FROM photoshop_jobs WHERE status IN ('dang_xu_ly','cho_duyet') AND is_active = true`)
+      : await pool.query(`SELECT COUNT(*) FROM photoshop_jobs WHERE assigned_staff_id = $1 AND status IN ('dang_xu_ly','cho_duyet') AND is_active = true`, [callerId]);
+
+    // Đơn hoàn thành tháng này
+    const myDoneQ = isAdmin
+      ? await pool.query(`SELECT COUNT(*) FROM photoshop_jobs WHERE status = 'hoan_thanh' AND updated_at >= $1 AND is_active = true`, [monthStart])
+      : await pool.query(`SELECT COUNT(*) FROM photoshop_jobs WHERE assigned_staff_id = $1 AND status = 'hoan_thanh' AND updated_at >= $2 AND is_active = true`, [callerId, monthStart]);
+
+    // Đơn chưa nhận: booking không có job active, hoặc job chưa assigned, hoặc status = chua_nhan
+    const unassignedQ = await pool.query(`
+      SELECT COUNT(*) FROM bookings b
+      WHERE b.status NOT IN ('cancelled')
+        AND (b.parent_id IS NULL OR b.is_parent_contract = true)
+        AND NOT EXISTS (
+          SELECT 1 FROM photoshop_jobs pj
+          WHERE pj.booking_id = b.id
+            AND pj.is_active = true
+            AND pj.assigned_staff_id IS NOT NULL
+            AND pj.status != 'chua_nhan'
+        )
+    `);
+
+    res.json({
+      myActive: parseInt(myActiveQ.rows[0]?.count ?? "0"),
+      myDoneThisMonth: parseInt(myDoneQ.rows[0]?.count ?? "0"),
+      unassigned: parseInt(unassignedQ.rows[0]?.count ?? "0"),
+    });
+  } catch (e) { res.status(500).json({ error: String(e) }); }
+});
+
+// ── Original list endpoint ────────────────────────────────────────────────────
 router.get("/photoshop-jobs", async (req, res) => {
   try {
     const { search, status } = req.query as Record<string, string>;
@@ -106,7 +217,6 @@ router.get("/photoshop-jobs", async (req, res) => {
 
     const result = rows.map(r => {
       const included = r.bookingId != null ? (includedMap[r.bookingId] ?? null) : null;
-      // extraCount is null when not linked; otherwise max(0, done - included)
       const extraCount = included != null
         ? Math.max(0, (r.donePhotos ?? 0) - included)
         : null;
@@ -123,6 +233,7 @@ router.get("/photoshop-jobs", async (req, res) => {
   } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
+// ── Single job by id ──────────────────────────────────────────────────────────
 router.get("/photoshop-jobs/:id", async (req, res) => {
   try {
     const rows = await db.select().from(photoshopJobsTable).where(eq(photoshopJobsTable.id, +req.params.id));
@@ -131,6 +242,7 @@ router.get("/photoshop-jobs/:id", async (req, res) => {
   } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
+// ── Create job — bookingId REQUIRED ──────────────────────────────────────────
 router.post("/photoshop-jobs", async (req, res) => {
   try {
     const {
@@ -139,9 +251,23 @@ router.post("/photoshop-jobs", async (req, res) => {
       internalDeadline, customerDeadline, status, progressPercent,
       totalPhotos, donePhotos, notes
     } = req.body;
+
+    if (!bookingId) {
+      return res.status(400).json({ error: "Phải gắn với đơn hàng. bookingId là bắt buộc." });
+    }
+
+    // Prevent duplicate active job for the same booking
+    const existing = await db
+      .select({ id: photoshopJobsTable.id })
+      .from(photoshopJobsTable)
+      .where(and(eq(photoshopJobsTable.bookingId, Number(bookingId)), eq(photoshopJobsTable.isActive, true)));
+    if (existing.length > 0) {
+      return res.status(400).json({ error: "Đơn hàng này đã có job hậu kỳ", jobId: existing[0].id });
+    }
+
     const [row] = await db.insert(photoshopJobsTable).values({
       jobCode: jobCode || `JOB-${Date.now()}`,
-      bookingId: bookingId || null,
+      bookingId: Number(bookingId),
       customerName: customerName || "",
       customerPhone: customerPhone || "",
       serviceName: serviceName || "",
@@ -158,7 +284,6 @@ router.post("/photoshop-jobs", async (req, res) => {
       notes: notes || "",
     }).returning();
 
-    // Sync extra_retouched item if linked to a booking
     if (row.bookingId && row.donePhotos > 0) {
       await syncExtraRetouchedItem(row.bookingId, row.donePhotos).catch(err =>
         console.error("[photoshop-jobs] syncExtraRetouchedItem (POST) failed:", err)
@@ -169,6 +294,7 @@ router.post("/photoshop-jobs", async (req, res) => {
   } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
+// ── Update job ────────────────────────────────────────────────────────────────
 router.put("/photoshop-jobs/:id", async (req, res) => {
   try {
     const {
@@ -178,7 +304,6 @@ router.put("/photoshop-jobs/:id", async (req, res) => {
       totalPhotos, donePhotos, notes, isActive
     } = req.body;
 
-    // Capture old bookingId before update (for relink cleanup)
     const [oldJob] = await db
       .select({ bookingId: photoshopJobsTable.bookingId })
       .from(photoshopJobsTable)
@@ -203,20 +328,23 @@ router.put("/photoshop-jobs/:id", async (req, res) => {
     if (donePhotos !== undefined) updates.donePhotos = donePhotos;
     if (notes !== undefined) updates.notes = notes;
     if (isActive !== undefined) updates.isActive = isActive;
-    const [row] = await db.update(photoshopJobsTable).set(updates as never).where(eq(photoshopJobsTable.id, +req.params.id)).returning();
+
+    const [row] = await db
+      .update(photoshopJobsTable)
+      .set(updates as never)
+      .where(eq(photoshopJobsTable.id, +req.params.id))
+      .returning();
     if (!row) return res.status(404).json({ error: "Not found" });
 
     const newBookingId = row.bookingId ?? null;
     const bookingIdChanged = bookingId !== undefined && oldBookingId !== newBookingId;
 
-    // If bookingId changed, clear extra_retouched from the old booking
     if (bookingIdChanged && oldBookingId != null) {
       await clearExtraRetouchedItem(oldBookingId).catch(err =>
         console.error("[photoshop-jobs] clearExtraRetouchedItem (old booking) failed:", err)
       );
     }
 
-    // Sync extra_retouched booking_item when donePhotos or bookingId changes and job is linked to a booking
     if ((donePhotos !== undefined || bookingIdChanged) && newBookingId) {
       await syncExtraRetouchedItem(newBookingId, row.donePhotos ?? 0).catch(err =>
         console.error("[photoshop-jobs] syncExtraRetouchedItem (PUT) failed:", err)
@@ -227,9 +355,9 @@ router.put("/photoshop-jobs/:id", async (req, res) => {
   } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
+// ── Delete job ────────────────────────────────────────────────────────────────
 router.delete("/photoshop-jobs/:id", async (req, res) => {
   try {
-    // Clear extra_retouched booking item before deleting the job
     const [job] = await db
       .select({ bookingId: photoshopJobsTable.bookingId })
       .from(photoshopJobsTable)
