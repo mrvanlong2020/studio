@@ -113,10 +113,14 @@ router.post("/settings/ai-key/test", async (req, res) => {
   if (!await isAdminCaller(req.headers.authorization)) {
     return res.status(403).json({ error: "Không có quyền" });
   }
-  const apiKey = await getGeminiApiKey();
-  if (!apiKey) return res.json({ ok: false, message: "Chưa có API key trong database" });
+  const apiKey = await db
+    .select()
+    .from(settingsTable)
+    .where(eq(settingsTable.key, "gemini_api_key"));
+  const dbKey = apiKey[0]?.value?.trim() || "";
+  if (!dbKey) return res.json({ ok: false, message: "Chưa có API key trong database" });
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
+    const genAI = new GoogleGenerativeAI(dbKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     await model.generateContent("Trả lời đúng 1 chữ: OK");
     res.json({ ok: true, message: "Kết nối Gemini thành công!" });
