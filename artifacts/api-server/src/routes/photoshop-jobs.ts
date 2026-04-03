@@ -68,7 +68,7 @@ async function syncExtraRetouchedItem(bookingId: number, donePhotos: number) {
 // ── NEW: Booking-centric view (MUST be before /:id) ───────────────────────────
 router.get("/photoshop-jobs/booking-view", async (req, res) => {
   try {
-    const { search, status, staffId } = req.query as Record<string, string>;
+    const { search, status, staffId, month } = req.query as Record<string, string>;
 
     const result = await pool.query(`
       SELECT
@@ -103,6 +103,17 @@ router.get("/photoshop-jobs/booking-view", async (req, res) => {
     `);
 
     let data = result.rows as Record<string, unknown>[];
+
+    // Filter theo tháng phát sinh (YYYY-MM)
+    // booking_created_at có thể là Date object từ pg hoặc ISO string
+    if (month && month !== "all") {
+      data = data.filter(r => {
+        const raw = r.booking_created_at;
+        if (!raw) return false;
+        try { return new Date(raw as string | Date).toISOString().slice(0, 7) === month; }
+        catch { return false; }
+      });
+    }
 
     if (status && status !== "all") {
       if (status === "chua_nhan") {
@@ -152,8 +163,9 @@ router.get("/photoshop-jobs/my-stats", async (req, res) => {
       ? await pool.query(`SELECT COUNT(*) FROM photoshop_jobs WHERE status = 'hoan_thanh' AND updated_at >= $1 AND is_active = true`, [monthStart])
       : await pool.query(`SELECT COUNT(*) FROM photoshop_jobs WHERE assigned_staff_id = $1 AND status = 'hoan_thanh' AND updated_at >= $2 AND is_active = true`, [callerId, monthStart]);
 
-    // Đơn chưa nhận: booking không có job active, hoặc job chưa assigned, hoặc status = chua_nhan
-    const unassignedQ = await pool.query(`
+    // Đơn tồn: tất cả booking trong màn hậu kỳ chưa hoàn thành (khớp với booking-view)
+    // = non-cancelled + non-child bookings mà không có job is_active=true với status='hoan_thanh'
+    const backlogQ = await pool.query(`
       SELECT COUNT(*) FROM bookings b
       WHERE b.status NOT IN ('cancelled')
         AND (b.parent_id IS NULL OR b.is_parent_contract = true)
@@ -161,15 +173,14 @@ router.get("/photoshop-jobs/my-stats", async (req, res) => {
           SELECT 1 FROM photoshop_jobs pj
           WHERE pj.booking_id = b.id
             AND pj.is_active = true
-            AND pj.assigned_staff_id IS NOT NULL
-            AND pj.status != 'chua_nhan'
+            AND pj.status = 'hoan_thanh'
         )
     `);
 
     res.json({
       myActive: parseInt(myActiveQ.rows[0]?.count ?? "0"),
       myDoneThisMonth: parseInt(myDoneQ.rows[0]?.count ?? "0"),
-      unassigned: parseInt(unassignedQ.rows[0]?.count ?? "0"),
+      backlog: parseInt(backlogQ.rows[0]?.count ?? "0"),
     });
   } catch (e) { res.status(500).json({ error: String(e) }); }
 });
