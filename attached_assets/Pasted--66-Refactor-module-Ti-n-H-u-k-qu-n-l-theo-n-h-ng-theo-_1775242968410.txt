@@ -1,0 +1,217 @@
+#66 - Refactor module Tiến độ Hậu kỳ — quản lý theo Đơn hàng, theo tài khoản nhân viên
+
+Mục tiêu
+Biến module "Tiến độ hậu kỳ" thành màn quản lý công việc hậu kỳ chuyên nghiệp, lấy dữ liệu trực tiếp từ Đơn hàng (bookings), không cho tạo job hậu kỳ độc lập.
+
+Nguyên tắc
+1. Hậu kỳ không phải entity riêng
+2. Hậu kỳ phải gắn với đơn hàng
+3. Nhân viên đăng nhập tài khoản nào thì thấy đúng công việc của tài khoản đó
+4. Chủ xem được toàn bộ, nhân viên chỉ ưu tiên thấy phần việc của mình
+
+-----------------------------------
+1. XÓA LOGIC CŨ
+-----------------------------------
+
+Xóa hoàn toàn:
+- Nút "+ Thêm job"
+- Modal "Tạo job hậu kỳ"
+- API tạo photoshop job độc lập (nếu có)
+
+Không được tồn tại job hậu kỳ rời, không gắn booking
+
+-----------------------------------
+2. HẬU KỲ PHẢI GẮN VỚI BOOKING
+-----------------------------------
+
+Dùng dữ liệu từ bookings để quản lý hậu kỳ.
+
+Mỗi booking cần có / hoặc derive được các thông tin sau:
+- customerName
+- phone
+- serviceName
+- shootDate
+- createdAt
+- editAssignedTo
+- editStatus: pending | assigned | editing | done
+- editStartAt
+- editDeadlineInternal
+- editDeadlineClient
+- totalImages
+- editedImages
+
+Tiến độ:
+progress = editedImages / totalImages
+
+-----------------------------------
+3. MÀN "TIẾN ĐỘ HẬU KỲ"
+-----------------------------------
+
+Không tạo mới.
+Chỉ hiển thị danh sách đơn hàng có hậu kỳ.
+
+Sort mặc định:
+- Đơn mới nhất lên trên
+- createdAt DESC
+
+-----------------------------------
+4. THEO TÀI KHOẢN NHÂN VIÊN
+-----------------------------------
+
+Nếu đăng nhập bằng tài khoản Photoshop (ví dụ Quân, Trung):
+- vào module Hậu kỳ
+- thấy danh sách đơn hàng hậu kỳ
+- ưu tiên hiển thị đơn mình đã nhận
+- vẫn có thể thấy các đơn chưa có người nhận để nhận việc nếu được phân quyền
+
+Nếu là admin/chủ:
+- thấy toàn bộ
+- quản lý được ai đang làm, ai chưa làm, đơn nào sắp trễ
+
+-----------------------------------
+5. Ô THỐNG KÊ TRÊN ĐẦU TRANG
+-----------------------------------
+
+Hiển thị các box thống kê gọn, đẹp, chuyên nghiệp:
+
+1. Đơn hàng bạn đã nhận
+- số đơn hiện đang assigned/editing cho tài khoản hiện tại
+
+2. Đơn hàng bạn đã hoàn thành trong tháng này
+- số đơn editStatus = done trong tháng hiện tại của tài khoản hiện tại
+
+3. Đơn hàng chưa thực hiện
+- đơn chưa có ai nhận
+- hoặc editStatus = pending
+
+Admin có thể thấy thống kê toàn bộ
+Nhân viên thấy thống kê theo tài khoản của mình
+
+-----------------------------------
+6. TÌM KIẾM / LỌC
+-----------------------------------
+
+Thanh tìm kiếm trên đầu:
+Cho phép tìm theo:
+- tên khách
+- số điện thoại
+- ngày chụp / ngày đơn
+
+Có thể gộp 1 ô search thông minh:
+"Tìm tên khách, số điện thoại, ngày..."
+
+-----------------------------------
+7. CẢNH BÁO MÀU SẮC
+-----------------------------------
+
+Logic màu cảnh báo:
+
+A. Nếu đơn chưa có người nhận:
+- hiển thị đỏ
+- trạng thái: "Chưa có người nhận"
+
+B. Nếu đã nhận rồi:
+- tính số ngày còn lại tới deadline nội bộ
+
+Nếu còn <= 3 ngày:
+- đỏ
+
+Nếu còn <= 5 ngày:
+- vàng
+
+Nếu > 5 ngày:
+- bình thường / xanh
+
+C. Nếu hoàn thành:
+- xanh / completed
+
+Mục tiêu:
+Chủ nhìn vào là biết ngay đơn nào đang nguy hiểm
+
+-----------------------------------
+8. CARD ĐƠN HÀNG TRONG MÀN HẬU KỲ
+-----------------------------------
+
+Mỗi card hiển thị gọn và chuyên nghiệp:
+
+- Tên khách
+- Số điện thoại
+- Tên dịch vụ
+- Ngày chụp
+- Ngày bắt đầu hậu kỳ
+- Deadline nội bộ
+- Deadline khách
+- Nhân viên phụ trách
+- Tổng số ảnh
+- Đã làm xong bao nhiêu ảnh
+- Thanh tiến độ %
+
+Badge trạng thái:
+- Chưa nhận
+- Đang làm
+- Hoàn thành
+
+Badge cảnh báo:
+- Đỏ / vàng theo deadline
+- Đỏ nếu chưa có người nhận
+
+-----------------------------------
+9. KHI BẤM VÀO ĐƠN HÀNG
+-----------------------------------
+
+Mở chi tiết hậu kỳ của chính booking đó, không mở job riêng.
+
+Trong detail có các action:
+
+1. Nhận việc
+- editAssignedTo = currentUser
+- editStartAt = now
+- editStatus = assigned hoặc editing
+
+2. Cập nhật tiến độ
+- sửa editedImages
+- tự tính progress
+
+3. Hoàn thành
+- editStatus = done
+
+-----------------------------------
+10. PHÂN NHÓM HIỂN THỊ
+-----------------------------------
+
+Có thể chia tab / section:
+
+- Đơn của tôi
+- Chưa có người nhận
+- Đang làm
+- Hoàn thành
+
+Hoặc giữ 1 list nhưng có filter:
+- Tất cả
+- Của tôi
+- Chưa nhận
+- Đang làm
+- Hoàn thành
+
+Ưu tiên UX gọn, đẹp, chuyên nghiệp trên mobile
+
+-----------------------------------
+11. KHÔNG ĐƯỢC SỬA
+-----------------------------------
+
+Không sửa module khác ngoài phạm vi hậu kỳ/bookings liên quan trực tiếp.
+Không tạo entity hậu kỳ độc lập nữa.
+Không để hậu kỳ tách rời khỏi đơn hàng.
+
+-----------------------------------
+12. KẾT QUẢ CUỐI CÙNG
+-----------------------------------
+
+- Nhân viên Photoshop đăng nhập vào là thấy đúng danh sách việc
+- Có tìm kiếm theo tên / SĐT / ngày
+- Có box thống kê rõ ràng
+- Đơn mới lên trên
+- Đơn chưa có người nhận báo đỏ
+- Đơn gần deadline báo vàng/đỏ
+- Click vào đơn để nhận việc, cập nhật tiến độ, hoàn thành
+- Hệ thống gọn, đúng logic studio, không còn job rời gây loạn dữ liệu
