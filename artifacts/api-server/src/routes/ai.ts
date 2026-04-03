@@ -18,7 +18,7 @@ function checkRateLimit(callerId: number): boolean {
 }
 
 function getGemini() {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY_2;
   if (!apiKey) throw new Error("GEMINI_API_KEY chưa được cấu hình");
   return new GoogleGenerativeAI(apiKey);
 }
