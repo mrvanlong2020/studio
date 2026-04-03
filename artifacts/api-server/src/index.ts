@@ -7,19 +7,7 @@ if (!process.env["GEMINI_API_KEY"] && !process.env["GOOGLE_API_KEY_2"]) {
   logger.warn("GEMINI_API_KEY chưa được cấu hình. Vào Replit Secrets và thêm key từ aistudio.google.com/apikey để dùng Trợ lý AI.");
 }
 
-const rawPort = process.env["PORT"];
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
+const port = Number(process.env.PORT) || 3000;
 
 runMigrations()
   .catch((err) => {
@@ -27,11 +15,15 @@ runMigrations()
     process.exit(1);
   })
   .then(() => {
-    app.listen(port, (err) => {
+    const server = app.listen(port, (err?: Error) => {
       if (err) {
         logger.error({ err }, "Error listening on port");
         process.exit(1);
       }
       logger.info({ port }, "Server listening");
     });
+
+    const shutdown = () => server.close(() => process.exit(0));
+    process.on("SIGTERM", shutdown);
+    process.on("SIGINT", shutdown);
   });
