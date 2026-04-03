@@ -186,10 +186,8 @@ export default function SettingsPage() {
       });
       const data = await r.json() as { ok: boolean; message: string };
       setAiTestResult(data);
-      if (data.ok) {
-        refetchAiStatus();
-        qc.invalidateQueries({ queryKey: ["ai-key-status"] });
-      }
+      refetchAiStatus();
+      qc.invalidateQueries({ queryKey: ["ai-key-status"] });
     } finally {
       setAiTesting(false);
     }
