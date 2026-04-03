@@ -1,5 +1,7 @@
 import { Router, type IRouter } from "express";
-import { pool } from "@workspace/db";
+import { pool, db } from "@workspace/db";
+import { settingsTable } from "@workspace/db/schema";
+import { eq } from "drizzle-orm";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { verifyToken } from "./auth";
 
@@ -17,8 +19,13 @@ function checkRateLimit(callerId: number): boolean {
   return true;
 }
 
-function getGemini() {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY_2;
+async function getGemini() {
+  let apiKey: string | null = null;
+  try {
+    const rows = await db.select().from(settingsTable).where(eq(settingsTable.key, "gemini_api_key"));
+    apiKey = rows[0]?.value || null;
+  } catch {}
+  if (!apiKey) apiKey = process.env.GEMINI_API_KEY || null;
   if (!apiKey) throw new Error("GEMINI_API_KEY chưa được cấu hình");
   return new GoogleGenerativeAI(apiKey);
 }
@@ -138,7 +145,7 @@ ${studioContext}`;
       parts: [{ text: m.content }],
     }));
 
-    const genAI = getGemini();
+    const genAI = await getGemini();
     const model = genAI.getGenerativeModel({
       model: "gemini-2.0-flash",
       systemInstruction,

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, Input, Button, Badge } from "@/components/ui";
 import { Bot, Send, User, Sparkles, Loader2 } from "lucide-react";
 import { useStaffAuth } from "@/contexts/StaffAuthContext";
@@ -17,7 +18,6 @@ export default function AiAssistantPage() {
   ]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
-  const [keyConfigured, setKeyConfigured] = useState<boolean | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -36,15 +36,15 @@ export default function AiAssistantPage() {
     scrollToBottom();
   }, [messages]);
 
-  useEffect(() => {
-    fetch(`${BASE}/api/health/check-ai-key`)
-      .then(r => r.json())
-      .then(data => setKeyConfigured(data.configured))
-      .catch(() => setKeyConfigured(false));
-  }, []);
+  const { data: aiKeyData } = useQuery({
+    queryKey: ["ai-key-status"],
+    queryFn: () => fetch(`${BASE}/api/health/check-ai-key`).then(r => r.ok ? r.json() : { configured: false }),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
 
   const handleSend = async (text: string) => {
-    if (!text.trim() || isStreaming || !keyConfigured) return;
+    if (!text.trim() || isStreaming || !aiKeyData?.configured) return;
 
     const userMsg: Message = { role: "user", content: text };
     setMessages(prev => [...prev, userMsg]);
@@ -151,12 +151,12 @@ export default function AiAssistantPage() {
         <p className="text-muted-foreground mt-1">Phân tích dữ liệu và gợi ý thông minh cho studio của bạn</p>
       </div>
 
-      {keyConfigured === false && (
+      {aiKeyData?.configured === false && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
           <Sparkles className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="font-semibold text-amber-900">Cấu hình GEMINI_API_KEY</p>
-            <p className="text-sm text-amber-800 mt-1">Vui lòng cấu hình GEMINI_API_KEY trong Replit Secrets để dùng Trợ lý AI.</p>
+            <p className="font-semibold text-amber-900">Cần cấu hình Gemini API Key</p>
+            <p className="text-sm text-amber-800 mt-1">Vào <strong>Cài đặt → Cài đặt AI</strong> để nhập API key từ aistudio.google.com/apikey.</p>
           </div>
         </div>
       )}

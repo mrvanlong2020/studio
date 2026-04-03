@@ -3,6 +3,8 @@ import { db } from "@workspace/db";
 import { settingsTable } from "@workspace/db/schema";
 import { verifyToken } from "./auth";
 import { pool } from "@workspace/db";
+import { eq } from "drizzle-orm";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const router: IRouter = Router();
 
@@ -71,6 +73,56 @@ router.put("/settings", async (req, res) => {
       .onConflictDoUpdate({ target: settingsTable.key, set: { value: String(value) } });
   }
   res.json(await loadSettings());
+});
+
+// ---------- AI Key helpers ----------
+async function getGeminiApiKey(): Promise<string | null> {
+  try {
+    const rows = await db.select().from(settingsTable).where(eq(settingsTable.key, "gemini_api_key"));
+    if (rows[0]?.value) return rows[0].value;
+  } catch {}
+  return process.env.GEMINI_API_KEY || null;
+}
+
+// GET /settings/ai-key/status — configured true/false (không trả key)
+router.get("/settings/ai-key/status", async (req, res) => {
+  const callerId = verifyToken(req.headers.authorization);
+  if (!callerId) return res.status(401).json({ error: "Chưa đăng nhập" });
+  const key = await getGeminiApiKey();
+  res.json({ configured: !!key });
+});
+
+// PUT /settings/ai-key — lưu key vào DB (admin only)
+router.put("/settings/ai-key", async (req, res) => {
+  if (!await isAdminCaller(req.headers.authorization)) {
+    return res.status(403).json({ error: "Không có quyền" });
+  }
+  const { apiKey } = req.body as { apiKey?: string };
+  if (!apiKey || typeof apiKey !== "string" || !apiKey.trim()) {
+    return res.status(400).json({ error: "API key không hợp lệ" });
+  }
+  await db
+    .insert(settingsTable)
+    .values({ key: "gemini_api_key", value: apiKey.trim() })
+    .onConflictDoUpdate({ target: settingsTable.key, set: { value: apiKey.trim() } });
+  res.json({ ok: true });
+});
+
+// POST /settings/ai-key/test — test key đã lưu trong DB (admin only)
+router.post("/settings/ai-key/test", async (req, res) => {
+  if (!await isAdminCaller(req.headers.authorization)) {
+    return res.status(403).json({ error: "Không có quyền" });
+  }
+  const apiKey = await getGeminiApiKey();
+  if (!apiKey) return res.json({ ok: false, message: "Chưa có API key trong database" });
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    await model.generateContent("Trả lời đúng 1 chữ: OK");
+    res.json({ ok: true, message: "Kết nối Gemini thành công!" });
+  } catch (e) {
+    res.json({ ok: false, message: "Key không hợp lệ hoặc lỗi mạng: " + String(e) });
+  }
 });
 
 export default router;
