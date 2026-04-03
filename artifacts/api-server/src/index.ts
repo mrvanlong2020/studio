@@ -7,7 +7,8 @@ if (!process.env["GEMINI_API_KEY"] && !process.env["GOOGLE_API_KEY_2"]) {
   logger.warn("GEMINI_API_KEY chưa được cấu hình. Vào Replit Secrets và thêm key từ aistudio.google.com/apikey để dùng Trợ lý AI.");
 }
 
-const port = Number(process.env.PORT) || 3000;
+const rawPort = Number(process.env.PORT);
+const port = Number.isInteger(rawPort) && rawPort > 0 ? rawPort : 3000;
 
 runMigrations()
   .catch((err) => {
