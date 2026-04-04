@@ -228,7 +228,7 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
       });
       c.addEventListener('pointerup', function() { drawing = false; last = null; });
 
-      function clearSig() { ctx.clearRect(0, 0, c.width, c.height); }
+      window.clearSig = function clearSig() { ctx.clearRect(0, 0, c.width, c.height); };
 
       function showMsg(html, type) {
         var m = document.getElementById('msg');
@@ -236,7 +236,7 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
         m.className = type === 'ok' ? 'msg-ok' : type === 'err' ? 'msg-err' : 'msg-info';
       }
 
-      async function submitSign() {
+      window.submitSign = async function submitSign() {
         var name = document.getElementById('signerName').value.trim();
         var phone = document.getElementById('signerPhone').value.trim();
         if (!name) { showMsg('⚠️ Vui lòng nhập họ và tên.', 'err'); return; }
@@ -272,7 +272,7 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
           document.getElementById('btnSubmit').disabled = false;
           document.getElementById('btnClear').disabled = false;
         }
-      }
+      };
     }
   </script>
 </body>
