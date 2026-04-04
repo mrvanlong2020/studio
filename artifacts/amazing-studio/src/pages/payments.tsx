@@ -423,7 +423,11 @@ export default function PaymentsPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
-  const { data: paymentHistory = [], refetch: refetchHistory } = useQuery<Payment[]>({
+  const {
+    data: paymentHistory = [],
+    refetch: refetchHistory,
+    isFetched: paymentHistoryFetched,
+  } = useQuery<Payment[]>({
     queryKey: ["payments", selectedBooking?.id],
     queryFn: () => fetchJson(`/api/payments?bookingId=${selectedBooking!.id}`),
     enabled: !!selectedBooking,
@@ -484,7 +488,7 @@ export default function PaymentsPage() {
     if (fileRef.current) fileRef.current.value = "";
   };
 
-  /* Khi chọn hồ sơ → mở Sheet */
+  /* Khi chọn hồ sơ → mở Sheet, rồi fetch fresh booking để luôn có paidAmount đúng */
   const handleSelectBooking = (b: Booking) => {
     setSelectedBooking(b);
     setSaveError(null);
@@ -492,12 +496,22 @@ export default function PaymentsPage() {
     setProofImage(null);
     if (fileRef.current) fileRef.current.value = "";
     setSheetOpen(true);
+    // Fetch fresh booking ngay sau khi mở Sheet (không block UI)
+    if (b.customerPhone) {
+      fetchJson(`/api/payments/search?q=${encodeURIComponent(b.customerPhone)}`)
+        .then((fresh: Booking[]) => {
+          const refreshed = fresh.find(x => x.id === b.id);
+          if (refreshed) setSelectedBooking(refreshed);
+        })
+        .catch(() => {});
+    }
   };
 
   /* Khi click vào phiếu thu gần đây → chọn booking tương ứng */
-  const handleSelectFromRecent = async (p: RecentPaymentItem) => {
+  const handleSelectFromRecent = (p: RecentPaymentItem) => {
     if (!p.bookingId) return;
-    // Set initial state từ cached data để mở Sheet ngay
+    // Build initial booking từ cached data để mở Sheet ngay
+    // handleSelectBooking sẽ tự fetch fresh booking sau khi mở
     const booking: Booking = {
       id:              p.bookingId,
       orderCode:       p.orderCode ?? "",
@@ -515,16 +529,6 @@ export default function PaymentsPage() {
       serviceCount:    0,
     };
     handleSelectBooking(booking);
-    // Fetch fresh booking để cập nhật paidAmount chính xác (không dùng cache)
-    if (p.customerPhone) {
-      try {
-        const fresh: Booking[] = await fetchJson(
-          `/api/payments/search?q=${encodeURIComponent(p.customerPhone)}`
-        );
-        const refreshed = fresh.find(b => b.id === p.bookingId);
-        if (refreshed) setSelectedBooking(refreshed);
-      } catch {}
-    }
   };
 
   /* Đóng Sheet: kiểm tra isDirty */
@@ -627,9 +631,9 @@ export default function PaymentsPage() {
   const amtNum = parseFloat(form.amount) || 0;
 
   // actualPaid: source of truth — tổng từ paymentHistory (đã fetch fresh từ DB)
-  // Fallback về selectedBooking.paidAmount nếu paymentHistory chưa load
-  const actualPaid = paymentHistory.length > 0
-    ? paymentHistory.reduce((s, p) => s + ((p as any).amount ?? 0), 0)
+  // Fallback về selectedBooking.paidAmount chỉ khi query chưa hoàn thành (isFetched = false)
+  const actualPaid = paymentHistoryFetched
+    ? paymentHistory.reduce((s: number, p: Payment) => s + p.amount, 0)
     : (selectedBooking?.paidAmount ?? 0);
 
   // effectiveRemaining: tính từ actualPaid — không dùng cache

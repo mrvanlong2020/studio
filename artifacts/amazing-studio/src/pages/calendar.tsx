@@ -1913,6 +1913,14 @@ function ShowDetailPanel({
   const siblings: Booking[] = fullDetail?.siblings ?? [];
   const parentContract: (Booking & { remainingAmount: number }) | null = (fullDetail?.parentContract as (Booking & { remainingAmount: number })) ?? null;
 
+  // ── Payment history for this booking ─────────────────────────────────────
+  type BookingPayment = { id?: number; amount?: number; paymentMethod?: string; paymentType?: string; collectorName?: string; notes?: string; paidAt?: string; paidDate?: string };
+  const { data: paymentHistory = [] } = useQuery<BookingPayment[]>({
+    queryKey: ["payments", booking.id],
+    queryFn: () => authFetch(`${BASE}/api/payments?bookingId=${booking.id}`).then(r => r.ok ? r.json() : []),
+    staleTime: 30_000,
+  });
+
   const [deleting, setDeleting] = useState(false);
   const [previewImg, setPreviewImg] = useState<string | null>(null);
 
@@ -2453,23 +2461,50 @@ function ShowDetailPanel({
                 <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                   <CreditCard className="w-3.5 h-3.5" /> Thanh toán
                 </p>
-                <div className="rounded-xl border border-border/50 overflow-hidden divide-y divide-border/40">
-                  <div className="flex justify-between items-center px-3 py-2.5">
-                    <span className="text-sm text-muted-foreground">Tổng tiền</span>
-                    <span className="font-bold text-base">{formatVND(booking.totalAmount)}</span>
-                  </div>
-                  <div className="flex justify-between items-center px-3 py-2.5">
-                    <span className="text-sm text-muted-foreground">Đã thanh toán</span>
-                    <span className="font-semibold text-emerald-600">{formatVND(booking.paidAmount)}</span>
-                  </div>
-                  <div className={`flex justify-between items-center px-3 py-2.5 ${booking.remainingAmount > 0 ? "bg-destructive/5" : "bg-emerald-50/40"}`}>
-                    <span className="text-sm font-semibold">Còn lại</span>
-                    <span className={`font-bold text-base ${booking.remainingAmount > 0 ? "text-destructive" : "text-emerald-600"}`}>
-                      {booking.remainingAmount > 0 && <span className="mr-1">⚠️</span>}
-                      {formatVND(booking.remainingAmount)}
-                    </span>
-                  </div>
-                </div>
+                {(() => {
+                  const totalPaid = paymentHistory.reduce((s, p) => s + (p.amount ?? 0), 0);
+                  const discount   = booking.discountAmount ?? 0;
+                  const remaining  = Math.max(0, booking.totalAmount - discount - totalPaid);
+                  return (
+                    <div className="rounded-xl border border-border/50 overflow-hidden divide-y divide-border/40">
+                      <div className="flex justify-between items-center px-3 py-2.5">
+                        <span className="text-sm text-muted-foreground">Tổng tiền</span>
+                        <span className="font-bold text-base">{formatVND(booking.totalAmount)}</span>
+                      </div>
+                      {discount > 0 && (
+                        <div className="flex justify-between items-center px-3 py-2.5">
+                          <span className="text-sm text-muted-foreground">Giảm giá</span>
+                          <span className="text-amber-600 font-medium">-{formatVND(discount)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center px-3 py-2.5">
+                        <span className="text-sm text-muted-foreground">Đã thu</span>
+                        <span className="font-semibold text-emerald-600">{formatVND(totalPaid)}</span>
+                      </div>
+                      <div className={`flex justify-between items-center px-3 py-2.5 ${remaining > 0 ? "bg-destructive/5" : "bg-emerald-50/40"}`}>
+                        <span className="text-sm font-semibold">Còn lại</span>
+                        <span className={`font-bold text-base ${remaining > 0 ? "text-destructive" : "text-emerald-600"}`}>
+                          {remaining > 0 && <span className="mr-1">⚠️</span>}
+                          {formatVND(remaining)}
+                        </span>
+                      </div>
+                      {paymentHistory.length > 0 && (
+                        <div className="px-3 py-2 space-y-1 bg-muted/10">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Lịch sử thu tiền</p>
+                          {paymentHistory.map((p, i) => (
+                            <div key={p.id ?? i} className="flex justify-between items-center text-xs">
+                              <span className="text-muted-foreground">
+                                {p.paidDate ? new Date(p.paidDate).toLocaleDateString("vi-VN") : p.paidAt ? new Date(p.paidAt).toLocaleDateString("vi-VN") : "—"}
+                                {p.paymentMethod === "bank_transfer" ? " · CK" : " · TM"}
+                              </span>
+                              <span className="font-medium text-emerald-700">+{formatVND(p.amount ?? 0)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </>
           )}
