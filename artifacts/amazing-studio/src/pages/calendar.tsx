@@ -2065,7 +2065,7 @@ function ShowDetailPanel({
     try {
       const res = await authFetch(`${BASE}/api/contracts?customerId=${booking.customerId}`);
       const rows = res.ok ? await res.json() : [];
-      const contract = Array.isArray(rows) ? rows.find((c: { bookingId?: number }) => c.bookingId === booking.id) : null;
+      const contract = Array.isArray(rows) ? rows[0] : null;
       if (!contract) {
         alert("Không tìm thấy hóa đơn của show này");
         return;
