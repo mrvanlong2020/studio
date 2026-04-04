@@ -2621,9 +2621,7 @@ function MonthDayCell({
   const isRam = lunar.day === 15;
   const MAX_VISIBLE = density === "comfortable" ? 4 : 3;
 
-  const cellMinHeight = density === "comfortable"
-    ? "160px"
-    : "clamp(130px, calc((100vh - 260px) / 6), 220px)";
+  const isComfortable = density === "comfortable";
 
   return (
     <div
@@ -2632,8 +2630,9 @@ function MonthDayCell({
         "transition-colors duration-100",
         isSelected ? "bg-primary/5" : isToday(date) ? "bg-orange-50/30 dark:bg-orange-950/10" : "hover:bg-muted/20",
         isOtherMonth ? "opacity-25" : "",
+        isComfortable ? "min-h-[160px] sm:min-h-[180px]" : "",
       ].join(" ")}
-      style={{ minHeight: cellMinHeight }}
+      style={!isComfortable ? { minHeight: "clamp(130px, calc((100vh - 260px) / 6), 220px)" } : undefined}
       onClick={() => onDayClick(date)}
     >
       {/* Day header — compact */}
@@ -3116,7 +3115,7 @@ function CalendarPageInner() {
 
   // ── MONTH VIEW (full screen) ──
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3" style={{ minHeight: 0 }}>
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
@@ -3149,7 +3148,8 @@ function CalendarPageInner() {
 
       {/* Calendar card */}
       <div
-        className="bg-card rounded-2xl border shadow-sm overflow-hidden"
+        className="bg-card rounded-2xl border shadow-sm overflow-hidden flex flex-col"
+        style={{ maxHeight: "calc(100svh - 160px)" }}
         onTouchStart={e => {
           const t = e.touches[0];
           touchStartRef.current = { x: t.clientX, y: t.clientY };
@@ -3167,7 +3167,7 @@ function CalendarPageInner() {
         }}
       >
         {/* Month nav */}
-        <div className="flex items-center justify-between px-4 py-3 border-b bg-gradient-to-r from-card to-muted/10">
+        <div className="flex items-center justify-between px-4 py-3 border-b bg-gradient-to-r from-card to-muted/10 flex-shrink-0">
           <div>
             <div className="flex items-center gap-2">
               <Sun className="w-4 h-4 text-orange-400" />
@@ -3202,14 +3202,14 @@ function CalendarPageInner() {
         </div>
 
         {/* Day-of-week headers */}
-        <div className="grid grid-cols-7 border-b border-border/50">
+        <div className="grid grid-cols-7 border-b border-border/50 flex-shrink-0">
           {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((d, i) => (
             <div key={d} className={`text-center text-xs font-bold py-2 border-r border-border/50 last:border-r-0 ${i === 5 ? "text-blue-600" : i === 6 ? "text-red-500" : "text-muted-foreground"}`}>{d}</div>
           ))}
         </div>
 
-        {/* Grid — scrollable body */}
-        <div className="overflow-y-auto" style={{ maxHeight: "calc(100svh - 260px)" }}>
+        {/* Grid — scrollable body (flex-1 fills the remaining card height) */}
+        <div className="overflow-y-auto flex-1 min-h-0">
           <div className="grid grid-cols-7">
             {/* Leading days from prev month */}
             {Array.from({ length: firstDayOfMonth }).map((_, i) => {
