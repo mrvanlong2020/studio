@@ -1,13 +1,14 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useListTasks, useUpdateTask, useListStaff, TaskStatus } from "@workspace/api-client-react";
 import { Select } from "@/components/ui";
 import {
-  Plus, Clock, AlertCircle, CheckCircle2, User, Calendar,
-  List, LayoutGrid, Search, X, Loader2, Camera, Briefcase
+  Clock, AlertCircle, CheckCircle2, User, Calendar,
+  List, LayoutGrid, Search, X, Loader2, Briefcase, Save,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { StaffAssignmentEditor, type StaffAssignment } from "@/components/staff-assignment-editor";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const TOKEN_KEY = "amazingStudioToken_v2";
@@ -47,42 +48,24 @@ type BookingWithTasks = {
   location: string | null;
   customer_name: string;
   customer_phone: string;
+  assigned_staff: StaffAssignment[];
   tasks: TaskAssignment[];
 };
 
-type StaffItem = { id: number | string; name: string };
-
-// ── Role options ──────────────────────────────────────────────────────────────
-const ROLE_OPTIONS = [
-  { role: "photographer", taskType: "chup",      label: "Chụp hình",  emoji: "📷",
-    chipCls: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" },
-  { role: "makeup",       taskType: "makeup",    label: "Makeup",     emoji: "💄",
-    chipCls: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300" },
-  { role: "assistant",    taskType: "support",   label: "Thợ phụ",    emoji: "🤝",
-    chipCls: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" },
-  { role: "support",      taskType: "support",   label: "Hỗ trợ",     emoji: "🛠️",
-    chipCls: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" },
-  { role: "videographer", taskType: "quay_phim", label: "Quay phim",  emoji: "🎬",
-    chipCls: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300" },
-  { role: "other",        taskType: "other",     label: "Khác",       emoji: "📋",
-    chipCls: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" },
-];
-
-function getRoleOption(role: string | null) {
-  return ROLE_OPTIONS.find(r => r.role === role) ?? ROLE_OPTIONS[ROLE_OPTIONS.length - 1];
-}
+type StaffRate = { staffId: number; role: string; taskKey: string; rate: number | null };
+type StaffOption = { id: number; name: string; roles: string[] };
 
 // ── Kanban/List constants ─────────────────────────────────────────────────────
 const PRIO_CONFIG = {
-  high:   { label: "Cao",       color: "text-red-700",    bg: "bg-red-100 border-red-200" },
-  medium: { label: "Trung bình",color: "text-yellow-700", bg: "bg-yellow-100 border-yellow-200" },
-  low:    { label: "Thấp",      color: "text-green-700",  bg: "bg-green-100 border-green-200" },
+  high:   { label: "Cao",        color: "text-red-700",    bg: "bg-red-100 border-red-200" },
+  medium: { label: "Trung bình", color: "text-yellow-700", bg: "bg-yellow-100 border-yellow-200" },
+  low:    { label: "Thấp",       color: "text-green-700",  bg: "bg-green-100 border-green-200" },
 };
 
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; iconColor: string; bg: string; border: string }> = {
-  todo:        { label: "Chờ xử lý",      icon: Clock,       iconColor: "text-slate-500",   bg: "bg-slate-50 dark:bg-slate-900/20",  border: "border-slate-200" },
-  in_progress: { label: "Đang thực hiện", icon: AlertCircle, iconColor: "text-blue-500",    bg: "bg-blue-50 dark:bg-blue-900/20",    border: "border-blue-200" },
-  done:        { label: "Hoàn thành",     icon: CheckCircle2,iconColor: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-900/20", border: "border-emerald-200" },
+  todo:        { label: "Chờ xử lý",      icon: Clock,        iconColor: "text-slate-500",   bg: "bg-slate-50 dark:bg-slate-900/20",     border: "border-slate-200" },
+  in_progress: { label: "Đang thực hiện", icon: AlertCircle,  iconColor: "text-blue-500",    bg: "bg-blue-50 dark:bg-blue-900/20",       border: "border-blue-200" },
+  done:        { label: "Hoàn thành",     icon: CheckCircle2, iconColor: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-900/20", border: "border-emerald-200" },
 };
 const columns = (Object.entries(STATUS_CONFIG) as [TaskStatus, typeof STATUS_CONFIG[string]][])
   .map(([id, cfg]) => ({ id, ...cfg }));
@@ -102,208 +85,124 @@ function fmtShootDate(d: string | null | undefined) {
 }
 
 function isFullyStaffed(b: BookingWithTasks): boolean {
-  return b.tasks.some(t => t.task_type === "chup") && b.tasks.some(t => t.task_type === "makeup");
-}
-
-function getStaffingStatus(b: BookingWithTasks): "du_nguoi" | "chua_du" {
-  return isFullyStaffed(b) ? "du_nguoi" : "chua_du";
+  return (b.assigned_staff ?? []).length > 0;
 }
 
 function daysUntil(d: string | null | undefined): { days: number; label: string; color: string } | null {
   if (!d) return null;
-  const today = new Date(); today.setHours(0,0,0,0);
-  const dt = new Date(d); dt.setHours(0,0,0,0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const dt = new Date(d); dt.setHours(0, 0, 0, 0);
   const diff = Math.round((dt.getTime() - today.getTime()) / 86400000);
-  if (diff < 0)  return { days: diff, label: `${Math.abs(diff)} ngày trước`, color: "text-slate-400" };
-  if (diff === 0) return { days: 0, label: "Hôm nay!", color: "text-orange-600 font-bold" };
-  if (diff <= 3)  return { days: diff, label: `Còn ${diff} ngày`, color: "text-red-600 font-semibold" };
-  if (diff <= 7)  return { days: diff, label: `Còn ${diff} ngày`, color: "text-amber-600" };
+  if (diff < 0)   return { days: diff, label: `${Math.abs(diff)} ngày trước`, color: "text-slate-400" };
+  if (diff === 0) return { days: 0,    label: "Hôm nay!",                    color: "text-orange-600 font-bold" };
+  if (diff <= 3)  return { days: diff, label: `Còn ${diff} ngày`,            color: "text-red-600 font-semibold" };
+  if (diff <= 7)  return { days: diff, label: `Còn ${diff} ngày`,            color: "text-amber-600" };
   return { days: diff, label: `Còn ${diff} ngày`, color: "text-muted-foreground" };
 }
 
-// ── Assignment Modal ──────────────────────────────────────────────────────────
-function AssignmentModal({
-  booking, onClose, staffList,
-}: {
-  booking: BookingWithTasks;
-  onClose: () => void;
-  staffList: StaffItem[];
-}) {
-  const qc = useQueryClient();
-  const [staffId, setStaffId] = useState("");
-  const [roleKey, setRoleKey] = useState("photographer");
-  const [notes, setNotes] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState("");
-
-  const selectedRole = ROLE_OPTIONS.find(r => r.role === roleKey) ?? ROLE_OPTIONS[0];
-
-  const handleSave = async () => {
-    if (!staffId) { setErr("Chọn nhân sự trước"); return; }
-    setSaving(true); setErr("");
-    try {
-      const res = await authFetch(`${BASE}/api/tasks`, {
-        method: "POST",
-        body: JSON.stringify({
-          bookingId: booking.booking_id,
-          title: `${selectedRole.label} - ${booking.customer_name}`,
-          assigneeId: parseInt(staffId),
-          role: selectedRole.role,
-          taskType: selectedRole.taskType,
-          category: "photo",
-          notes: notes || null,
-          priority: "medium",
-          status: "todo",
-        }),
-      });
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({}));
-        throw new Error(e.error || "Lỗi giao việc");
-      }
-      qc.invalidateQueries({ queryKey: ["tasks-booking-view"] });
-      qc.invalidateQueries({ queryKey: ["/api/tasks"] });
-      onClose();
-    } catch (e) { setErr(String(e instanceof Error ? e.message : e)); }
-    finally { setSaving(false); }
-  };
-
-  const du = daysUntil(booking.shoot_date);
-
-  return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
-      <div className="bg-background rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="px-4 pt-4 pb-3 border-b border-border">
-          <div className="flex items-start justify-between">
-            <div>
-              <h2 className="font-semibold text-base">Giao việc</h2>
-              <div className="text-sm text-muted-foreground mt-0.5">{booking.customer_name} · {booking.order_code}</div>
-            </div>
-            <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted"><X size={18} /></button>
-          </div>
-          <div className="flex flex-wrap gap-2 mt-2 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <Camera size={11} />{fmtShootDate(booking.shoot_date)}
-            </span>
-            {du && <span className={du.color}>{du.label}</span>}
-            <span>{booking.service_label || booking.package_type || "—"}</span>
-            {booking.location && <span>📍 {booking.location}</span>}
-          </div>
-        </div>
-
-        <div className="p-4 space-y-4">
-          {err && <div className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">{err}</div>}
-
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Vai trò</label>
-            <div className="grid grid-cols-3 gap-1.5">
-              {ROLE_OPTIONS.map(r => (
-                <button key={r.role} onClick={() => setRoleKey(r.role)}
-                  className={`flex flex-col items-center gap-1 px-2 py-2 rounded-xl border text-xs font-medium transition-colors
-                    ${roleKey === r.role ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-muted-foreground"}`}>
-                  <span className="text-base">{r.emoji}</span>
-                  <span>{r.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Nhân sự</label>
-            <select className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm"
-              value={staffId} onChange={e => setStaffId(e.target.value)}>
-              <option value="">— Chọn nhân sự —</option>
-              {staffList.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Ghi chú (tuỳ chọn)</label>
-            <textarea rows={2} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none"
-              placeholder="Ghi chú thêm..." value={notes} onChange={e => setNotes(e.target.value)} />
-          </div>
-
-          <button onClick={handleSave} disabled={saving}
-            className="w-full py-3 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
-            {saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-            {saving ? "Đang lưu..." : `Giao ${selectedRole.label}`}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Booking card ──────────────────────────────────────────────────────────────
+// ── Booking Card ──────────────────────────────────────────────────────────────
 function BookingCard({
-  booking, onAdd, onRemoveTask,
+  booking, staffOptions, allStaffRates, onSaved,
 }: {
   booking: BookingWithTasks;
-  onAdd: () => void;
-  onRemoveTask: (taskId: number) => void;
+  staffOptions: StaffOption[];
+  allStaffRates: StaffRate[];
+  onSaved: () => void;
 }) {
-  const staffing = getStaffingStatus(booking);
-  const fully = staffing === "du_nguoi";
+  const serverStaff = booking.assigned_staff ?? [];
+  const [localStaff, setLocalStaff] = useState<StaffAssignment[]>(() => serverStaff);
+  const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState("");
+
+  const serverKey = JSON.stringify(serverStaff);
+  useEffect(() => {
+    setLocalStaff(serverStaff);
+    setSaveErr("");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverKey]);
+
+  const isDirty = JSON.stringify(localStaff) !== serverKey;
+  const fully = serverStaff.length > 0;
   const du = daysUntil(booking.shoot_date);
   const borderColor = fully ? "border-l-emerald-400" : "border-l-red-400";
 
-  const hasTasks = booking.tasks.length > 0;
-  const statusBadge = !hasTasks
-    ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 dark:bg-red-900/30 font-medium">Chưa giao</span>
-    : !fully
-    ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 font-medium">Chưa đủ người</span>
-    : null;
+  const handleSave = async () => {
+    setSaving(true); setSaveErr("");
+    try {
+      const res = await authFetch(`${BASE}/api/bookings/${booking.booking_id}`, {
+        method: "PUT",
+        body: JSON.stringify({ assignedStaff: localStaff }),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        setSaveErr(e.error || "Lỗi lưu nhân sự");
+        return;
+      }
+      onSaved();
+    } catch (e) {
+      setSaveErr(String(e instanceof Error ? e.message : e));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className={`rounded-xl border border-border border-l-4 ${borderColor} bg-card shadow-sm p-3 transition-all hover:shadow-md`}>
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-sm">{booking.customer_name}</span>
-            <span className="text-xs text-muted-foreground font-mono">{booking.order_code}</span>
-            {statusBadge}
-          </div>
-          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs text-muted-foreground">
-            <span>{booking.customer_phone}</span>
-            <span>{booking.service_label || booking.package_type || "—"}</span>
-          </div>
-          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs">
-            <span className="flex items-center gap-1 text-muted-foreground">
-              <Calendar size={10} />Chụp: {fmtShootDate(booking.shoot_date)}
+      {/* Header */}
+      <div className="mb-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-semibold text-sm">{booking.customer_name}</span>
+          <span className="text-xs text-muted-foreground font-mono">{booking.order_code}</span>
+          {!fully && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 dark:bg-red-900/30 font-medium">
+              Chưa có nhân sự
             </span>
-            {du && <span className={du.color}>{du.label}</span>}
-            {booking.location && <span className="text-muted-foreground">📍 {booking.location}</span>}
-          </div>
-          <div className="mt-0.5 text-xs text-muted-foreground/60">
-            Tạo: {fmtShootDate(booking.booking_created_at)}
-          </div>
+          )}
         </div>
-        <button onClick={onAdd}
-          className="shrink-0 w-8 h-8 rounded-full bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors">
-          <Plus size={16} />
-        </button>
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs text-muted-foreground">
+          <span>{booking.customer_phone}</span>
+          <span>{booking.service_label || booking.package_type || "—"}</span>
+        </div>
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs">
+          <span className="flex items-center gap-1 text-muted-foreground">
+            <Calendar size={10} />Chụp: {fmtShootDate(booking.shoot_date)}
+          </span>
+          {du && <span className={du.color}>{du.label}</span>}
+          {booking.location && <span className="text-muted-foreground">📍 {booking.location}</span>}
+        </div>
+        <div className="mt-0.5 text-xs text-muted-foreground/60">
+          Tạo: {fmtShootDate(booking.booking_created_at)}
+        </div>
       </div>
 
-      {/* Staff chips */}
-      {hasTasks ? (
-        <div className="flex flex-wrap gap-1.5 mt-2">
-          {booking.tasks.map(t => {
-            const ro = getRoleOption(t.role);
-            return (
-              <div key={t.task_id}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${ro.chipCls}`}>
-                <span>{ro.emoji}</span>
-                <span>{t.assignee_name ?? "—"}</span>
-                <span className="opacity-60">({ro.label})</span>
-                <button onClick={() => onRemoveTask(t.task_id)}
-                  className="ml-0.5 hover:opacity-100 opacity-50 transition-opacity">
-                  <X size={10} />
-                </button>
-              </div>
-            );
-          })}
+      {/* Inline staff editor */}
+      <div className="border-t border-border/40 pt-2.5">
+        <StaffAssignmentEditor
+          value={localStaff}
+          onChange={setLocalStaff}
+          staffOptions={staffOptions}
+          allStaffRates={allStaffRates}
+          baseJobType="mac_dinh"
+        />
+      </div>
+
+      {/* Error */}
+      {saveErr && (
+        <div className="mt-1.5 text-xs text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg px-2 py-1">
+          {saveErr}
         </div>
-      ) : (
-        <div className="mt-2 text-xs text-muted-foreground italic">Nhấn + để giao việc</div>
+      )}
+
+      {/* Save button (only when dirty) */}
+      {isDirty && (
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="mt-2 w-full py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50 transition-colors"
+        >
+          {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+          {saving ? "Đang lưu..." : "Lưu thay đổi nhân sự"}
+        </button>
       )}
     </div>
   );
@@ -319,7 +218,6 @@ export default function TasksPage() {
   const [viewMode, setViewMode] = useState<"booking" | "kanban" | "list">("booking");
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"all" | "chua_du" | "du_nguoi">("all");
-  const [assigningBooking, setAssigningBooking] = useState<BookingWithTasks | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
   const [filterAssignee, setFilterAssignee] = useState("");
   const [filterPrio, setFilterPrio] = useState("");
@@ -335,13 +233,26 @@ export default function TasksPage() {
     staleTime: 0,
   });
 
-  const staffList = (staff as StaffItem[]).map(s => ({ id: s.id, name: s.name }));
+  // Staff rates for StaffAssignmentEditor
+  const { data: allStaffRates = [] } = useQuery<StaffRate[]>({
+    queryKey: ["staff-rates"],
+    queryFn: () =>
+      authFetch(`${BASE}/api/staff-rates`)
+        .then(r => r.ok ? r.json() : [])
+        .then((d: unknown) => (Array.isArray(d) ? d : [])),
+  });
+
+  const staffOptions: StaffOption[] = (staff as Array<{ id: number | string; name: string; roles?: string[] }>).map(s => ({
+    id: Number(s.id),
+    name: s.name,
+    roles: s.roles || [],
+  }));
 
   // Filter booking-view data
   const filteredBookings = useMemo(() => {
     let data = [...bookingViewData];
-    if (tab === "chua_du")   data = data.filter(b => !isFullyStaffed(b));
-    if (tab === "du_nguoi")  data = data.filter(b => isFullyStaffed(b));
+    if (tab === "chua_du")  data = data.filter(b => !isFullyStaffed(b));
+    if (tab === "du_nguoi") data = data.filter(b => isFullyStaffed(b));
     if (search.trim()) {
       const q = search.toLowerCase();
       data = data.filter(b =>
@@ -360,16 +271,8 @@ export default function TasksPage() {
     });
   };
 
-  const handleRemoveTask = async (taskId: number) => {
-    if (!confirm("Bỏ giao việc này?")) return;
-    const res = await authFetch(`${BASE}/api/tasks/${taskId}`, { method: "DELETE" });
-    if (!res.ok && res.status !== 204) {
-      const e = await res.json().catch(() => ({}));
-      alert(e.error || "Không thể xoá giao việc này");
-      return;
-    }
+  const handleSaved = () => {
     qc.invalidateQueries({ queryKey: ["tasks-booking-view"] });
-    qc.invalidateQueries({ queryKey: ["/api/tasks"] });
   };
 
   const filteredTasks = tasks.filter(t => {
@@ -423,8 +326,12 @@ export default function TasksPage() {
           {/* Search */}
           <div className="relative">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input className="w-full pl-9 pr-9 py-2 rounded-xl border border-border bg-background text-sm placeholder:text-muted-foreground"
-              placeholder="Tìm tên khách, SĐT, mã đơn..." value={search} onChange={e => setSearch(e.target.value)} />
+            <input
+              className="w-full pl-9 pr-9 py-2 rounded-xl border border-border bg-background text-sm placeholder:text-muted-foreground"
+              placeholder="Tìm tên khách, SĐT, mã đơn..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
             {search && (
               <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-foreground">
                 <X size={14} />
@@ -462,9 +369,13 @@ export default function TasksPage() {
               <div className="space-y-2">
                 <div className="text-xs text-muted-foreground px-1">{filteredBookings.length} đơn</div>
                 {filteredBookings.map(b => (
-                  <BookingCard key={b.booking_id} booking={b}
-                    onAdd={() => setAssigningBooking(b)}
-                    onRemoveTask={handleRemoveTask} />
+                  <BookingCard
+                    key={b.booking_id}
+                    booking={b}
+                    staffOptions={staffOptions}
+                    allStaffRates={allStaffRates}
+                    onSaved={handleSaved}
+                  />
                 ))}
               </div>
             )}
@@ -488,14 +399,14 @@ export default function TasksPage() {
             </Select>
           </div>
           {tasksLoading ? (
-            <div className="flex-1 flex items-center justify-center text-muted-foreground">Đang tải...</div>
+            <div className="flex items-center justify-center py-16 text-muted-foreground"><Loader2 className="animate-spin mr-2" />Đang tải...</div>
           ) : (
-            <div className="flex gap-4 overflow-x-auto pb-4 flex-1">
+            <div className="flex gap-3 flex-1 overflow-x-auto min-h-0">
               {columns.map(col => {
-                const ColTasks = tasksByStatus[col.id];
+                const ColTasks = tasksByStatus[col.id as keyof typeof tasksByStatus] ?? [];
                 return (
                   <div key={col.id}
-                    className={`flex-1 min-w-72 rounded-2xl border ${col.border} ${col.bg} flex flex-col`}
+                    className={`flex flex-col flex-1 min-w-[240px] max-w-sm rounded-xl border ${col.border} ${col.bg} min-h-0`}
                     onDragOver={e => e.preventDefault()}
                     onDrop={() => { if (dragId !== null) handleStatusChange(dragId, col.id); setDragId(null); }}>
                     <div className={`px-4 py-3 flex items-center justify-between border-b ${col.border}`}>
@@ -621,11 +532,6 @@ export default function TasksPage() {
             </div>
           )}
         </>
-      )}
-
-      {/* Assignment modal */}
-      {assigningBooking && (
-        <AssignmentModal booking={assigningBooking} onClose={() => setAssigningBooking(null)} staffList={staffList} />
       )}
     </div>
   );

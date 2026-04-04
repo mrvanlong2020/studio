@@ -64,6 +64,7 @@ router.get("/tasks/booking-view", async (req, res) => {
         b.service_label,
         b.status          AS booking_status,
         b.location,
+        b.assigned_staff,
         c.name            AS customer_name,
         c.phone           AS customer_phone,
         t.id              AS task_id,
@@ -89,6 +90,10 @@ router.get("/tasks/booking-view", async (req, res) => {
     for (const row of result.rows) {
       const bid = Number(row.booking_id);
       if (!map.has(bid)) {
+        const rawStaff = row.assigned_staff;
+        const assigned_staff = Array.isArray(rawStaff)
+          ? rawStaff
+          : (typeof rawStaff === "string" ? JSON.parse(rawStaff) : []);
         map.set(bid, {
           booking_id: bid,
           order_code: row.order_code,
@@ -100,6 +105,7 @@ router.get("/tasks/booking-view", async (req, res) => {
           location: row.location,
           customer_name: row.customer_name,
           customer_phone: row.customer_phone,
+          assigned_staff,
           tasks: [],
         });
       }
