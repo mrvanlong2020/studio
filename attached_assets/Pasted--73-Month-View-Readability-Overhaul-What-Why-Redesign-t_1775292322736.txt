@@ -1,0 +1,61 @@
+#73 - Month View: Readability Overhaul
+
+What & Why
+Redesign the MonthDayCell show cards so users can read key booking info at a glance — customer name, time, service, photographer, and makeup — without straining to decode truncated text. The current chips are too narrow, fonts are too small, and staff names are cramped into unreadable fragments.
+
+The compact mode is no longer needed. Month view should prioritize readability, not density.
+
+Done looks like
+- Each show card in the month grid displays clearly at a glance:
+  - Line 1: time (e.g. "07h") + customer name
+  - Line 2: service/package name
+  - Line 3: photographer: "P: TRUNG"
+  - Line 4: makeup: "M: DIỆU MAI"
+- Additional staff (assistant, support, video...) can appear as:
+  - "A: Tên"
+  - "HT: Tên"
+  - "V: Tên"
+  - or first extra role + "+N" if multiple extras
+- Cards span near full cell width (~94–96% of the day cell)
+- Text is comfortably readable:
+  - line 1 = 11px bold
+  - subsequent lines = 10px
+- Service name is always visible in month view
+- Truncation only happens at the end of long fields when truly necessary; no awkward clipping across the whole card
+- Compact/Comfortable toggle is removed; comfortable becomes the only mode
+- Comfortable month cell height remains from Task #72
+- Max 4 show cards visible per day cell in month view; overflow shows "+N show nữa"
+
+Out of scope
+- Backend / API changes
+- Day view, week view, or other calendar views
+- Booking detail drawer logic
+- Staff assignment editor
+- Any other calendar page section outside MonthDayCell
+
+Tasks
+1. Remove compact mode
+- Delete density toggle from month header
+- Remove calendarDensity localStorage state
+- Hard-code comfortable layout in month view
+- Remove density prop from MonthDayCell
+
+2. Redesign show card layout
+- Replace the current chip-style layout with a structured multi-line card
+- Line 1: time + customer name
+- Line 2: service/package name (always visible)
+- Line 3: photographer
+- Line 4: makeup
+- Additional roles (assistant/support/video...) come from item.assignedStaff
+- If multiple extra staff exist, show first one + "+N"
+- Prefer a short readable display name if helper exists; otherwise show full name with gentle truncation
+
+3. Fix sizing and spacing
+- Increase usable card width to near full cell width (~94–96%)
+- Reduce unnecessary horizontal padding/margins around the card
+- Increase internal spacing for readability
+- Remove any mobile-only hidden gate that suppresses the service line
+- Use truncation only on long individual fields, not on the whole card block
+
+Relevant files
+- artifacts/amazing-studio/src/pages/calendar.tsx:2607-2717
