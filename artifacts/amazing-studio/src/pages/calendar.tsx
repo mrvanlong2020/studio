@@ -1863,6 +1863,74 @@ function ShowDetailPanel({
   const [rescheduling, setRescheduling] = useState(false);
   const st = STATUS[booking.status as keyof typeof STATUS] ?? STATUS.pending;
 
+  // ── Batch edit siblings ──
+  type SiblingBatchRow = { id: number; serviceLabel: string; shootDate: string; shootTime: string; totalAmount: string };
+  const [showSiblingBatchEdit, setShowSiblingBatchEdit] = useState(false);
+  const [siblingBatchRows, setSiblingBatchRows] = useState<SiblingBatchRow[]>([]);
+  const [batchParent, setBatchParent] = useState({ depositAmount: "0", discountAmount: "0" });
+  const [batchSaving, setBatchSaving] = useState(false);
+  const [batchError, setBatchError] = useState<string | null>(null);
+
+  const openSiblingBatchEdit = () => {
+    setSiblingBatchRows(siblings.map(s => ({
+      id: s.id,
+      serviceLabel: s.serviceLabel || s.packageType || "",
+      shootDate: s.shootDate || "",
+      shootTime: s.shootTime || "",
+      totalAmount: String(s.totalAmount ?? 0),
+    })));
+    setBatchParent({
+      depositAmount: String(parentContract?.depositAmount ?? 0),
+      discountAmount: String(parentContract?.discountAmount ?? 0),
+    });
+    setBatchError(null);
+    setShowSiblingBatchEdit(true);
+  };
+
+  const handleSiblingBatchSave = async () => {
+    setBatchSaving(true);
+    setBatchError(null);
+    try {
+      for (const row of siblingBatchRows) {
+        const res = await authFetch(`${BASE}/api/bookings/${row.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            serviceLabel: row.serviceLabel,
+            shootDate: row.shootDate,
+            shootTime: row.shootTime,
+            totalAmount: parseFloat(row.totalAmount) || 0,
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `Lỗi lưu dịch vụ ID ${row.id}`);
+        }
+      }
+      if (parentContract?.id) {
+        const res = await authFetch(`${BASE}/api/bookings/${parentContract.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            depositAmount: parseFloat(batchParent.depositAmount) || 0,
+            discountAmount: parseFloat(batchParent.discountAmount) || 0,
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Lỗi lưu thông tin thanh toán");
+        }
+      }
+      await qc.invalidateQueries({ queryKey: ["bookings"] });
+      await qc.invalidateQueries({ queryKey: ["booking-full", booking.id] });
+      setShowSiblingBatchEdit(false);
+    } catch (e: unknown) {
+      setBatchError(e instanceof Error ? e.message : "Lỗi không xác định");
+    } finally {
+      setBatchSaving(false);
+    }
+  };
+
   // Parse assignedStaff — might be object or array
   const assignedObj: Record<string, unknown> =
     booking.assignedStaff && !Array.isArray(booking.assignedStaff) && typeof booking.assignedStaff === "object"
@@ -2078,11 +2146,125 @@ function ShowDetailPanel({
               {/* Siblings list */}
               {siblings.length > 0 && (
                 <div className="rounded-xl border border-violet-200 dark:border-violet-800 overflow-hidden">
-                  <div className="px-3 py-2 bg-violet-50 dark:bg-violet-950/30 border-b border-violet-200 dark:border-violet-800">
+                  <div className="px-3 py-2 bg-violet-50 dark:bg-violet-950/30 border-b border-violet-200 dark:border-violet-800 flex items-center justify-between">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-violet-700 dark:text-violet-300">
                       📅 Tất cả dịch vụ trong hợp đồng ({siblings.length})
                     </p>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); showSiblingBatchEdit ? setShowSiblingBatchEdit(false) : openSiblingBatchEdit(); }}
+                        title="Chỉnh sửa tất cả dịch vụ cùng lúc"
+                        className={`p-1 rounded-md transition-colors ${showSiblingBatchEdit ? "bg-violet-200 dark:bg-violet-700 text-violet-800 dark:text-violet-100" : "hover:bg-violet-200 dark:hover:bg-violet-800 text-violet-500 dark:text-violet-400"}`}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
+
+                  {/* Batch edit form */}
+                  {showSiblingBatchEdit && (
+                    <div className="border-b border-violet-200 dark:border-violet-800 bg-violet-50/60 dark:bg-violet-950/20 px-3 py-3 space-y-3">
+                      <p className="text-[10px] font-semibold text-violet-700 dark:text-violet-300 uppercase tracking-wider">Chỉnh sửa từng dịch vụ</p>
+                      {siblingBatchRows.map((row, idx) => (
+                        <div key={row.id} className="rounded-lg border border-violet-200 dark:border-violet-700 bg-white dark:bg-violet-950/30 p-2.5 space-y-2">
+                          <p className="text-[10px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wider">Dịch vụ {idx + 1}</p>
+                          <div className="space-y-1.5">
+                            <input
+                              type="text"
+                              value={row.serviceLabel}
+                              onChange={e => setSiblingBatchRows(prev => prev.map((r, i) => i === idx ? { ...r, serviceLabel: e.target.value } : r))}
+                              placeholder="Tên dịch vụ"
+                              className="w-full text-sm border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-violet-400"
+                            />
+                            <div className="flex gap-2">
+                              <input
+                                type="date"
+                                value={row.shootDate}
+                                onChange={e => setSiblingBatchRows(prev => prev.map((r, i) => i === idx ? { ...r, shootDate: e.target.value } : r))}
+                                className="flex-1 text-sm border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-violet-400"
+                              />
+                              <input
+                                type="time"
+                                value={row.shootTime}
+                                onChange={e => setSiblingBatchRows(prev => prev.map((r, i) => i === idx ? { ...r, shootTime: e.target.value } : r))}
+                                className="w-28 text-sm border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-violet-400"
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground flex-shrink-0">Thành tiền</span>
+                              <input
+                                type="number"
+                                value={row.totalAmount}
+                                onChange={e => setSiblingBatchRows(prev => prev.map((r, i) => i === idx ? { ...r, totalAmount: e.target.value } : r))}
+                                placeholder="0"
+                                min={0}
+                                step={100000}
+                                className="flex-1 text-sm border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-violet-400 text-right"
+                              />
+                              <span className="text-xs text-muted-foreground flex-shrink-0">đ</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Parent-level payment fields */}
+                      {parentContract && (
+                        <div className="rounded-lg border border-emerald-200 dark:border-emerald-700 bg-white dark:bg-emerald-950/20 p-2.5 space-y-2">
+                          <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Thanh toán chung</p>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground w-20 flex-shrink-0">Đặt cọc</span>
+                            <input
+                              type="number"
+                              value={batchParent.depositAmount}
+                              onChange={e => setBatchParent(p => ({ ...p, depositAmount: e.target.value }))}
+                              min={0}
+                              step={100000}
+                              className="flex-1 text-sm border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-emerald-400 text-right"
+                            />
+                            <span className="text-xs text-muted-foreground flex-shrink-0">đ</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground w-20 flex-shrink-0">Giảm giá</span>
+                            <input
+                              type="number"
+                              value={batchParent.discountAmount}
+                              onChange={e => setBatchParent(p => ({ ...p, discountAmount: e.target.value }))}
+                              min={0}
+                              step={100000}
+                              className="flex-1 text-sm border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-emerald-400 text-right"
+                            />
+                            <span className="text-xs text-muted-foreground flex-shrink-0">đ</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {batchError && (
+                        <p className="text-xs text-destructive bg-destructive/10 rounded-md px-2.5 py-1.5">{batchError}</p>
+                      )}
+
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={handleSiblingBatchSave}
+                          disabled={batchSaving}
+                          className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white disabled:opacity-60 transition-colors"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                          {batchSaving ? "Đang lưu..." : "Lưu tất cả"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowSiblingBatchEdit(false)}
+                          disabled={batchSaving}
+                          className="px-3 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted transition-colors"
+                        >
+                          Huỷ
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {siblings.map((sib, idx) => {
                     const sibDate = (() => { try { const d = parseISO(sib.shootDate); return isNaN(d.getTime()) ? null : d; } catch { return null; } })();
                     const isCurrent = sib.id === booking.id;
