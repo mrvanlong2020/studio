@@ -148,7 +148,9 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
     .btn-clear{background:#f3e8f3;color:#6b2d63}
     .btn-submit{background:#8B1A6B;color:#fff;box-shadow:0 4px 14px rgba(139,26,107,.3)}
     .btn-print{background:#065f46;color:#fff;border:0;border-radius:10px;padding:13px 20px;font-weight:700;cursor:pointer;font-size:14px;width:100%;margin-top:14px;transition:opacity .15s}
+    .btn-back{background:#7f8c8d;color:#fff;border:0;border-radius:10px;padding:13px 20px;font-weight:700;cursor:pointer;font-size:14px;width:100%;margin-top:10px;transition:opacity .15s}
     .btn-print:hover{opacity:.88}
+    .btn-back:hover{opacity:.88}
     .btn:hover{opacity:.88}
     .btn:disabled{opacity:.5;cursor:not-allowed}
     #msg{margin-top:16px;padding:14px 16px;border-radius:12px;font-weight:700;font-size:14px;display:none;text-align:center;line-height:1.6}
@@ -197,6 +199,7 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
         </div>
         ${row.content ? `<div style="margin-top:16px"><div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Nội dung hợp đồng</div><div class="contract-content">${row.content.replace(/</g, "&lt;")}</div></div>` : ""}
         <button class="btn-print no-print" onclick="window.print()">🖨️ In / Lưu PDF hợp đồng có chữ ký</button>
+        <button class="btn-back no-print" onclick="history.back()">↩ Quay lại trang trước</button>
       </div>
     </div>
 
@@ -308,6 +311,14 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
             document.getElementById('noSigMsg').style.display = 'none';
             document.getElementById('signForm').style.display = 'none';
             document.getElementById('signedView').style.display = '';
+            if (!document.getElementById('signedBack')) {
+              var backBtn = document.createElement('button');
+              backBtn.id = 'signedBack';
+              backBtn.className = 'btn-back no-print';
+              backBtn.textContent = '↩ Quay lại trang trước';
+              backBtn.onclick = function() { history.back(); };
+              document.querySelector('.signed-section').appendChild(backBtn);
+            }
           } else {
             showMsg('❌ Lỗi khi lưu chữ ký. Vui lòng thử lại.', 'err');
             document.getElementById('btnSubmit').disabled = false;
