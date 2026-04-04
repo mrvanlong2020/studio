@@ -199,7 +199,7 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
         </div>
         ${row.content ? `<div style="margin-top:16px"><div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Nội dung hợp đồng</div><div class="contract-content">${row.content.replace(/</g, "&lt;")}</div></div>` : ""}
         <button class="btn-print no-print" onclick="window.print()">🖨️ In / Lưu PDF hợp đồng có chữ ký</button>
-        <button class="btn-back no-print" onclick="history.back()">↩ Quay lại trang trước</button>
+        <button class="btn-back no-print" onclick="goBack()">↩ Quay lại trang trước</button>
       </div>
     </div>
 
@@ -311,14 +311,6 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
             document.getElementById('noSigMsg').style.display = 'none';
             document.getElementById('signForm').style.display = 'none';
             document.getElementById('signedView').style.display = '';
-            if (!document.getElementById('signedBack')) {
-              var backBtn = document.createElement('button');
-              backBtn.id = 'signedBack';
-              backBtn.className = 'btn-back no-print';
-              backBtn.textContent = '↩ Quay lại trang trước';
-              backBtn.onclick = function() { history.back(); };
-              document.querySelector('.signed-section').appendChild(backBtn);
-            }
           } else {
             showMsg('❌ Lỗi khi lưu chữ ký. Vui lòng thử lại.', 'err');
             document.getElementById('btnSubmit').disabled = false;
@@ -329,6 +321,13 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
           document.getElementById('btnSubmit').disabled = false;
           document.getElementById('btnClear').disabled = false;
         }
+      };
+      window.goBack = function goBack() {
+        if (window.history.length > 1) {
+          window.history.back();
+          return;
+        }
+        window.location.href = window.location.href.replace('/sign', '');
       };
     }
   </script>
