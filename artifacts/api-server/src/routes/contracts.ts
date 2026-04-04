@@ -39,7 +39,7 @@ router.get("/contracts", async (req, res) => {
 });
 
 router.post("/contracts", async (req, res) => {
-  const { bookingId, customerId, title, content, status, signedAt, expiresAt, totalValue, notes } = req.body;
+  const { bookingId, customerId, title, content, status, signedAt, expiresAt, totalValue, notes } = req.body ?? {};
   const count = await db.select().from(contractsTable);
   const contractCode = `HD${String(count.length + 1).padStart(4, "0")}`;
   const [contract] = await db

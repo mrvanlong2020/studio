@@ -2089,6 +2089,7 @@ function ShowDetailPanel({
         }
         const createRes = await authFetch(`${BASE}/api/contracts`, {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             bookingId: booking.id,
             customerId: booking.customerId,
