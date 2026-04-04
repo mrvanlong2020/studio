@@ -142,7 +142,6 @@ function AssignmentModal({
     if (!staffId) { setErr("Chọn nhân sự trước"); return; }
     setSaving(true); setErr("");
     try {
-      const staffName = staffList.find(s => String(s.id) === staffId)?.name ?? "";
       const res = await authFetch(`${BASE}/api/tasks`, {
         method: "POST",
         body: JSON.stringify({
@@ -324,7 +323,6 @@ export default function TasksPage() {
   const [dragId, setDragId] = useState<number | null>(null);
   const [filterAssignee, setFilterAssignee] = useState("");
   const [filterPrio, setFilterPrio] = useState("");
-  const [removingId, setRemovingId] = useState<number | null>(null);
 
   // Booking-view data
   const { data: bookingViewData = [], isLoading: bvLoading } = useQuery<BookingWithTasks[]>({
@@ -364,17 +362,14 @@ export default function TasksPage() {
 
   const handleRemoveTask = async (taskId: number) => {
     if (!confirm("Bỏ giao việc này?")) return;
-    setRemovingId(taskId);
-    try {
-      const res = await authFetch(`${BASE}/api/tasks/${taskId}`, { method: "DELETE" });
-      if (!res.ok && res.status !== 204) {
-        const e = await res.json().catch(() => ({}));
-        alert(e.error || "Không thể xoá giao việc này");
-        return;
-      }
-      qc.invalidateQueries({ queryKey: ["tasks-booking-view"] });
-      qc.invalidateQueries({ queryKey: ["/api/tasks"] });
-    } finally { setRemovingId(null); }
+    const res = await authFetch(`${BASE}/api/tasks/${taskId}`, { method: "DELETE" });
+    if (!res.ok && res.status !== 204) {
+      const e = await res.json().catch(() => ({}));
+      alert(e.error || "Không thể xoá giao việc này");
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ["tasks-booking-view"] });
+    qc.invalidateQueries({ queryKey: ["/api/tasks"] });
   };
 
   const filteredTasks = tasks.filter(t => {
