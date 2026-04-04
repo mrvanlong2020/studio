@@ -1465,7 +1465,12 @@ function generateContractHTML(
   const paidAmount      = Number(paymentSummary?.paidAmount      ?? booking.paidAmount      ?? 0) || 0;
   const discountAmount  = Number(paymentSummary?.discountAmount  ?? booking.discountAmount  ?? 0) || 0;
   const remainingAmount = Number(paymentSummary?.remainingAmount ?? booking.remainingAmount ?? Math.max(0, totalAmount - discountAmount - paidAmount)) || 0;
-  let runningRemaining = remainingAmount;
+  const paymentRows = [...paymentHistoryList].sort((a, b) => {
+    const ta = new Date(a.paidDate || a.paidAt || 0).getTime();
+    const tb = new Date(b.paidDate || b.paidAt || 0).getTime();
+    return ta - tb;
+  });
+  let runningPaid = 0;
 
   // ── Lịch chụp section ─────────────────────────────────────────────────────
   const scheduleSectionHTML = isMulti
@@ -1793,18 +1798,19 @@ function generateContractHTML(
         </tr>
       </thead>
       <tbody>
-        ${[...paymentHistoryList].reverse().map((p, idx) => {
+        ${paymentRows.map((p, idx) => {
           const dateVal = p.paidDate || p.paidAt || "";
           const dateDisp = dateVal ? new Date(dateVal).toLocaleDateString("vi-VN") : "—";
           const methodDisp = p.paymentMethod === "bank_transfer" ? "Chuyển khoản" : "Tiền mặt";
           const rowBg = idx % 2 === 1 ? "background:#fdf8ff;" : "";
-          runningRemaining = Math.max(0, runningRemaining - (Number(p.amount) || 0));
+          runningPaid += Number(p.amount) || 0;
+          const rowRemaining = Math.max(0, totalAmount - discountAmount - runningPaid);
           return `<tr style="${rowBg}">
             <td style="padding:7px 12px;border-bottom:1px solid #f0e8f0;">${dateDisp}</td>
             <td style="padding:7px 12px;border-bottom:1px solid #f0e8f0;">${methodDisp}</td>
             <td style="padding:7px 12px;border-bottom:1px solid #f0e8f0;color:#555;">${p.collectorName || "—"}</td>
             <td style="padding:7px 12px;border-bottom:1px solid #f0e8f0;text-align:right;font-weight:700;color:#1a7a4b;">+${fmtVNDStr(p.amount ?? 0)}</td>
-            <td style="padding:7px 12px;border-bottom:1px solid #f0e8f0;text-align:right;font-weight:700;color:#8B1A6B;">${fmtVNDStr(runningRemaining)}</td>
+            <td style="padding:7px 12px;border-bottom:1px solid #f0e8f0;text-align:right;font-weight:700;color:#8B1A6B;">${fmtVNDStr(rowRemaining)}</td>
           </tr>`;
         }).join("")}
         <tr style="background:#f0fff4;">
