@@ -600,7 +600,7 @@ export default function BookingsPage() {
                                       <span className="text-xs text-muted-foreground">{PAYMENT_TYPE[p.paymentType] ?? p.paymentType}</span>
                                     </div>
                                     <div className="text-xs text-muted-foreground mt-0.5 ml-6">
-                                      {PAYMENT_METHOD[p.paymentMethod] ?? p.paymentMethod} · {formatDate(p.paidAt)}
+                                      {PAYMENT_METHOD[p.paymentMethod] ?? p.paymentMethod} · {new Date(p.paidAt).toLocaleString("vi-VN")}
                                       {p.collectorName ? ` · Người thu: ${p.collectorName}` : ""}
                                       {p.notes && ` · ${p.notes}`}
                                     </div>
