@@ -15,6 +15,39 @@ function sanitizeDeductions(raw: unknown): DeductionItem[] {
     .map(({ label, amount }) => ({ label: String(label).trim(), amount: Number(amount) }));
 }
 
+// ─── Task #71: Normalize items[].photoName/makeupName from assignedStaff ─────
+type StaffAssignmentLike = { role?: string; staffId?: number; staffName?: string; id?: string };
+
+function normalizeItemStaff(rawItems: unknown): unknown[] {
+  if (!Array.isArray(rawItems)) return [];
+  return (rawItems as Record<string, unknown>[]).map((item) => {
+    const sa: StaffAssignmentLike[] = Array.isArray(item.assignedStaff)
+      ? (item.assignedStaff as StaffAssignmentLike[])
+      : [];
+    const result = { ...item };
+
+    // Populate photoName from assignedStaff if empty
+    if (!result.photoName || result.photoName === "") {
+      const p = sa.find(s => /^(photo|photographer)$/i.test(String(s.role ?? "")));
+      if (p?.staffName) {
+        result.photoName = p.staffName;
+        result.photoId = p.staffId ?? result.photoId;
+      }
+    }
+
+    // Populate makeupName from assignedStaff if empty
+    if (!result.makeupName || result.makeupName === "") {
+      const m = sa.find(s => /^makeup$/i.test(String(s.role ?? "")));
+      if (m?.staffName) {
+        result.makeupName = m.staffName;
+        result.makeupId = m.staffId ?? result.makeupId;
+      }
+    }
+
+    return result;
+  });
+}
+
 // ─── Select fields shared across GET queries ──────────────────────────────────
 const bookingFields = {
   id: bookingsTable.id,
@@ -136,6 +169,7 @@ router.get("/bookings", async (req, res) => {
     const productionCost = productionCostMap[b.id] ?? 0;
     return {
       ...b,
+      items: normalizeItemStaff(b.items),
       totalAmount,
       depositAmount: parseFloat(b.depositAmount),
       paidAmount,
@@ -431,6 +465,7 @@ router.get("/bookings/:id", async (req, res) => {
 
   res.json({
     ...row,
+    items: normalizeItemStaff(row.items),
     totalAmount,
     depositAmount: parseFloat(row.depositAmount),
     paidAmount,

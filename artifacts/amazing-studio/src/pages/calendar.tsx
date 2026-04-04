@@ -1465,11 +1465,24 @@ function generateContractHTML(
            </div>`
         : "";
 
-      const staffHTML = (line.photoName || line.makeupName)
+      const _staffLines: string[] = [];
+      if (line.photoName) _staffLines.push(`📷 Nhiếp ảnh: <strong>${line.photoName}</strong>`);
+      if (line.makeupName) _staffLines.push(`💄 Makeup: <strong>${line.makeupName}</strong>`);
+      // Additional roles from assignedStaff (assistant, support, video…)
+      if (Array.isArray(line.assignedStaff)) {
+        const _extraRoleLabel: Record<string, string> = {
+          assistant: "🤝 Trợ lý", tro_ly: "🤝 Trợ lý",
+          support: "🙋 Hỗ trợ", ho_tro: "🙋 Hỗ trợ",
+          video: "🎥 Quay phim",
+        };
+        for (const _sa of line.assignedStaff as StaffAssignment[]) {
+          const _label = _extraRoleLabel[_sa.role ?? ""];
+          if (_label && _sa.staffName) _staffLines.push(`${_label}: <strong>${_sa.staffName}</strong>`);
+        }
+      }
+      const staffHTML = _staffLines.length > 0
         ? `<div style="margin-top:8px;padding:6px 10px;background:#f0f4ff;border-radius:6px;font-size:12px;color:#555;">
-            ${line.photoName ? `📷 Nhiếp ảnh: <strong>${line.photoName}</strong>` : ""}
-            ${line.photoName && line.makeupName ? "&nbsp;&nbsp;|&nbsp;&nbsp;" : ""}
-            ${line.makeupName ? `💄 Makeup: <strong>${line.makeupName}</strong>` : ""}
+            ${_staffLines.join("&nbsp;&nbsp;|&nbsp;&nbsp;")}
            </div>`
         : "";
 
@@ -2216,7 +2229,7 @@ function ShowDetailPanel({
                     )}
 
                     {/* Staff assignments */}
-                    {(item.photoName || item.makeupName) && (
+                    {(item.photoName || item.makeupName || (Array.isArray(item.assignedStaff) && (item.assignedStaff as StaffAssignment[]).some(sa => sa.staffName))) && (
                       <div className="px-3 py-2 border-t border-border/30 space-y-1">
                         {item.photoName && (
                           <div className="flex items-center gap-2 text-xs">
@@ -2232,6 +2245,24 @@ function ShowDetailPanel({
                             <span className="font-medium">{item.makeupName}</span>
                           </div>
                         )}
+                        {/* Additional roles: assistant, support, video… */}
+                        {Array.isArray(item.assignedStaff) && (item.assignedStaff as StaffAssignment[])
+                          .filter(sa => !["photographer", "photo", "makeup"].includes(sa.role ?? "") && sa.staffName)
+                          .map((sa, idx) => {
+                            const roleLabel =
+                              sa.role === "assistant" || sa.role === "tro_ly" ? "Trợ lý" :
+                              sa.role === "support" || sa.role === "ho_tro" ? "Hỗ trợ" :
+                              sa.role === "video" ? "Quay phim" :
+                              sa.role ?? "Khác";
+                            return (
+                              <div key={idx} className="flex items-center gap-2 text-xs">
+                                <User className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
+                                <span className="text-muted-foreground">{roleLabel}:</span>
+                                <span className="font-medium">{sa.staffName}</span>
+                              </div>
+                            );
+                          })
+                        }
                       </div>
                     )}
 
