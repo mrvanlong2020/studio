@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, Input, Button, Textarea } from "@/components/ui";
 import { CurrencyInput } from "@/components/ui/currency-input";
-import { Save, Store, Mail, Phone, MapPin, Building, Clock, Navigation, Loader2, LocateFixed, CheckCircle2, AlertCircle, Eye, EyeOff, Bot } from "lucide-react";
+import { Save, Store, Mail, Phone, MapPin, Building, Clock, Navigation, Loader2, LocateFixed, CheckCircle2, AlertCircle } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -138,60 +138,6 @@ export default function SettingsPage() {
   const qc = useQueryClient();
   const [form, setForm] = useState<Partial<Settings>>({});
   const [saved, setSaved] = useState(false);
-
-  // --- AI Key state ---
-  const [aiKey, setAiKey] = useState("");
-  const [showKey, setShowKey] = useState(false);
-  const [aiSaving, setAiSaving] = useState(false);
-  const [aiSaved, setAiSaved] = useState(false);
-  const [aiTesting, setAiTesting] = useState(false);
-  const [aiTestResult, setAiTestResult] = useState<{ ok: boolean; message: string } | null>(null);
-
-  const { data: aiKeyStatus, refetch: refetchAiStatus } = useQuery({
-    queryKey: ["ai-key-status"],
-    queryFn: () => fetch(`${BASE}/api/settings/ai-key/status`, { headers: authH() }).then(r => r.json()),
-    staleTime: 0,
-    refetchOnMount: "always",
-  });
-
-  const saveAiKey = async () => {
-    if (!aiKey.trim()) return;
-    setAiSaving(true);
-    setAiTestResult(null);
-    try {
-      const r = await fetch(`${BASE}/api/settings/ai-key`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token()}` },
-        body: JSON.stringify({ apiKey: aiKey }),
-      });
-      if (r.ok) {
-        setAiSaved(true);
-        setAiKey("");
-        refetchAiStatus();
-        qc.invalidateQueries({ queryKey: ["ai-key-status"] });
-        setTimeout(() => setAiSaved(false), 3000);
-      }
-    } finally {
-      setAiSaving(false);
-    }
-  };
-
-  const testAiKey = async () => {
-    setAiTesting(true);
-    setAiTestResult(null);
-    try {
-      const r = await fetch(`${BASE}/api/settings/ai-key/test`, {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${token()}` },
-      });
-      const data = await r.json() as { ok: boolean; message: string };
-      setAiTestResult(data);
-      refetchAiStatus();
-      qc.invalidateQueries({ queryKey: ["ai-key-status"] });
-    } finally {
-      setAiTesting(false);
-    }
-  };
 
   const { data: settings, isLoading } = useQuery<Settings>({
     queryKey: ["settings"],
@@ -340,72 +286,6 @@ export default function SettingsPage() {
             <p>💡 <strong>Cách đơn giản nhất:</strong> Mở trang này <em>tại tiệm</em>, bấm nút "Lấy vị trí hiện tại" → tọa độ tự động điền.</p>
             <p>📌 Hoặc mở Google Maps, nhấp chuột phải vào studio → chọn <em>"What's here?"</em> để thấy lat/lng.</p>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* === CÀI ĐẶT AI === */}
-      <Card>
-        <CardContent className="pt-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <Bot className="w-5 h-5 text-primary" />
-            <h2 className="font-semibold text-base">Cài đặt AI — Gemini API Key</h2>
-            {aiKeyStatus?.configured
-              ? <span className="ml-auto text-xs font-medium text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">✅ Đã cấu hình</span>
-              : <span className="ml-auto text-xs font-medium text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">⚠️ Chưa cấu hình</span>
-            }
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Lấy API key miễn phí tại{" "}
-            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-primary underline">
-              aistudio.google.com/apikey
-            </a>
-          </p>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Input
-                type={showKey ? "text" : "password"}
-                placeholder="AIzaSy..."
-                value={aiKey}
-                onChange={e => setAiKey(e.target.value)}
-                className="pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowKey(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-            <Button
-              onClick={saveAiKey}
-              disabled={!aiKey.trim() || aiSaving}
-              className="gap-2 shrink-0"
-            >
-              {aiSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Lưu key
-            </Button>
-          </div>
-          {aiSaved && <p className="text-sm text-green-600 font-medium">✓ Đã lưu API key thành công</p>}
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              onClick={testAiKey}
-              disabled={!aiKeyStatus?.configured || aiTesting}
-              className="gap-2"
-            >
-              {aiTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4" />}
-              Kiểm tra kết nối
-            </Button>
-            {!aiKeyStatus?.configured && (
-              <span className="text-xs text-muted-foreground">Lưu key trước khi kiểm tra</span>
-            )}
-          </div>
-          {aiTestResult && (
-            <p className={`text-sm font-medium ${aiTestResult.ok ? "text-green-600" : "text-red-600"}`}>
-              {aiTestResult.ok ? "✅" : "❌"} {aiTestResult.message}
-            </p>
-          )}
         </CardContent>
       </Card>
 
