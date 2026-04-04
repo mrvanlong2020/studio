@@ -149,7 +149,7 @@ export default function SettingsPage() {
 
   const { data: aiKeyStatus, refetch: refetchAiStatus } = useQuery({
     queryKey: ["ai-key-status"],
-    queryFn: () => fetch(`${BASE}/api/health/check-ai-key`).then(r => r.json()),
+    queryFn: () => fetch(`${BASE}/api/settings/ai-key/status`, { headers: authH() }).then(r => r.json()),
     staleTime: 0,
     refetchOnMount: "always",
   });
