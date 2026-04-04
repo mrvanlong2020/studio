@@ -100,13 +100,32 @@ router.get("/tasks/booking-view", async (req, res) => {
           if (Array.isArray(rawStaff)) {
             assigned_staff = rawStaff;
           }
-          // Case 2: string JSON
+          // Case 2: string JSON — parse then handle array or object
           else if (typeof rawStaff === "string" && rawStaff.trim()) {
             const parsed = JSON.parse(rawStaff);
-            assigned_staff = Array.isArray(parsed) ? parsed : [];
+            if (Array.isArray(parsed)) {
+              assigned_staff = parsed;
+            } else if (parsed && typeof parsed === "object") {
+              // normalize object-format below
+              const obj = parsed as Record<string, unknown>;
+              const roleKeys = ["sale", "photoshop", "photo", "makeup", "video"];
+              for (const role of roleKeys) {
+                if (obj[role]) {
+                  assigned_staff.push({ id: `obj-${role}-${obj[role]}`, role, staffId: obj[role], staffName: "", castAmount: 0 });
+                }
+              }
+            }
           }
-          // Case 3: old-format object { sale: N, photoshop: M } — not a StaffAssignment array, skip
-          // (do nothing — real staff is inside items[i].assignedStaff)
+          // Case 3: old-format object { sale: N, photoshop: M } — normalize to StaffAssignment[]
+          else if (rawStaff && typeof rawStaff === "object") {
+            const obj = rawStaff as Record<string, unknown>;
+            const roleKeys = ["sale", "photoshop", "photo", "makeup", "video"];
+            for (const role of roleKeys) {
+              if (obj[role]) {
+                assigned_staff.push({ id: `obj-${role}-${obj[role]}`, role, staffId: obj[role], staffName: "", castAmount: 0 });
+              }
+            }
+          }
         } catch {
           assigned_staff = [];
         }
