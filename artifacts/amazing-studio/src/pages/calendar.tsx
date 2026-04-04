@@ -2110,6 +2110,13 @@ function ShowDetailPanel({
       const linkData = await linkRes.json();
       const signUrl = linkData.signUrl as string;
       const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(signUrl)}`;
+      const contractRes = await authFetch(`${BASE}/api/contracts/${contractId}`);
+      const contractData = contractRes.ok ? await contractRes.json() : null;
+      let signatureData = "";
+      try {
+        const parsed = contractData?.notes ? JSON.parse(contractData.notes) : null;
+        signatureData = parsed?.signatureData ?? "";
+      } catch {}
 
       // 5. Tạo HTML hóa đơn đầy đủ
       const parentDiscount = Number(parentContract?.discountAmount ?? 0) || 0;
@@ -2121,7 +2128,15 @@ function ShowDetailPanel({
       const paymentSummary = parentContract
         ? { totalAmount: parentTotal, paidAmount: parentPaid, discountAmount: parentDiscount, remainingAmount: Math.max(0, parentTotal - parentDiscount - parentPaid) }
         : { totalAmount: bookingTotal, paidAmount: bookingPaid, discountAmount: bookingDiscount, remainingAmount: Math.max(0, bookingTotal - bookingDiscount - bookingPaid) };
-      const invoiceHtml = generateContractHTML(booking, siblings, allPackages, paymentSummary, false, paymentHistory);
+      const invoiceHtml = generateContractHTML(booking, siblings, allPackages, paymentSummary, false, paymentHistory).replace(
+        "</body></html>",
+        signatureData
+          ? `<div style="margin:18px 24px 0;background:#fff;border:1px solid #eadcec;border-radius:16px;padding:16px">
+               <div style="font-size:12px;font-weight:700;color:#8B1A6B;margin-bottom:10px">Chữ ký khách hàng</div>
+               <img src="${signatureData}" style="max-width:100%;height:auto;border:1px solid #ddd;border-radius:12px;background:#fff;padding:10px" />
+             </div></body></html>`
+          : `</body></html>`
+      );
 
       // 6. Mở popup với toolbar + iframe hóa đơn
       const win = window.open("", "_blank", "width=1120,height=920");

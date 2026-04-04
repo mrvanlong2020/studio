@@ -348,7 +348,7 @@ router.get("/contracts/:id/public", async (req, res): Promise<void> => {
 
 router.post("/contracts/:id/mark-signed", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id);
-  const { customerName, customerPhone, signedAt } = req.body ?? {};
+  const { customerName, customerPhone, signedAt, signatureData } = req.body ?? {};
   const [existing] = await db.select().from(contractsTable).where(eq(contractsTable.id, id));
   if (!existing) {
     res.status(404).json({ error: "Không tìm thấy hợp đồng" });
@@ -358,6 +358,7 @@ router.post("/contracts/:id/mark-signed", async (req, res): Promise<void> => {
   await db.update(contractsTable).set({
     status: "signed",
     signedAt: signedAt ?? new Date().toISOString(),
+    notes: signatureData ? JSON.stringify({ signatureData }) : existing.notes,
   }).where(eq(contractsTable.id, id));
 
   if (existing.customerId && (customerName !== undefined || customerPhone !== undefined)) {
