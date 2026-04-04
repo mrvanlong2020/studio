@@ -91,9 +91,16 @@ router.get("/tasks/booking-view", async (req, res) => {
       const bid = Number(row.booking_id);
       if (!map.has(bid)) {
         const rawStaff = row.assigned_staff;
-        const assigned_staff = Array.isArray(rawStaff)
-          ? rawStaff
-          : (typeof rawStaff === "string" ? JSON.parse(rawStaff) : []);
+        let assigned_staff: unknown[] = [];
+        try {
+          if (Array.isArray(rawStaff)) {
+            assigned_staff = rawStaff;
+          } else if (typeof rawStaff === "string" && rawStaff.trim()) {
+            assigned_staff = JSON.parse(rawStaff);
+          }
+        } catch {
+          assigned_staff = [];
+        }
         map.set(bid, {
           booking_id: bid,
           order_code: row.order_code,
