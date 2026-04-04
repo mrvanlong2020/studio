@@ -1011,7 +1011,7 @@ export default function PaymentsPage() {
                     )}
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Đã thu</span>
-                      <span className="text-green-600 font-semibold">{fmtVND(selectedBooking.paidAmount)}</span>
+                      <span className="text-green-600 font-semibold">{fmtVND(actualPaid)}</span>
                     </div>
                     <div className="flex justify-between text-base">
                       <span className="font-semibold">Còn lại</span>
