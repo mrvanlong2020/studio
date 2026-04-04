@@ -427,6 +427,7 @@ export default function PaymentsPage() {
     queryKey: ["payments", selectedBooking?.id],
     queryFn: () => fetchJson(`/api/payments?bookingId=${selectedBooking!.id}`),
     enabled: !!selectedBooking,
+    staleTime: 0,
   });
 
   /* Recent payment history section */
@@ -494,8 +495,9 @@ export default function PaymentsPage() {
   };
 
   /* Khi click vào phiếu thu gần đây → chọn booking tương ứng */
-  const handleSelectFromRecent = (p: RecentPaymentItem) => {
+  const handleSelectFromRecent = async (p: RecentPaymentItem) => {
     if (!p.bookingId) return;
+    // Set initial state từ cached data để mở Sheet ngay
     const booking: Booking = {
       id:              p.bookingId,
       orderCode:       p.orderCode ?? "",
@@ -513,6 +515,16 @@ export default function PaymentsPage() {
       serviceCount:    0,
     };
     handleSelectBooking(booking);
+    // Fetch fresh booking để cập nhật paidAmount chính xác (không dùng cache)
+    if (p.customerPhone) {
+      try {
+        const fresh: Booking[] = await fetchJson(
+          `/api/payments/search?q=${encodeURIComponent(p.customerPhone)}`
+        );
+        const refreshed = fresh.find(b => b.id === p.bookingId);
+        if (refreshed) setSelectedBooking(refreshed);
+      } catch {}
+    }
   };
 
   /* Đóng Sheet: kiểm tra isDirty */
@@ -614,16 +626,16 @@ export default function PaymentsPage() {
   /* Tính toán số tiền */
   const amtNum = parseFloat(form.amount) || 0;
 
-  // safeRemaining: luôn tính theo công thức cục bộ để đối chiếu với API
-  const safeRemaining = selectedBooking
-    ? (selectedBooking.totalAmount - (selectedBooking.discountAmount ?? 0)) - selectedBooking.paidAmount
-    : 0;
+  // actualPaid: source of truth — tổng từ paymentHistory (đã fetch fresh từ DB)
+  // Fallback về selectedBooking.paidAmount nếu paymentHistory chưa load
+  const actualPaid = paymentHistory.length > 0
+    ? paymentHistory.reduce((s, p) => s + ((p as any).amount ?? 0), 0)
+    : (selectedBooking?.paidAmount ?? 0);
 
-  // effectiveRemaining: dùng giá trị API, nhưng nếu lệch quá 1đ thì fallback về công thức cục bộ
-  const apiRemaining = selectedBooking?.remainingAmount ?? safeRemaining;
-  const effectiveRemaining = selectedBooking && Math.abs(apiRemaining - safeRemaining) > 1
-    ? safeRemaining
-    : apiRemaining;
+  // effectiveRemaining: tính từ actualPaid — không dùng cache
+  const effectiveTotal    = selectedBooking ? selectedBooking.totalAmount : 0;
+  const effectiveDiscount = selectedBooking ? (selectedBooking.discountAmount ?? 0) : 0;
+  const effectiveRemaining = Math.max(0, effectiveTotal - effectiveDiscount - actualPaid);
 
   const isOverpaid = amtNum > effectiveRemaining;
   const afterPay   = Math.max(0, effectiveRemaining - amtNum);
@@ -1261,7 +1273,7 @@ export default function PaymentsPage() {
                   <div className="mt-4 pt-3 border-t border-border space-y-1.5 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Tổng đã thu</span>
-                      <span className="font-bold text-green-600">{fmtVND(selectedBooking.paidAmount)}</span>
+                      <span className="font-bold text-green-600">{fmtVND(actualPaid)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Còn lại</span>
