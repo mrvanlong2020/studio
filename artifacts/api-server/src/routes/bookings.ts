@@ -421,6 +421,7 @@ router.get("/bookings/:id", async (req, res) => {
       .orderBy(bookingsTable.shootDate);
     siblings = siblingRows.map(s => ({
       ...s,
+      items: normalizeItemStaff(s.items),
       totalAmount: parseFloat(s.totalAmount),
       depositAmount: parseFloat(s.depositAmount),
     }));
@@ -438,6 +439,7 @@ router.get("/bookings/:id", async (req, res) => {
       const parentDiscount = parseFloat(parentRow.discountAmount ?? "0");
       parentContract = {
         ...parentRow,
+        items: normalizeItemStaff(parentRow.items),
         totalAmount: parentTotal,
         depositAmount: parseFloat(parentRow.depositAmount),
         paidAmount: parentPaid,
@@ -458,6 +460,7 @@ router.get("/bookings/:id", async (req, res) => {
       .orderBy(bookingsTable.shootDate);
     children = childRows.map(c => ({
       ...c,
+      items: normalizeItemStaff(c.items),
       totalAmount: parseFloat(c.totalAmount),
       depositAmount: parseFloat(c.depositAmount),
     }));
