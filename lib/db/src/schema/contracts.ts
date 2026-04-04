@@ -17,6 +17,9 @@ export const contractsTable = pgTable("contracts", {
   expiresAt: date("expires_at"),
   fileUrl: text("file_url"),
   notes: text("notes"),
+  signatureImageUrl: text("signature_image_url"),
+  signerName: text("signer_name"),
+  signerPhone: text("signer_phone"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -1457,6 +1457,7 @@ function generateContractHTML(
   paymentSummary?: { totalAmount: number; paidAmount: number; discountAmount?: number; remainingAmount: number },
   forImageExport = false,
   paymentHistoryList: ContractPayment[] = [],
+  signatureInfo?: { signatureImageUrl?: string | null; signerName?: string | null; signerPhone?: string | null; signedAt?: string | null },
 ): string {
   const today = new Date();
   const todayStr = format(today, "dd/MM/yyyy");
@@ -1882,12 +1883,16 @@ function generateContractHTML(
         <div style="font-size:11.5px;color:#888;font-style:italic;">(Ký, ghi rõ họ tên)</div>
         <div style="margin-top:10px;font-size:12px;color:#666;">Ngày ___/___/______</div>
       </div>
-      <div style="text-align:center;border:1px dashed #d0b8d0;border-radius:10px;padding:20px 16px;">
+      <div style="text-align:center;border:${signatureInfo?.signatureImageUrl ? "1.5px solid #a7f3d0" : "1px dashed #d0b8d0"};border-radius:10px;padding:20px 16px;${signatureInfo?.signatureImageUrl ? "background:#f0fdf4;" : ""}">
         <div style="font-weight:700;font-size:13px;color:#8B1A6B;margin-bottom:4px;">Bên B – Khách hàng</div>
-        <div style="font-size:11.5px;color:#888;margin-bottom:3px;">${booking.customerName}</div>
-        <div style="height:70px;border-bottom:1.5px solid #bbb;margin:12px 24px 8px;"></div>
-        <div style="font-size:11.5px;color:#888;font-style:italic;">(Ký, ghi rõ họ tên)</div>
-        <div style="margin-top:10px;font-size:12px;color:#666;">Ngày ___/___/______</div>
+        <div style="font-size:11.5px;color:#888;margin-bottom:3px;">${signatureInfo?.signerName || booking.customerName}</div>
+        ${signatureInfo?.signerPhone ? `<div style="font-size:11px;color:#aaa;margin-bottom:6px;">${signatureInfo.signerPhone}</div>` : ""}
+        ${signatureInfo?.signatureImageUrl
+          ? `<img src="${signatureInfo.signatureImageUrl}" style="max-width:100%;max-height:100px;object-fit:contain;margin:8px auto 6px;display:block;border-radius:8px;background:#fff;padding:6px;border:1px solid #ddd;" />`
+          : `<div style="height:70px;border-bottom:1.5px solid #bbb;margin:12px 24px 8px;"></div>`
+        }
+        <div style="font-size:11.5px;color:${signatureInfo?.signatureImageUrl ? "#065f46" : "#888"};font-style:italic;font-weight:${signatureInfo?.signatureImageUrl ? "700" : "400"};">${signatureInfo?.signatureImageUrl ? "✅ Đã ký xác nhận" : "(Ký, ghi rõ họ tên)"}</div>
+        <div style="margin-top:10px;font-size:12px;color:#666;">${signatureInfo?.signedAt ? `Ngày ${new Date(signatureInfo.signedAt).toLocaleDateString("vi-VN")}` : "Ngày ___/___/______"}</div>
       </div>
     </div>
   </div>
@@ -2112,11 +2117,12 @@ function ShowDetailPanel({
       const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(signUrl)}`;
       const contractRes = await authFetch(`${BASE}/api/contracts/${contractId}`);
       const contractData = contractRes.ok ? await contractRes.json() : null;
-      let signatureData = "";
-      try {
-        const parsed = contractData?.notes ? JSON.parse(contractData.notes) : null;
-        signatureData = parsed?.signatureData ?? "";
-      } catch {}
+      const signatureInfo = contractData ? {
+        signatureImageUrl: contractData.signatureImageUrl ?? null,
+        signerName: contractData.signerName ?? null,
+        signerPhone: contractData.signerPhone ?? null,
+        signedAt: contractData.signedAt ?? null,
+      } : undefined;
 
       // 5. Tạo HTML hóa đơn đầy đủ
       const parentDiscount = Number(parentContract?.discountAmount ?? 0) || 0;
@@ -2128,15 +2134,7 @@ function ShowDetailPanel({
       const paymentSummary = parentContract
         ? { totalAmount: parentTotal, paidAmount: parentPaid, discountAmount: parentDiscount, remainingAmount: Math.max(0, parentTotal - parentDiscount - parentPaid) }
         : { totalAmount: bookingTotal, paidAmount: bookingPaid, discountAmount: bookingDiscount, remainingAmount: Math.max(0, bookingTotal - bookingDiscount - bookingPaid) };
-      const invoiceHtml = generateContractHTML(booking, siblings, allPackages, paymentSummary, false, paymentHistory).replace(
-        "</body></html>",
-        signatureData
-          ? `<div style="margin:18px 24px 0;background:#fff;border:1px solid #eadcec;border-radius:16px;padding:16px">
-               <div style="font-size:12px;font-weight:700;color:#8B1A6B;margin-bottom:10px">Chữ ký khách hàng</div>
-               <img src="${signatureData}" style="max-width:100%;height:auto;border:1px solid #ddd;border-radius:12px;background:#fff;padding:10px" />
-             </div></body></html>`
-          : `</body></html>`
-      );
+      const invoiceHtml = generateContractHTML(booking, siblings, allPackages, paymentSummary, false, paymentHistory, signatureInfo);
 
       // 6. Mở popup với toolbar + iframe hóa đơn
       const win = window.open("", "_blank", "width=1120,height=920");

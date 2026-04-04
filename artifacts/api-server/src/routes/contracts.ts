@@ -358,7 +358,9 @@ router.post("/contracts/:id/mark-signed", async (req, res): Promise<void> => {
   await db.update(contractsTable).set({
     status: "signed",
     signedAt: signedAt ?? new Date().toISOString(),
-    notes: signatureData ? JSON.stringify({ signatureData }) : existing.notes,
+    ...(signatureData ? { signatureImageUrl: signatureData } : {}),
+    ...(customerName ? { signerName: customerName } : {}),
+    ...(customerPhone ? { signerPhone: customerPhone } : {}),
   }).where(eq(contractsTable.id, id));
 
   if (existing.customerId && (customerName !== undefined || customerPhone !== undefined)) {
@@ -482,6 +484,9 @@ router.get("/contracts/:id", async (req, res): Promise<void> => {
       expiresAt: contractsTable.expiresAt,
       fileUrl: contractsTable.fileUrl,
       notes: contractsTable.notes,
+      signatureImageUrl: contractsTable.signatureImageUrl,
+      signerName: contractsTable.signerName,
+      signerPhone: contractsTable.signerPhone,
       createdAt: contractsTable.createdAt,
       bookingDeductions: bookingsTable.deductions,
       bookingSurcharges: bookingsTable.surcharges,
