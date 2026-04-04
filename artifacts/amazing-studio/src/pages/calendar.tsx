@@ -1443,12 +1443,15 @@ async function buildContractImages(htmlContent: string): Promise<string[]> {
   }
 }
 
+type ContractPayment = { amount?: number; paymentMethod?: string; collectorName?: string; paidDate?: string; paidAt?: string; notes?: string };
+
 function generateContractHTML(
   booking: Booking,
   siblings: Booking[],
   allPackages: DetailPackage[],
   paymentSummary?: { totalAmount: number; paidAmount: number; discountAmount?: number; remainingAmount: number },
   forImageExport = false,
+  paymentHistoryList: ContractPayment[] = [],
 ): string {
   const today = new Date();
   const todayStr = format(today, "dd/MM/yyyy");
@@ -1765,7 +1768,7 @@ function generateContractHTML(
     </div>` : ""}
     <div style="height:1px;background:rgba(255,255,255,0.25);margin:8px 0 12px;"></div>
     <div style="display:flex;justify-content:space-between;margin-bottom:7px;font-size:13.5px;">
-      <span style="opacity:0.9;">✅ Đã đặt cọc / đã thanh toán</span>
+      <span style="opacity:0.9;">✅ Tổng đã thu</span>
       <span style="font-weight:600;">${fmtVNDStr(paidAmount)}</span>
     </div>
     <div style="display:flex;justify-content:space-between;font-size:14px;">
@@ -1773,6 +1776,41 @@ function generateContractHTML(
       <span style="font-weight:800;font-size:17px;">${fmtVNDStr(remainingAmount)}</span>
     </div>
   </div>
+
+  ${paymentHistoryList.length > 0 ? `
+  <!-- Lịch sử thanh toán -->
+  <div style="margin-bottom:24px;page-break-inside:avoid;">
+    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#9b59b6;margin-bottom:10px;">🧾 Lịch sử thanh toán</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      <thead>
+        <tr style="background:#f8f0fa;">
+          <th style="padding:8px 12px;text-align:left;color:#6c3483;font-weight:700;border-bottom:2px solid #c39bd3;">Ngày</th>
+          <th style="padding:8px 12px;text-align:left;color:#6c3483;font-weight:700;border-bottom:2px solid #c39bd3;">Hình thức</th>
+          <th style="padding:8px 12px;text-align:left;color:#6c3483;font-weight:700;border-bottom:2px solid #c39bd3;">Người thu</th>
+          <th style="padding:8px 12px;text-align:right;color:#6c3483;font-weight:700;border-bottom:2px solid #c39bd3;">Số tiền</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${paymentHistoryList.map((p, idx) => {
+          const dateVal = p.paidDate || p.paidAt || "";
+          const dateDisp = dateVal ? new Date(dateVal).toLocaleDateString("vi-VN") : "—";
+          const methodDisp = p.paymentMethod === "bank_transfer" ? "Chuyển khoản" : "Tiền mặt";
+          const rowBg = idx % 2 === 1 ? "background:#fdf8ff;" : "";
+          return `<tr style="${rowBg}">
+            <td style="padding:7px 12px;border-bottom:1px solid #f0e8f0;">${dateDisp}</td>
+            <td style="padding:7px 12px;border-bottom:1px solid #f0e8f0;">${methodDisp}</td>
+            <td style="padding:7px 12px;border-bottom:1px solid #f0e8f0;color:#555;">${p.collectorName || "—"}</td>
+            <td style="padding:7px 12px;border-bottom:1px solid #f0e8f0;text-align:right;font-weight:700;color:#1a7a4b;">+${fmtVNDStr(p.amount ?? 0)}</td>
+          </tr>`;
+        }).join("")}
+        <tr style="background:#f0fff4;">
+          <td colspan="3" style="padding:8px 12px;font-weight:700;color:#1a7a4b;">Tổng đã thu</td>
+          <td style="padding:8px 12px;text-align:right;font-weight:800;font-size:14px;color:#1a7a4b;">${fmtVNDStr(paidAmount)}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  ` : ""}
 
   ${notesHTML ? `
   <!-- Ghi chú -->
@@ -1902,23 +1940,22 @@ function ShowDetailPanel({
     staleTime: 60_000,
   });
 
-  // ── Fetch full detail (includes siblings/parentContract) when applicable ──
-  const needsFullDetail = !!booking.parentId || !!booking.isParentContract;
+  // ── Fetch full detail (always — needed for siblings/parentContract and fresh paidAmount) ──
   const { data: fullDetail } = useQuery<Booking & { siblings?: Booking[]; parentContract?: Booking; children?: Booking[] }>({
     queryKey: ["booking-full", booking.id],
     queryFn: () => authFetch(`${BASE}/api/bookings/${booking.id}`).then(r => r.json()),
-    enabled: needsFullDetail,
-    staleTime: 30_000,
+    enabled: true,
+    staleTime: 0,
   });
   const siblings: Booking[] = fullDetail?.siblings ?? [];
-  const parentContract: (Booking & { remainingAmount: number }) | null = (fullDetail?.parentContract as (Booking & { remainingAmount: number })) ?? null;
+  const parentContract: (Booking & { remainingAmount: number; paidAmount: number }) | null = (fullDetail?.parentContract as (Booking & { remainingAmount: number; paidAmount: number })) ?? null;
 
   // ── Payment history for this booking ─────────────────────────────────────
   type BookingPayment = { id?: number; amount?: number; paymentMethod?: string; paymentType?: string; collectorName?: string; notes?: string; paidAt?: string; paidDate?: string };
   const { data: paymentHistory = [] } = useQuery<BookingPayment[]>({
     queryKey: ["payments", booking.id],
     queryFn: () => authFetch(`${BASE}/api/payments?bookingId=${booking.id}`).then(r => r.ok ? r.json() : []),
-    staleTime: 30_000,
+    staleTime: 0,
   });
 
   const [deleting, setDeleting] = useState(false);
@@ -1982,26 +2019,26 @@ function ShowDetailPanel({
 
   const handlePrintContract = () => {
     const parentDiscount = Number(parentContract?.discountAmount ?? 0) || 0;
-    const parentDeposit = Number(parentContract?.depositAmount ?? 0) || 0;
-    const parentTotal = Number(parentContract?.totalAmount ?? 0) || 0;
-    const bookingDeposit = Number(booking.depositAmount ?? 0) || 0;
-    const bookingDiscount = Number(booking.discountAmount ?? 0) || 0;
-    const bookingTotal = Number(booking.totalAmount ?? 0) || 0;
-    
+    const parentPaid     = Number(parentContract?.paidAmount     ?? 0) || 0;
+    const parentTotal    = Number(parentContract?.totalAmount    ?? 0) || 0;
+    const bookingPaid    = paymentHistory.reduce((s, p) => s + (p.amount ?? 0), 0);
+    const bookingDiscount = Number((fullDetail ?? booking).discountAmount ?? 0) || 0;
+    const bookingTotal    = Number((fullDetail ?? booking).totalAmount    ?? 0) || 0;
+
     const paymentSummary = parentContract
       ? {
           totalAmount:     parentTotal,
-          paidAmount:      parentDeposit,
+          paidAmount:      parentPaid,
           discountAmount:  parentDiscount,
-          remainingAmount: Math.max(0, parentTotal - parentDiscount - parentDeposit),
+          remainingAmount: Math.max(0, parentTotal - parentDiscount - parentPaid),
         }
       : {
           totalAmount:     bookingTotal,
-          paidAmount:      bookingDeposit,
+          paidAmount:      bookingPaid,
           discountAmount:  bookingDiscount,
-          remainingAmount: Math.max(0, bookingTotal - bookingDiscount - bookingDeposit),
+          remainingAmount: Math.max(0, bookingTotal - bookingDiscount - bookingPaid),
         };
-    const html = generateContractHTML(booking, siblings, allPackages, paymentSummary);
+    const html = generateContractHTML(booking, siblings, allPackages, paymentSummary, false, paymentHistory);
     const win = window.open("", "_blank");
     if (!win) { alert("Vui lòng cho phép trình duyệt mở cửa sổ mới để xuất hợp đồng."); return; }
     win.document.write(html);
@@ -2054,26 +2091,26 @@ function ShowDetailPanel({
             setShowContractImages(true);
             try {
               const parentDiscount = Number(parentContract?.discountAmount ?? 0) || 0;
-              const parentDeposit = Number(parentContract?.depositAmount ?? 0) || 0;
-              const parentTotal = Number(parentContract?.totalAmount ?? 0) || 0;
-              const bookingDeposit = Number(booking.depositAmount ?? 0) || 0;
-              const bookingDiscount = Number(booking.discountAmount ?? 0) || 0;
-              const bookingTotal = Number(booking.totalAmount ?? 0) || 0;
-              
+              const parentPaid     = Number(parentContract?.paidAmount     ?? 0) || 0;
+              const parentTotal    = Number(parentContract?.totalAmount    ?? 0) || 0;
+              const bookingPaid    = paymentHistory.reduce((s, p) => s + (p.amount ?? 0), 0);
+              const bookingDiscount = Number((fullDetail ?? booking).discountAmount ?? 0) || 0;
+              const bookingTotal    = Number((fullDetail ?? booking).totalAmount    ?? 0) || 0;
+
               const paymentSummary = parentContract
                 ? {
                     totalAmount:     parentTotal,
-                    paidAmount:      parentDeposit,
+                    paidAmount:      parentPaid,
                     discountAmount:  parentDiscount,
-                    remainingAmount: Math.max(0, parentTotal - parentDiscount - parentDeposit),
+                    remainingAmount: Math.max(0, parentTotal - parentDiscount - parentPaid),
                   }
                 : {
                     totalAmount:     bookingTotal,
-                    paidAmount:      bookingDeposit,
+                    paidAmount:      bookingPaid,
                     discountAmount:  bookingDiscount,
-                    remainingAmount: Math.max(0, bookingTotal - bookingDiscount - bookingDeposit),
+                    remainingAmount: Math.max(0, bookingTotal - bookingDiscount - bookingPaid),
                   };
-              const html = generateContractHTML(booking, siblings, allPackages, paymentSummary, true);
+              const html = generateContractHTML(booking, siblings, allPackages, paymentSummary, true, paymentHistory);
               const urls = await buildContractImages(html);
               setContractImageUrls(urls);
             } catch (err) {
@@ -2225,13 +2262,13 @@ function ShowDetailPanel({
                       </div>
                     )}
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Đã đặt cọc</span>
-                      <span className="font-semibold text-emerald-600">{fmtVND(parentContract.depositAmount)}</span>
+                      <span className="text-muted-foreground">Đã thu</span>
+                      <span className="font-semibold text-emerald-600">{fmtVND(parentContract.paidAmount ?? 0)}</span>
                     </div>
                     <div className="flex justify-between text-sm border-t border-border/40 pt-1.5">
                       <span className="font-semibold">Còn lại</span>
                       {(() => {
-                        const calcRemaining = Math.max(0, (parentContract.totalAmount ?? 0) - (parentContract.discountAmount ?? 0) - (parentContract.depositAmount ?? 0));
+                        const calcRemaining = Math.max(0, (parentContract.totalAmount ?? 0) - (parentContract.discountAmount ?? 0) - (parentContract.paidAmount ?? 0));
                         return <span className={`font-bold ${calcRemaining > 0 ? "text-destructive" : "text-emerald-600"}`}>{fmtVND(calcRemaining)}</span>;
                       })()}
                     </div>
@@ -2489,17 +2526,28 @@ function ShowDetailPanel({
                         </span>
                       </div>
                       {paymentHistory.length > 0 && (
-                        <div className="px-3 py-2 space-y-1 bg-muted/10">
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Lịch sử thu tiền</p>
-                          {paymentHistory.map((p, i) => (
-                            <div key={p.id ?? i} className="flex justify-between items-center text-xs">
-                              <span className="text-muted-foreground">
-                                {p.paidDate ? new Date(p.paidDate).toLocaleDateString("vi-VN") : p.paidAt ? new Date(p.paidAt).toLocaleDateString("vi-VN") : "—"}
-                                {p.paymentMethod === "bank_transfer" ? " · CK" : " · TM"}
-                              </span>
-                              <span className="font-medium text-emerald-700">+{formatVND(p.amount ?? 0)}</span>
-                            </div>
-                          ))}
+                        <div className="px-3 py-2 space-y-2 bg-muted/10">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Lịch sử thu tiền ({paymentHistory.length} lần)</p>
+                          {paymentHistory.map((p, i) => {
+                            const dateStr = p.paidDate
+                              ? new Date(p.paidDate).toLocaleDateString("vi-VN")
+                              : p.paidAt ? new Date(p.paidAt).toLocaleDateString("vi-VN") : "—";
+                            const method = p.paymentMethod === "bank_transfer" ? "Chuyển khoản" : "Tiền mặt";
+                            return (
+                              <div key={p.id ?? i} className="rounded-lg bg-background/70 border border-border/40 px-2.5 py-1.5">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs text-muted-foreground">{dateStr} · {method}</span>
+                                  <span className="text-sm font-bold text-emerald-700">+{formatVND(p.amount ?? 0)}</span>
+                                </div>
+                                {p.collectorName && (
+                                  <p className="text-[10px] text-muted-foreground/70 mt-0.5">Người thu: {p.collectorName}</p>
+                                )}
+                                {p.notes && (
+                                  <p className="text-[10px] text-muted-foreground/70 mt-0.5 italic">{p.notes}</p>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
