@@ -1,0 +1,60 @@
+#72 - Lịch tháng: Compact / Comfortable mode + scroll dọc
+
+What & Why
+Month view hiện tại nhét toàn bộ lưới vào một màn hình nên ô ngày rất chật trên mobile, khó đọc giờ / tên khách / nhân sự. Grid cũng không scroll dọc nên nếu tháng có 6 hàng thì các ô bị bóp nhỏ hơn nữa.
+
+Fix:
+- tách phần body của month grid thành scrollable container độc lập
+- giữ header điều hướng tháng và hàng thứ trong tuần (T2–CN) cố định
+- thêm toggle Compact / Comfortable để user chọn mật độ hiển thị
+
+Done looks like
+- Lịch tháng có nút toggle "Compact / Comfortable" trên header
+- Comfortable là mode mặc định mới
+- Comfortable: ô ngày đủ cao để đọc dễ hơn trên mobile, body grid scroll dọc
+- Compact: giữ cảm giác gần như hiện tại
+- Header điều hướng tháng và hàng T2–CN không scroll theo
+- Tháng 6 hàng: user kéo xuống để xem, không bị bóp nhỏ
+- Mode được lưu localStorage và giữ qua refresh
+- Không ảnh hưởng đến lịch ngày / lịch 24h
+
+UI expectation
+- Comfortable:
+  - mobile: min-height khoảng 150px
+  - desktop/tablet: 180px
+- Compact:
+  - giữ logic chiều cao hiện tại
+- Trong mỗi ô ngày, ưu tiên readability cho:
+  - giờ
+  - tên khách
+  - nhân sự chính
+- Text dài có thể truncate hợp lý, không bắt buộc hiển thị full mọi nội dung
+
+Out of scope
+- Không thay đổi lịch ngày / DayView
+- Không thay đổi backend / API
+
+Tasks
+1. Scrollable grid container
+- Chỉ bọc phần body của month grid vào container có overflow-y-auto flex-1
+- Không bọc header điều hướng tháng
+- Không bọc hàng T2–CN
+- Parent dùng flex flex-col để phần grid body chiếm phần còn lại màn hình
+
+2. Compact / Comfortable toggle
+- Thêm state calendarDensity: "compact" | "comfortable"
+- Default: "comfortable"
+- Persist localStorage key: amazingCalDensity
+- Nếu localStorage chưa có hoặc lỗi parse thì fallback về "comfortable"
+- Đặt toggle nhỏ gọn trong header month view, cùng khu vực điều hướng tháng
+
+3. Cell height
+- Trong MonthDayCell, nhận prop density
+- Comfortable:
+  - mobile minHeight ~150px
+  - desktop/tablet ~180px
+- Compact:
+  - giữ logic chiều cao hiện tại
+
+Relevant files
+- artifacts/amazing-studio/src/pages/calendar.tsx:2610-2713,3165-3215
