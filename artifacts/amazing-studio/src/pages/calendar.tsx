@@ -1465,6 +1465,7 @@ function generateContractHTML(
   const paidAmount      = Number(paymentSummary?.paidAmount      ?? booking.paidAmount      ?? 0) || 0;
   const discountAmount  = Number(paymentSummary?.discountAmount  ?? booking.discountAmount  ?? 0) || 0;
   const remainingAmount = Number(paymentSummary?.remainingAmount ?? booking.remainingAmount ?? Math.max(0, totalAmount - discountAmount - paidAmount)) || 0;
+  let runningRemaining = remainingAmount;
 
   // ── Lịch chụp section ─────────────────────────────────────────────────────
   const scheduleSectionHTML = isMulti
@@ -1788,6 +1789,7 @@ function generateContractHTML(
           <th style="padding:8px 12px;text-align:left;color:#6c3483;font-weight:700;border-bottom:2px solid #c39bd3;">Hình thức</th>
           <th style="padding:8px 12px;text-align:left;color:#6c3483;font-weight:700;border-bottom:2px solid #c39bd3;">Người thu</th>
           <th style="padding:8px 12px;text-align:right;color:#6c3483;font-weight:700;border-bottom:2px solid #c39bd3;">Số tiền</th>
+          <th style="padding:8px 12px;text-align:right;color:#6c3483;font-weight:700;border-bottom:2px solid #c39bd3;">Còn lại</th>
         </tr>
       </thead>
       <tbody>
@@ -1796,15 +1798,17 @@ function generateContractHTML(
           const dateDisp = dateVal ? new Date(dateVal).toLocaleDateString("vi-VN") : "—";
           const methodDisp = p.paymentMethod === "bank_transfer" ? "Chuyển khoản" : "Tiền mặt";
           const rowBg = idx % 2 === 1 ? "background:#fdf8ff;" : "";
+          runningRemaining = Math.max(0, runningRemaining - (Number(p.amount) || 0));
           return `<tr style="${rowBg}">
             <td style="padding:7px 12px;border-bottom:1px solid #f0e8f0;">${dateDisp}</td>
             <td style="padding:7px 12px;border-bottom:1px solid #f0e8f0;">${methodDisp}</td>
             <td style="padding:7px 12px;border-bottom:1px solid #f0e8f0;color:#555;">${p.collectorName || "—"}</td>
             <td style="padding:7px 12px;border-bottom:1px solid #f0e8f0;text-align:right;font-weight:700;color:#1a7a4b;">+${fmtVNDStr(p.amount ?? 0)}</td>
+            <td style="padding:7px 12px;border-bottom:1px solid #f0e8f0;text-align:right;font-weight:700;color:#8B1A6B;">${fmtVNDStr(runningRemaining)}</td>
           </tr>`;
         }).join("")}
         <tr style="background:#f0fff4;">
-          <td colspan="3" style="padding:8px 12px;font-weight:700;color:#1a7a4b;">Tổng đã thu</td>
+          <td colspan="4" style="padding:8px 12px;font-weight:700;color:#1a7a4b;">Tổng đã thu</td>
           <td style="padding:8px 12px;text-align:right;font-weight:800;font-size:14px;color:#1a7a4b;">${fmtVNDStr(paidAmount)}</td>
         </tr>
       </tbody>

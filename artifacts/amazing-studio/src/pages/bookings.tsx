@@ -52,7 +52,7 @@ type Booking = {
 };
 
 type Payment = {
-  id: number; amount: number; paymentMethod: string; paymentType: string; notes?: string; paidAt: string;
+  id: number; amount: number; paymentMethod: string; paymentType: string; notes?: string; paidAt: string; collectorName?: string;
 };
 
 type Expense = {
@@ -601,6 +601,7 @@ export default function BookingsPage() {
                                     </div>
                                     <div className="text-xs text-muted-foreground mt-0.5 ml-6">
                                       {PAYMENT_METHOD[p.paymentMethod] ?? p.paymentMethod} · {formatDate(p.paidAt)}
+                                      {p.collectorName ? ` · Người thu: ${p.collectorName}` : ""}
                                       {p.notes && ` · ${p.notes}`}
                                     </div>
                                   </div>
