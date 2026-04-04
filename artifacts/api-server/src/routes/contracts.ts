@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { contractsTable, customersTable, bookingsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
+import crypto from "node:crypto";
 
 const router: IRouter = Router();
 
@@ -45,6 +46,35 @@ router.post("/contracts", async (req, res) => {
     .returning();
   const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, customerId));
   res.status(201).json({ ...contract, customerName: customer.name, customerPhone: customer.phone });
+});
+
+router.post("/contracts/:id/sign-link", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const [row] = await db
+    .select({
+      id: contractsTable.id,
+      contractCode: contractsTable.contractCode,
+      customerId: contractsTable.customerId,
+      customerName: customersTable.name,
+      customerPhone: customersTable.phone,
+      title: contractsTable.title,
+    })
+    .from(contractsTable)
+    .innerJoin(customersTable, eq(contractsTable.customerId, customersTable.id))
+    .where(eq(contractsTable.id, id));
+
+  if (!row) return res.status(404).json({ error: "Không tìm thấy hợp đồng" });
+
+  const baseUrl = process.env.PUBLIC_APP_URL || process.env.REPLIT_DEV_DOMAIN || "";
+  const signUrl = `${baseUrl.replace(/\/$/, "")}/contracts/${id}/sign`;
+
+  res.json({
+    signUrl,
+    customerName: row.customerName,
+    customerPhone: row.customerPhone,
+    contractCode: row.contractCode,
+    title: row.title,
+  });
 });
 
 router.get("/contracts/:id", async (req, res) => {

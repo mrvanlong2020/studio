@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatVND, formatDate } from "@/lib/utils";
 import { Button, Input, Select, Textarea, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui";
 import { CurrencyInput } from "@/components/ui/currency-input";
-import { Plus, Search, FileText, User, Calendar, CheckCircle2, Clock, AlertCircle, Trash2, Edit, Printer, ReceiptText } from "lucide-react";
+import { Plus, Search, FileText, User, Calendar, CheckCircle2, Clock, AlertCircle, Trash2, Edit, Printer, ReceiptText, Send, Link2, Copy } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const fetchJson = (url: string, opts?: RequestInit) =>
@@ -240,6 +240,16 @@ export default function ContractsPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["contracts"] }); setSelectedId(null); },
   });
 
+  const sendLinkMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`${BASE}/api/contracts/${id}/sign-link`, { method: "POST" });
+      if (!res.ok) throw new Error("Không tạo được link ký");
+      return res.json() as Promise<{ signUrl: string }>;
+    },
+  });
+
+  const [sharedSignUrl, setSharedSignUrl] = useState("");
+
   const openCreate = () => { setForm({ ...EMPTY_FORM }); setEditingId(null); setIsOpen(true); };
   const openEdit = (c: Contract) => {
     setForm({
@@ -474,6 +484,30 @@ export default function ContractsPage() {
                 <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl">
                   <p className="font-semibold text-xs text-yellow-700 mb-1">📝 Ghi chú</p>
                   <p className="text-yellow-800 text-xs">{selected.notes}</p>
+                </div>
+              )}
+
+              {selected.customerName && (
+                <div className="p-3 bg-muted/30 rounded-xl border space-y-2">
+                  <p className="font-semibold text-xs text-muted-foreground">Ký số khách hàng</p>
+                  <Button
+                    variant="secondary"
+                    className="w-full gap-2"
+                    onClick={async () => {
+                      const data = await sendLinkMutation.mutateAsync(selected.id);
+                      await navigator.clipboard.writeText(data.signUrl);
+                      setSharedSignUrl(data.signUrl);
+                    }}
+                  >
+                    <Send className="w-4 h-4" />
+                    Gửi / sao chép link ký
+                  </Button>
+                  {sharedSignUrl && (
+                    <a href={sharedSignUrl} target="_blank" rel="noreferrer" className="text-xs text-primary break-all inline-flex items-center gap-1">
+                      <Link2 className="w-3 h-3" />
+                      {sharedSignUrl}
+                    </a>
+                  )}
                 </div>
               )}
 
