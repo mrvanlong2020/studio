@@ -38,7 +38,7 @@ export default function AiAssistantPage() {
 
   const { data: aiKeyData } = useQuery({
     queryKey: ["ai-key-status"],
-    queryFn: () => fetch(`${BASE}/api/health/check-ai-key`).then(r => r.ok ? r.json() : { configured: false }),
+    queryFn: () => fetch(`${BASE}/api/check-ai-key`).then(r => r.ok ? r.json() : { configured: false }),
     staleTime: 0,
     refetchOnMount: "always",
   });
