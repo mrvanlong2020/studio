@@ -65,6 +65,7 @@ router.get("/tasks/booking-view", async (req, res) => {
         b.status          AS booking_status,
         b.location,
         b.assigned_staff,
+        b.items,
         c.name            AS customer_name,
         c.phone           AS customer_phone,
         t.id              AS task_id,
@@ -91,16 +92,42 @@ router.get("/tasks/booking-view", async (req, res) => {
       const bid = Number(row.booking_id);
       if (!map.has(bid)) {
         const rawStaff = row.assigned_staff;
+        const rawItems = row.items;
         let assigned_staff: unknown[] = [];
+
         try {
+          // Case 1: already an array (saved from Giao việc)
           if (Array.isArray(rawStaff)) {
             assigned_staff = rawStaff;
-          } else if (typeof rawStaff === "string" && rawStaff.trim()) {
-            assigned_staff = JSON.parse(rawStaff);
           }
+          // Case 2: string JSON
+          else if (typeof rawStaff === "string" && rawStaff.trim()) {
+            const parsed = JSON.parse(rawStaff);
+            assigned_staff = Array.isArray(parsed) ? parsed : [];
+          }
+          // Case 3: old-format object { sale: N, photoshop: M } — not a StaffAssignment array, skip
+          // (do nothing — real staff is inside items[i].assignedStaff)
         } catch {
           assigned_staff = [];
         }
+
+        // Extract per-service staff from items[i].assignedStaff (where Lịch show saves staff)
+        try {
+          const itemsArr = Array.isArray(rawItems) ? rawItems : [];
+          for (const item of itemsArr) {
+            if (Array.isArray((item as Record<string, unknown>)?.assignedStaff)) {
+              for (const sa of (item as Record<string, unknown>).assignedStaff as unknown[]) {
+                const s = sa as Record<string, unknown>;
+                // Deduplicate by id or by staffId+role combo
+                const already = (assigned_staff as Array<Record<string, unknown>>).some(
+                  x => x.id === s.id || (s.staffId && x.staffId === s.staffId && x.role === s.role)
+                );
+                if (!already) assigned_staff.push(sa);
+              }
+            }
+          }
+        } catch { /* ignore */ }
+
         map.set(bid, {
           booking_id: bid,
           order_code: row.order_code,
