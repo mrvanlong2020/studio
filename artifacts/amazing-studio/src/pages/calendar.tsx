@@ -2107,97 +2107,97 @@ function ShowDetailPanel({
       // 4. Tạo link ký + QR
       const linkRes = await authFetch(`${BASE}/api/contracts/${contractId}/sign-link`, { method: "POST" });
       if (!linkRes.ok) throw new Error("Không tạo được link ký");
-      const data = await linkRes.json();
-      const signUrl = data.signUrl as string;
-      const qr = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(signUrl)}`;
+      const linkData = await linkRes.json();
+      const signUrl = linkData.signUrl as string;
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(signUrl)}`;
 
-      // 5. Mở popup với hóa đơn + QR
-      const win = window.open("", "_blank", "width=1020,height=820");
+      // 5. Tạo HTML hóa đơn đầy đủ
+      const parentDiscount = Number(parentContract?.discountAmount ?? 0) || 0;
+      const parentPaid     = Number(parentContract?.paidAmount     ?? 0) || 0;
+      const parentTotal    = Number(parentContract?.totalAmount    ?? 0) || 0;
+      const bookingPaid    = paymentHistory.reduce((s, p) => s + (p.amount ?? 0), 0);
+      const bookingDiscount = Number((fullDetail ?? booking).discountAmount ?? 0) || 0;
+      const bookingTotal    = Number((fullDetail ?? booking).totalAmount    ?? 0) || 0;
+      const paymentSummary = parentContract
+        ? { totalAmount: parentTotal, paidAmount: parentPaid, discountAmount: parentDiscount, remainingAmount: Math.max(0, parentTotal - parentDiscount - parentPaid) }
+        : { totalAmount: bookingTotal, paidAmount: bookingPaid, discountAmount: bookingDiscount, remainingAmount: Math.max(0, bookingTotal - bookingDiscount - bookingPaid) };
+      const invoiceHtml = generateContractHTML(booking, siblings, allPackages, paymentSummary, false, paymentHistory);
+
+      // 6. Mở popup với toolbar + iframe hóa đơn
+      const win = window.open("", "_blank", "width=1120,height=920");
       if (!win) { alert("Trình duyệt đã chặn popup. Vui lòng cho phép popup từ trang này."); return; }
+
+      const escapedSignUrl = signUrl.replace(/'/g, "\\'");
       win.document.write(`<!doctype html>
 <html lang="vi">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Hóa đơn ký online – ${booking.customerName}</title>
+<title>Hóa đơn – ${booking.customerName ?? ""}</title>
 <style>
-  body{font-family:Arial,sans-serif;margin:0;background:#f6f0fb;color:#222}
-  .wrap{max-width:860px;margin:0 auto;padding:28px 20px}
-  .card{background:#fff;border:1px solid #e0d0ec;border-radius:20px;padding:28px;box-shadow:0 8px 32px rgba(139,26,107,.10)}
-  h1{margin:0 0 4px;color:#8B1A6B;font-size:22px}
-  .sub{margin:0 0 22px;color:#888;font-size:14px}
-  .row{display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap}
-  .qr-box{flex-shrink:0;text-align:center}
-  .qr-box img{width:260px;height:260px;border:3px solid #e8d0f0;border-radius:16px;display:block}
-  .qr-label{margin-top:8px;font-size:12px;color:#888}
-  .info{flex:1;min-width:240px}
-  .info-row{margin-bottom:10px}
-  .info-row label{display:block;font-size:11px;font-weight:700;color:#9b59b6;text-transform:uppercase;margin-bottom:3px}
-  .info-row p{margin:0;font-size:15px;font-weight:600;color:#222}
-  .link-box{background:#fdf4ff;border:1px solid #e0c8f0;border-radius:12px;padding:14px;margin-top:16px}
-  .link-box p{margin:0 0 6px;font-size:12px;color:#888}
-  .link-url{font-size:13px;color:#6b2d63;word-break:break-all;margin:0 0 12px;font-weight:600}
-  .btn{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:10px;padding:11px 18px;font-size:14px;font-weight:700;cursor:pointer}
-  .btn-primary{background:#8B1A6B;color:#fff}
-  .btn-ghost{background:#f3e8f3;color:#6b2d63}
-  .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
-  .badge-pending{background:#fef3c7;color:#d97706}
-  .badge-signed{background:#d1fae5;color:#065f46}
-  #copyMsg{display:none;color:#27ae60;font-size:12px;font-weight:700;margin-left:8px}
-  .divider{border:none;border-top:1px solid #f0e0f0;margin:20px 0}
-  .footer{text-align:center;color:#ccc;font-size:11px;margin-top:20px}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;background:#f5f0fb;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+  .toolbar{background:#8B1A6B;color:#fff;padding:10px 18px;display:flex;align-items:center;gap:10px;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+  .title{flex:1;font-size:15px;font-weight:700}
+  .title span{font-size:12px;font-weight:400;opacity:.75;margin-left:8px}
+  .btn{border:0;border-radius:8px;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .btn-white{background:#fff;color:#8B1A6B}
+  .btn-outline{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35)}
+  .btn:hover{opacity:.88}
+  .qr-bar{background:#fff;border-bottom:2px solid #e8d0f0;padding:16px 22px;flex-shrink:0;display:none;gap:20px;align-items:flex-start;flex-wrap:wrap}
+  .qr-bar.open{display:flex}
+  .qr-bar img{width:170px;height:170px;border:2px solid #e0c8f0;border-radius:12px;flex-shrink:0}
+  .qr-info{flex:1;min-width:200px}
+  .qr-info h3{color:#8B1A6B;font-size:14px;font-weight:700;margin-bottom:8px}
+  .link-box{background:#fdf4ff;border:1px solid #e0c8f0;border-radius:10px;padding:10px 14px;margin-bottom:8px}
+  .link-url{font-size:12px;color:#6b2d63;word-break:break-all;font-weight:600;margin:4px 0 10px}
+  .btn-copy{background:#8B1A6B;color:#fff;border:0;border-radius:8px;padding:8px 13px;font-size:12px;font-weight:700;cursor:pointer}
+  .btn-open{background:#f3e8f3;color:#6b2d63;border:0;border-radius:8px;padding:8px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:6px}
+  #copyMsg{color:#27ae60;font-size:11px;font-weight:700;margin-left:8px;display:none}
+  .iframe-wrap{flex:1;overflow:hidden}
+  iframe{width:100%;height:100%;border:0}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="card">
-    <h1>🧾 Hóa đơn & ký tên online</h1>
-    <p class="sub">Gửi link hoặc QR cho khách ký tên điện tử</p>
-    <div class="row">
-      <div class="qr-box">
-        <img src="${qr}" alt="QR Code" />
-        <p class="qr-label">Khách quét QR để ký</p>
-      </div>
-      <div class="info">
-        <div class="info-row">
-          <label>Khách hàng</label>
-          <p>${booking.customerName}</p>
-        </div>
-        <div class="info-row">
-          <label>Dịch vụ</label>
-          <p>${booking.packageType || booking.serviceCategory || "—"}</p>
-        </div>
-        <div class="info-row">
-          <label>Ngày chụp</label>
-          <p>${booking.shootDate ? new Date(booking.shootDate).toLocaleDateString("vi-VN") : "—"} ${booking.shootTime?.slice(0, 5) ?? ""}</p>
-        </div>
-        <div class="link-box">
-          <p>Link ký online:</p>
-          <p class="link-url">${signUrl}</p>
-          <button class="btn btn-primary" onclick="copyLink()">📋 Sao chép link</button>
-          <span id="copyMsg">✓ Đã sao chép!</span>
-        </div>
-      </div>
+<div class="toolbar">
+  <div class="title">🧾 Hóa đơn <span>${booking.customerName ?? ""}</span></div>
+  <button class="btn btn-outline" onclick="toggleQR()">📤 Gửi link ký online</button>
+  <button class="btn btn-white" onclick="printInvoice()">🖨️ In hóa đơn</button>
+</div>
+<div class="qr-bar" id="qrBar">
+  <img src="${qrUrl}" alt="QR ký online" />
+  <div class="qr-info">
+    <h3>📱 Gửi link này cho khách để ký online</h3>
+    <div class="link-box">
+      <div style="font-size:10px;color:#aaa;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Link ký online</div>
+      <div class="link-url">${signUrl}</div>
+      <button class="btn-copy" onclick="copyLink()">📋 Sao chép link</button>
+      <button class="btn-open" onclick="window.open('${escapedSignUrl}','_blank')">✍️ Mở trang ký</button>
+      <span id="copyMsg">✓ Đã sao chép!</span>
     </div>
-    <hr class="divider" />
-    <div style="display:flex;gap:12px;flex-wrap:wrap">
-      <button class="btn btn-ghost" onclick="window.open('${signUrl}','_blank')">✍️ Mở trang ký</button>
-      <button class="btn btn-ghost" onclick="window.print()">🖨️ In trang này</button>
-    </div>
-    <p class="footer">Hóa đơn được tạo bởi Amazing Studio</p>
+    <p style="font-size:11px;color:#aaa">Khách hàng quét QR hoặc mở link để ký tên và xác nhận hợp đồng. Sau khi ký, hệ thống tự cập nhật.</p>
   </div>
 </div>
+<div class="iframe-wrap"><iframe id="invoiceFrame"></iframe></div>
 <script>
+  function printInvoice(){ document.getElementById('invoiceFrame').contentWindow.print(); }
+  function toggleQR(){ document.getElementById('qrBar').classList.toggle('open'); }
   function copyLink(){
-    navigator.clipboard.writeText('${signUrl}').then(()=>{
-      const m=document.getElementById('copyMsg');
-      m.style.display='inline';
-      setTimeout(()=>m.style.display='none',2500);
+    navigator.clipboard.writeText('${escapedSignUrl}').then(function(){
+      var m=document.getElementById('copyMsg'); m.style.display='inline';
+      setTimeout(function(){ m.style.display='none'; }, 2500);
     });
   }
 </script>
 </body></html>`);
       win.document.close();
+
+      // Đổ nội dung hóa đơn vào iframe
+      const iframe = win.document.getElementById("invoiceFrame") as HTMLIFrameElement | null;
+      if (iframe?.contentDocument) {
+        iframe.contentDocument.open();
+        iframe.contentDocument.write(invoiceHtml);
+        iframe.contentDocument.close();
+      }
     } catch (err) {
       alert(err instanceof Error ? err.message : "Không mở được hóa đơn");
     }
