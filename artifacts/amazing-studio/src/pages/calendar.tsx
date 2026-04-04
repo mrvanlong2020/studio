@@ -1793,7 +1793,7 @@ function generateContractHTML(
         </tr>
       </thead>
       <tbody>
-        ${paymentHistoryList.map((p, idx) => {
+        ${[...paymentHistoryList].reverse().map((p, idx) => {
           const dateVal = p.paidDate || p.paidAt || "";
           const dateDisp = dateVal ? new Date(dateVal).toLocaleDateString("vi-VN") : "—";
           const methodDisp = p.paymentMethod === "bank_transfer" ? "Chuyển khoản" : "Tiền mặt";
@@ -1956,9 +1956,10 @@ function ShowDetailPanel({
 
   // ── Payment history for this booking ─────────────────────────────────────
   type BookingPayment = { id?: number; amount?: number; paymentMethod?: string; paymentType?: string; collectorName?: string; notes?: string; paidAt?: string; paidDate?: string };
+  const paymentTargetId = fullDetail?.parentContract?.id ?? booking.parentId ?? booking.id;
   const { data: paymentHistory = [] } = useQuery<BookingPayment[]>({
-    queryKey: ["payments", booking.id],
-    queryFn: () => authFetch(`${BASE}/api/payments?bookingId=${booking.id}`).then(r => r.ok ? r.json() : []),
+    queryKey: ["payments", paymentTargetId],
+    queryFn: () => authFetch(`${BASE}/api/payments?bookingId=${paymentTargetId}`).then(r => r.ok ? r.json() : []),
     staleTime: 0,
   });
 
