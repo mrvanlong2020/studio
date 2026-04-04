@@ -580,6 +580,11 @@ export default function PaymentsPage() {
       await refetchHistory();
       await refetchRecent();
       await refreshSelectedBooking(selectedBooking);
+      qc.invalidateQueries({ queryKey: ["booking", selectedBooking.id] });
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+      qc.invalidateQueries({ queryKey: ["payments"] });
+      qc.invalidateQueries({ queryKey: ["payments-recent"] });
+      qc.invalidateQueries({ queryKey: ["payment-suggestions"] });
       // Chỉ reset form sau khi lưu THÀNH CÔNG
       resetForm();
       setSheetOpen(false);

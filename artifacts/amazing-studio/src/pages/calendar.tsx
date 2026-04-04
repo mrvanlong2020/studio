@@ -695,6 +695,17 @@ function ShowFormPanel({
   const [saving, setSaving] = useState(false);
   const hasSiblingEdit = siblingBookings.length > 0;
 
+  const paymentHistory = (booking?.payments ?? []) as Array<{
+    id?: number;
+    amount?: number;
+    paymentMethod?: string;
+    paymentType?: string;
+    collectorName?: string;
+    notes?: string;
+    paidAt?: string;
+    paidDate?: string;
+  }>;
+
   // ── Service blocks (unified: single or multi-service) ────────────────────
   const emptyOrderLine = (): OrderLine => ({
     tempId: genId(), serviceName: "", serviceId: null, serviceKey: "",
@@ -2230,6 +2241,34 @@ function ShowDetailPanel({
                   </div>
                 </div>
               )}
+
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+                <div className="px-3 py-2 bg-slate-50 dark:bg-slate-950/30 border-b border-slate-200 dark:border-slate-800">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">🧾 Lịch sử thanh toán ({paymentHistory.length})</p>
+                </div>
+                <div className="px-3 py-2.5 space-y-2">
+                  {paymentHistory.length > 0 ? paymentHistory.map((p, idx) => {
+                    const paidAt = p.paidAt ? new Date(p.paidAt) : p.paidDate ? new Date(p.paidDate) : null;
+                    const dateText = paidAt && !isNaN(paidAt.getTime()) ? format(paidAt, "dd/MM/yyyy HH:mm", { locale: vi }) : "—";
+                    return (
+                      <div key={p.id ?? idx} className="flex items-start justify-between gap-3 text-sm">
+                        <div className="min-w-0">
+                          <p className="font-medium">{dateText} — {p.paymentType ? (p.paymentType === "deposit" ? "Thu cọc" : p.paymentType === "partial" ? "Thu đợt" : p.paymentType === "full" ? "Thu đủ" : p.paymentType === "payment" ? "Thu tiền" : p.paymentType) : "Thu tiền"}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {p.paymentMethod ? (p.paymentMethod === "cash" ? "Tiền mặt" : p.paymentMethod === "bank_transfer" ? "Chuyển khoản" : p.paymentMethod) : "—"}
+                            {p.collectorName ? ` · ${p.collectorName}` : ""}
+                            {p.notes ? ` · ${p.notes}` : ""}
+                          </p>
+                        </div>
+                        <span className="font-bold text-primary flex-shrink-0">{fmtVND(p.amount ?? 0)}</span>
+                      </div>
+                    );
+                  }) : (
+                    <p className="text-sm text-muted-foreground">Chưa có lần thu nào</p>
+                  )}
+                </div>
+              </div>
+
               <div className="border-t border-border/40" />
             </>
           )}

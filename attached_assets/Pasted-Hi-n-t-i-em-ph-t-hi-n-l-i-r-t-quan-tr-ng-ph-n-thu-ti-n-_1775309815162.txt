@@ -1,0 +1,110 @@
+Hiện tại em phát hiện lỗi rất quan trọng ở phần thu tiền nhiều đợt.
+
+Vấn đề đang bị:
+
+Sau khi thu tiền đợt 2, đợt 3 thì:
+	•	phần lịch / booking detail / show chụp vẫn giữ cảm giác như giá cũ lúc chốt ban đầu
+	•	chưa thể hiện rõ từng lần đã thu thêm bao nhiêu
+	•	chưa đồng bộ rõ sang các màn liên quan
+	•	khi xem lại rất dễ nhầm là khách chưa thanh toán hoặc không rõ đã thu mấy lần
+
+Cái này không ổn vì rất dễ gây xích mích với dâu rể và làm sai lệch khi đối chiếu.
+
+⸻
+
+Yêu cầu đúng:
+
+Sau mỗi lần thu tiền, hệ thống phải đồng bộ ngay lập tức ở tất cả các nơi liên quan:
+
+1) Trong booking / show detail
+
+Phải hiển thị rõ:
+	•	Tổng hợp đồng
+	•	Đã thu tổng cộng
+	•	Còn lại
+	•	Và đặc biệt là lịch sử từng lần thu tiền
+
+Ví dụ:
+	•	Đợt 1: 1.500.000đ — ngày 04/04/2026 08:00
+	•	Đợt 2: 3.900.000đ — ngày xx/xx/xxxx xx:xx
+	•	Đợt 3: 2.000.000đ — ngày xx/xx/xxxx xx:xx
+
+Không chỉ hiện một cục “đã thu”, mà phải có danh sách từng lần thu.
+
+⸻
+
+2) Trong lịch / calendar / card show
+
+Cần có trạng thái thanh toán đồng bộ rõ ràng, ví dụ:
+	•	Đã thu: 5.400.000đ
+	•	Còn lại: 10.500.000đ
+
+Hoặc nếu có chỗ phù hợp thì cho xem nhanh:
+	•	Cọc: 1.500.000đ
+	•	Thu thêm: 3.900.000đ
+	•	Còn lại: …
+
+Ít nhất phải đồng bộ tổng:
+	•	đã thu
+	•	còn lại
+
+Để mở lịch ra là nhân viên biết ngay khách đã thanh toán tới đâu.
+
+⸻
+
+3) Trong hợp đồng / invoice / phiếu thu in ra
+
+Phải thể hiện rõ:
+	•	mỗi lần thu bao nhiêu
+	•	ngày giờ thu
+	•	hình thức thanh toán
+	•	người thu
+	•	ghi chú nếu có
+
+Ví dụ:
+
+Lịch sử thanh toán
+	•	04/04/2026 08:00 — Thu cọc — 1.500.000đ
+	•	10/04/2026 14:30 — Thu đợt 2 — 3.900.000đ
+	•	15/04/2026 09:00 — Thu đợt 3 — 2.000.000đ
+
+Tổng đã thu: xxx
+Còn lại: xxx
+
+Mục tiêu là khi in hóa đơn / phiếu thu / xem lại hợp đồng thì phải cực kỳ rõ ràng để tránh tranh cãi với khách.
+
+⸻
+
+Yêu cầu kỹ thuật / behavior
+
+Sau khi lưu phiếu thu:
+	•	cập nhật ngay booking detail
+	•	cập nhật ngay contract summary
+	•	cập nhật ngay calendar related payment state
+	•	cập nhật ngay printable invoice / receipt view
+	•	không cần reload thủ công mới thấy đúng
+
+⸻
+
+Cần bổ sung UI rõ ràng:
+
+Thêm một block riêng như:
+
+LỊCH SỬ THANH TOÁN
+	•	lần 1: số tiền — ngày giờ — phương thức — người thu
+	•	lần 2: số tiền — ngày giờ — phương thức — người thu
+	•	lần 3: số tiền — ngày giờ — phương thức — người thu
+
+Có thể sắp theo thời gian cũ → mới hoặc mới → cũ, nhưng phải rõ.
+
+⸻
+
+Kết luận
+
+Em muốn hệ thống không chỉ lưu tổng tiền đã thu, mà phải lưu và hiển thị rõ từng lần thu tiền**, đồng bộ ở:
+	•	lịch
+	•	show detail
+	•	hợp đồng
+	•	phiếu thu / hóa đơn in ra
+
+Vì đây là phần rất dễ gây hiểu lầm với khách nếu không rõ ràng.
