@@ -693,6 +693,7 @@ function ShowFormPanel({
   });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const hasSiblingEdit = siblingBookings.length > 0;
 
   // ── Service blocks (unified: single or multi-service) ────────────────────
   const emptyOrderLine = (): OrderLine => ({
@@ -802,7 +803,7 @@ function ShowFormPanel({
     if (!customerName.trim()) { setError("Vui lòng nhập tên khách hàng"); return; }
     if (!shootDate) { setError("Vui lòng chọn ngày hợp đồng"); return; }
     const isMulti = subDrafts.length >= 2;
-    if (isEdit && isMulti && siblingBookings.length > 0) {
+    if (isEdit && isMulti && hasSiblingEdit) {
       setSaving(true);
       try {
         for (const sub of subDrafts) {
