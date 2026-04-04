@@ -1,9 +1,12 @@
 import { useState, useMemo } from "react";
 import type React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useListTasks, useCreateTask, useUpdateTask, useListStaff, TaskStatus, CreateTaskRequestPriority } from "@workspace/api-client-react";
-import { Button, Input, Select, Textarea, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui";
-import { Plus, Clock, AlertCircle, CheckCircle2, User, Calendar, List, LayoutGrid, BookOpen, ChevronDown, ChevronRight, CheckCircle, XCircle } from "lucide-react";
+import { useListTasks, useUpdateTask, useListStaff, TaskStatus } from "@workspace/api-client-react";
+import { Select } from "@/components/ui";
+import {
+  Plus, Clock, AlertCircle, CheckCircle2, User, Calendar,
+  List, LayoutGrid, Search, X, Loader2, Camera, Briefcase
+} from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -20,133 +23,336 @@ function authFetch(url: string, opts: RequestInit = {}): Promise<Response> {
   });
 }
 
-type Booking = {
-  id: number;
-  orderCode: string;
-  customerName: string;
-  customerPhone: string;
-  shootDate: string | null;
-  shootTime: string | null;
-  serviceCategory: string;
-  packageType: string;
-  serviceLabel: string | null;
-  location: string | null;
-  status: string;
-  totalAmount: number;
-  remainingAmount: number;
-  isParentContract: boolean;
-  parentId: number | null;
-  taskCount: number;
+// ── Types ─────────────────────────────────────────────────────────────────────
+type TaskAssignment = {
+  task_id: number;
+  title: string;
+  assignee_id: number | null;
+  assignee_name: string | null;
+  role: string | null;
+  task_type: string | null;
+  task_status: string;
+  cost: number;
+  notes: string | null;
 };
+
+type BookingWithTasks = {
+  booking_id: number;
+  order_code: string;
+  shoot_date: string | null;
+  booking_created_at: string;
+  package_type: string;
+  service_label: string | null;
+  booking_status: string;
+  location: string | null;
+  customer_name: string;
+  customer_phone: string;
+  tasks: TaskAssignment[];
+};
+
+type StaffItem = { id: number | string; name: string };
+
+// ── Role options ──────────────────────────────────────────────────────────────
+const ROLE_OPTIONS = [
+  { role: "photographer", taskType: "chup",      label: "Chụp hình",  emoji: "📷",
+    chipCls: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" },
+  { role: "makeup",       taskType: "makeup",    label: "Makeup",     emoji: "💄",
+    chipCls: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300" },
+  { role: "assistant",    taskType: "support",   label: "Thợ phụ",    emoji: "🤝",
+    chipCls: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" },
+  { role: "support",      taskType: "support",   label: "Hỗ trợ",     emoji: "🛠️",
+    chipCls: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" },
+  { role: "videographer", taskType: "quay_phim", label: "Quay phim",  emoji: "🎬",
+    chipCls: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300" },
+  { role: "other",        taskType: "other",     label: "Khác",       emoji: "📋",
+    chipCls: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" },
+];
+
+function getRoleOption(role: string | null) {
+  return ROLE_OPTIONS.find(r => r.role === role) ?? ROLE_OPTIONS[ROLE_OPTIONS.length - 1];
+}
+
+// ── Kanban/List constants ─────────────────────────────────────────────────────
+const PRIO_CONFIG = {
+  high:   { label: "Cao",       color: "text-red-700",    bg: "bg-red-100 border-red-200" },
+  medium: { label: "Trung bình",color: "text-yellow-700", bg: "bg-yellow-100 border-yellow-200" },
+  low:    { label: "Thấp",      color: "text-green-700",  bg: "bg-green-100 border-green-200" },
+};
+
+const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; iconColor: string; bg: string; border: string }> = {
+  todo:        { label: "Chờ xử lý",      icon: Clock,       iconColor: "text-slate-500",   bg: "bg-slate-50 dark:bg-slate-900/20",  border: "border-slate-200" },
+  in_progress: { label: "Đang thực hiện", icon: AlertCircle, iconColor: "text-blue-500",    bg: "bg-blue-50 dark:bg-blue-900/20",    border: "border-blue-200" },
+  done:        { label: "Hoàn thành",     icon: CheckCircle2,iconColor: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-900/20", border: "border-emerald-200" },
+};
+const columns = (Object.entries(STATUS_CONFIG) as [TaskStatus, typeof STATUS_CONFIG[string]][])
+  .map(([id, cfg]) => ({ id, ...cfg }));
 
 const CATEGORY_LABELS: Record<string, string> = {
   photo: "Chụp ảnh", editing: "Chỉnh sửa", delivery: "Bàn giao", admin: "Hành chính",
   design: "Thiết kế", meeting: "Họp", other: "Khác",
 };
 
-const PRIO_CONFIG = {
-  high: { label: "Cao", color: "text-red-700", bg: "bg-red-100 border-red-200" },
-  medium: { label: "Trung bình", color: "text-yellow-700", bg: "bg-yellow-100 border-yellow-200" },
-  low: { label: "Thấp", color: "text-green-700", bg: "bg-green-100 border-green-200" },
-};
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function fmtShootDate(d: string | null | undefined) {
+  if (!d) return "—";
+  try {
+    const dt = new Date(d);
+    return dt.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+  } catch { return d; }
+}
 
-const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; iconColor: string; bg: string; border: string }> = {
-  todo: { label: "Chờ xử lý", icon: Clock, iconColor: "text-slate-500", bg: "bg-slate-50 dark:bg-slate-900/20", border: "border-slate-200" },
-  in_progress: { label: "Đang thực hiện", icon: AlertCircle, iconColor: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-900/20", border: "border-blue-200" },
-  done: { label: "Hoàn thành", icon: CheckCircle2, iconColor: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-900/20", border: "border-emerald-200" },
-};
+function daysUntil(d: string | null | undefined): { days: number; label: string; color: string } | null {
+  if (!d) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const dt = new Date(d); dt.setHours(0,0,0,0);
+  const diff = Math.round((dt.getTime() - today.getTime()) / 86400000);
+  if (diff < 0)  return { days: diff, label: `${Math.abs(diff)} ngày trước`, color: "text-slate-400" };
+  if (diff === 0) return { days: 0, label: "Hôm nay!", color: "text-orange-600 font-bold" };
+  if (diff <= 3)  return { days: diff, label: `Còn ${diff} ngày`, color: "text-red-600 font-semibold" };
+  if (diff <= 7)  return { days: diff, label: `Còn ${diff} ngày`, color: "text-amber-600" };
+  return { days: diff, label: `Còn ${diff} ngày`, color: "text-muted-foreground" };
+}
 
-const columns: { id: TaskStatus; label: string; icon: React.ElementType; iconColor: string; bg: string; border: string }[] =
-  (Object.entries(STATUS_CONFIG) as [TaskStatus, typeof STATUS_CONFIG[string]][]).map(([id, cfg]) => ({ id, ...cfg }));
+// ── Assignment Modal ──────────────────────────────────────────────────────────
+function AssignmentModal({
+  booking, onClose, staffList,
+}: {
+  booking: BookingWithTasks;
+  onClose: () => void;
+  staffList: StaffItem[];
+}) {
+  const qc = useQueryClient();
+  const [staffId, setStaffId] = useState("");
+  const [roleKey, setRoleKey] = useState("photographer");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
 
-const BOOKING_STATUS_LABEL: Record<string, string> = {
-  pending: "Chờ xác nhận", confirmed: "Đã xác nhận", completed: "Hoàn thành", cancelled: "Đã hủy",
-};
+  const selectedRole = ROLE_OPTIONS.find(r => r.role === roleKey) ?? ROLE_OPTIONS[0];
 
+  const handleSave = async () => {
+    if (!staffId) { setErr("Chọn nhân sự trước"); return; }
+    setSaving(true); setErr("");
+    try {
+      const staffName = staffList.find(s => String(s.id) === staffId)?.name ?? "";
+      const res = await authFetch(`${BASE}/api/tasks`, {
+        method: "POST",
+        body: JSON.stringify({
+          bookingId: booking.booking_id,
+          title: `${selectedRole.label} - ${booking.customer_name}`,
+          assigneeId: parseInt(staffId),
+          role: selectedRole.role,
+          taskType: selectedRole.taskType,
+          category: "photo",
+          notes: notes || null,
+          priority: "medium",
+          status: "todo",
+        }),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error || "Lỗi giao việc");
+      }
+      qc.invalidateQueries({ queryKey: ["tasks-booking-view"] });
+      qc.invalidateQueries({ queryKey: ["/api/tasks"] });
+      onClose();
+    } catch (e) { setErr(String(e instanceof Error ? e.message : e)); }
+    finally { setSaving(false); }
+  };
+
+  const du = daysUntil(booking.shoot_date);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div className="bg-background rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="px-4 pt-4 pb-3 border-b border-border">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="font-semibold text-base">Giao việc</h2>
+              <div className="text-sm text-muted-foreground mt-0.5">{booking.customer_name} · {booking.order_code}</div>
+            </div>
+            <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted"><X size={18} /></button>
+          </div>
+          <div className="flex flex-wrap gap-2 mt-2 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <Camera size={11} />{fmtShootDate(booking.shoot_date)}
+            </span>
+            {du && <span className={du.color}>{du.label}</span>}
+            <span>{booking.service_label || booking.package_type || "—"}</span>
+            {booking.location && <span>📍 {booking.location}</span>}
+          </div>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {err && <div className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">{err}</div>}
+
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Vai trò</label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {ROLE_OPTIONS.map(r => (
+                <button key={r.role} onClick={() => setRoleKey(r.role)}
+                  className={`flex flex-col items-center gap-1 px-2 py-2 rounded-xl border text-xs font-medium transition-colors
+                    ${roleKey === r.role ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-muted-foreground"}`}>
+                  <span className="text-base">{r.emoji}</span>
+                  <span>{r.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Nhân sự</label>
+            <select className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm"
+              value={staffId} onChange={e => setStaffId(e.target.value)}>
+              <option value="">— Chọn nhân sự —</option>
+              {staffList.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Ghi chú (tuỳ chọn)</label>
+            <textarea rows={2} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none"
+              placeholder="Ghi chú thêm..." value={notes} onChange={e => setNotes(e.target.value)} />
+          </div>
+
+          <button onClick={handleSave} disabled={saving}
+            className="w-full py-3 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
+            {saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+            {saving ? "Đang lưu..." : `Giao ${selectedRole.label}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Booking card ──────────────────────────────────────────────────────────────
+function BookingCard({
+  booking, onAdd, onRemoveTask,
+}: {
+  booking: BookingWithTasks;
+  onAdd: () => void;
+  onRemoveTask: (taskId: number) => void;
+}) {
+  const hasTasks = booking.tasks.length > 0;
+  const du = daysUntil(booking.shoot_date);
+  const borderColor = !hasTasks ? "border-l-red-400" : "border-l-emerald-400";
+
+  return (
+    <div className={`rounded-xl border border-border border-l-4 ${borderColor} bg-card shadow-sm p-3 transition-all hover:shadow-md`}>
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-sm">{booking.customer_name}</span>
+            <span className="text-xs text-muted-foreground font-mono">{booking.order_code}</span>
+            {!hasTasks && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 dark:bg-red-900/30 font-medium">Chưa giao</span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs text-muted-foreground">
+            <span>{booking.customer_phone}</span>
+            <span>{booking.service_label || booking.package_type || "—"}</span>
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs">
+            <span className="flex items-center gap-1 text-muted-foreground">
+              <Calendar size={10} />{fmtShootDate(booking.shoot_date)}
+            </span>
+            {du && <span className={du.color}>{du.label}</span>}
+            {booking.location && <span className="text-muted-foreground">📍 {booking.location}</span>}
+          </div>
+        </div>
+        <button onClick={onAdd}
+          className="shrink-0 w-8 h-8 rounded-full bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors">
+          <Plus size={16} />
+        </button>
+      </div>
+
+      {/* Staff chips */}
+      {hasTasks ? (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {booking.tasks.map(t => {
+            const ro = getRoleOption(t.role);
+            return (
+              <div key={t.task_id}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${ro.chipCls}`}>
+                <span>{ro.emoji}</span>
+                <span>{t.assignee_name ?? "—"}</span>
+                <span className="opacity-60">({ro.label})</span>
+                <button onClick={() => onRemoveTask(t.task_id)}
+                  className="ml-0.5 hover:opacity-100 opacity-50 transition-opacity">
+                  <X size={10} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mt-2 text-xs text-muted-foreground italic">Nhấn + để giao việc</div>
+      )}
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function TasksPage() {
   const qc = useQueryClient();
-  const { data: tasks = [], isLoading } = useListTasks({});
+  const { data: tasks = [], isLoading: tasksLoading } = useListTasks({});
   const { data: staff = [] } = useListStaff();
-  const createTask = useCreateTask();
   const updateTask = useUpdateTask();
 
-  const [viewMode, setViewMode] = useState<"kanban" | "list" | "booking">("kanban");
-  const [isOpen, setIsOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"booking" | "kanban" | "list">("booking");
+  const [search, setSearch] = useState("");
+  const [tab, setTab] = useState<"all" | "chua_giao" | "da_giao">("all");
+  const [assigningBooking, setAssigningBooking] = useState<BookingWithTasks | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
   const [filterAssignee, setFilterAssignee] = useState("");
   const [filterPrio, setFilterPrio] = useState("");
-  const [expandedBookingId, setExpandedBookingId] = useState<number | null>(null);
-  const [form, setForm] = useState({
-    title: "", description: "", assigneeId: "", priority: "medium" as CreateTaskRequestPriority,
-    dueDate: "", category: "other", bookingId: undefined as number | undefined,
-  });
+  const [removingId, setRemovingId] = useState<number | null>(null);
 
-  // Fetch upcoming bookings (enabled only when "booking" tab is active)
-  const { data: upcomingBookings = [], isLoading: bookingsLoading } = useQuery<Booking[]>({
-    queryKey: ["bookings-for-tasks"],
+  // Booking-view data
+  const { data: bookingViewData = [], isLoading: bvLoading } = useQuery<BookingWithTasks[]>({
+    queryKey: ["tasks-booking-view"],
     queryFn: async () => {
-      const res = await authFetch(`${BASE}/api/bookings`);
-      if (!res.ok) return [];
-      const all: Booking[] = await res.json();
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - 7);
-      return all
-        .filter(b => !b.isParentContract && b.shootDate && new Date(b.shootDate) >= cutoff && b.status !== "cancelled")
-        .sort((a, b) => {
-          const da = a.shootDate ? new Date(a.shootDate).getTime() : 0;
-          const db2 = b.shootDate ? new Date(b.shootDate).getTime() : 0;
-          return da - db2;
-        });
+      const res = await authFetch(`${BASE}/api/tasks/booking-view`);
+      return res.ok ? res.json() : [];
     },
     enabled: viewMode === "booking",
-    staleTime: 30_000,
+    staleTime: 0,
   });
 
-  // Map bookingId → tasks
-  const tasksByBookingId = useMemo(() => {
-    const map: Record<number, typeof tasks> = {};
-    for (const t of tasks) {
-      if (t.bookingId != null) {
-        if (!map[t.bookingId]) map[t.bookingId] = [];
-        map[t.bookingId].push(t);
-      }
+  const staffList = (staff as StaffItem[]).map(s => ({ id: s.id, name: s.name }));
+
+  // Filter booking-view data
+  const filteredBookings = useMemo(() => {
+    let data = [...bookingViewData];
+    if (tab === "chua_giao") data = data.filter(b => b.tasks.length === 0);
+    if (tab === "da_giao")   data = data.filter(b => b.tasks.length > 0);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      data = data.filter(b =>
+        b.customer_name.toLowerCase().includes(q) ||
+        b.customer_phone.toLowerCase().includes(q) ||
+        b.order_code.toLowerCase().includes(q) ||
+        (b.shoot_date && b.shoot_date.includes(q))
+      );
     }
-    return map;
-  }, [tasks]);
+    return data;
+  }, [bookingViewData, tab, search]);
 
   const handleStatusChange = (taskId: number, newStatus: TaskStatus) => {
     updateTask.mutate({ id: taskId, data: { status: newStatus } }, {
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: ["/api/tasks"] });
-      }
+      onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/tasks"] }),
     });
   };
 
-  const handleCreate = () => {
-    if (!form.title) return;
-    createTask.mutate({
-      data: {
-        title: form.title,
-        description: form.description,
-        assigneeId: form.assigneeId ? parseInt(form.assigneeId) : undefined,
-        priority: form.priority,
-        dueDate: form.dueDate || undefined,
-        category: form.category,
-        bookingId: form.bookingId,
-      }
-    }, {
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: ["/api/tasks"] });
-        qc.invalidateQueries({ queryKey: ["bookings-for-tasks"] });
-        setIsOpen(false);
-        setForm({ title: "", description: "", assigneeId: "", priority: "medium", dueDate: "", category: "other", bookingId: undefined });
-      }
-    });
-  };
-
-  const openCreateForBooking = (booking: Booking) => {
-    setForm({ title: "", description: "", assigneeId: "", priority: "medium", dueDate: booking.shootDate || "", category: "other", bookingId: booking.id });
-    setIsOpen(true);
+  const handleRemoveTask = async (taskId: number) => {
+    if (!confirm("Bỏ giao việc này?")) return;
+    setRemovingId(taskId);
+    try {
+      await authFetch(`${BASE}/api/tasks/${taskId}`, { method: "DELETE" });
+      qc.invalidateQueries({ queryKey: ["tasks-booking-view"] });
+      qc.invalidateQueries({ queryKey: ["/api/tasks"] });
+    } finally { setRemovingId(null); }
   };
 
   const filteredTasks = tasks.filter(t => {
@@ -154,17 +360,13 @@ export default function TasksPage() {
     const matchPrio = !filterPrio || t.priority === filterPrio;
     return matchAssignee && matchPrio;
   });
-
   const tasksByStatus = {
-    todo: filteredTasks.filter(t => t.status === "todo"),
+    todo:        filteredTasks.filter(t => t.status === "todo"),
     in_progress: filteredTasks.filter(t => t.status === "in_progress"),
-    done: filteredTasks.filter(t => t.status === "done"),
+    done:        filteredTasks.filter(t => t.status === "done"),
   };
 
-  const counts = { todo: tasksByStatus.todo.length, in_progress: tasksByStatus.in_progress.length, done: tasksByStatus.done.length };
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const counts = { all: bookingViewData.length, chua_giao: bookingViewData.filter(b => b.tasks.length === 0).length, da_giao: bookingViewData.filter(b => b.tasks.length > 0).length };
 
   return (
     <div className="h-full flex flex-col">
@@ -174,384 +376,236 @@ export default function TasksPage() {
           <h1 className="text-2xl font-bold">Giao việc</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {viewMode === "booking"
-              ? `${upcomingBookings.length} buổi chụp sắp tới`
-              : `${counts.todo} chờ · ${counts.in_progress} đang làm · ${counts.done} hoàn thành`}
+              ? `${filteredBookings.length} đơn hàng`
+              : `${tasksByStatus.todo.length} chờ · ${tasksByStatus.in_progress.length} đang làm · ${tasksByStatus.done.length} xong`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border overflow-hidden">
-            <button
-              onClick={() => setViewMode("kanban")}
-              className={`px-3 py-1.5 text-sm flex items-center gap-1.5 ${viewMode === "kanban" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
-            >
-              <LayoutGrid className="w-3.5 h-3.5" /> Kanban
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className={`px-3 py-1.5 text-sm flex items-center gap-1.5 ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
-            >
-              <List className="w-3.5 h-3.5" /> Danh sách
-            </button>
-            <button
-              onClick={() => setViewMode("booking")}
-              className={`px-3 py-1.5 text-sm flex items-center gap-1.5 ${viewMode === "booking" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
-            >
-              <BookOpen className="w-3.5 h-3.5" /> Theo đơn
-            </button>
-          </div>
-          {viewMode !== "booking" && (
-            <Button onClick={() => { setForm(f => ({ ...f, bookingId: undefined })); setIsOpen(true); }} className="gap-1.5">
-              <Plus className="w-4 h-4" />Thêm việc
-            </Button>
-          )}
+        <div className="flex rounded-lg border overflow-hidden">
+          <button onClick={() => setViewMode("booking")}
+            className={`px-3 py-1.5 text-sm flex items-center gap-1.5 ${viewMode === "booking" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}>
+            <Briefcase className="w-3.5 h-3.5" /> Theo đơn
+          </button>
+          <button onClick={() => setViewMode("kanban")}
+            className={`px-3 py-1.5 text-sm flex items-center gap-1.5 ${viewMode === "kanban" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}>
+            <LayoutGrid className="w-3.5 h-3.5" /> Kanban
+          </button>
+          <button onClick={() => setViewMode("list")}
+            className={`px-3 py-1.5 text-sm flex items-center gap-1.5 ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}>
+            <List className="w-3.5 h-3.5" /> Danh sách
+          </button>
         </div>
       </div>
 
-      {/* Filters — only for kanban/list views */}
-      {viewMode !== "booking" && (
-        <div className="flex gap-2 mb-4">
-          <Select value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)} className="text-sm">
-            <option value="">Tất cả nhân viên</option>
-            {staff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </Select>
-          <Select value={filterPrio} onChange={e => setFilterPrio(e.target.value)} className="text-sm">
-            <option value="">Tất cả độ ưu tiên</option>
-            <option value="high">🔴 Cao</option>
-            <option value="medium">🟡 Trung bình</option>
-            <option value="low">🟢 Thấp</option>
-          </Select>
+      {/* ─── BOOKING VIEW (default) ──────────────────────────────────────────── */}
+      {viewMode === "booking" && (
+        <div className="flex flex-col flex-1 min-h-0 gap-3">
+          {/* Search */}
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input className="w-full pl-9 pr-9 py-2 rounded-xl border border-border bg-background text-sm placeholder:text-muted-foreground"
+              placeholder="Tìm tên khách, SĐT, mã đơn..." value={search} onChange={e => setSearch(e.target.value)} />
+            {search && (
+              <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-foreground">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-1">
+            {([
+              { key: "all",       label: `Tất cả (${counts.all})` },
+              { key: "chua_giao", label: `Chưa giao (${counts.chua_giao})` },
+              { key: "da_giao",   label: `Đã giao (${counts.da_giao})` },
+            ] as { key: typeof tab; label: string }[]).map(t => (
+              <button key={t.key} onClick={() => setTab(t.key)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${tab === t.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Cards */}
+          <div className="flex-1 overflow-y-auto">
+            {bvLoading ? (
+              <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+                <Loader2 size={20} className="animate-spin" /><span>Đang tải...</span>
+              </div>
+            ) : filteredBookings.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
+                <Briefcase size={36} className="opacity-30" />
+                <span className="text-sm">Không có đơn hàng nào</span>
+                {search && <span className="text-xs opacity-60">Thử xóa tìm kiếm</span>}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground px-1">{filteredBookings.length} đơn</div>
+                {filteredBookings.map(b => (
+                  <BookingCard key={b.booking_id} booking={b}
+                    onAdd={() => setAssigningBooking(b)}
+                    onRemoveTask={handleRemoveTask} />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* ─── BOOKING VIEW ─────────────────────────────────────────────────────── */}
-      {viewMode === "booking" && (
-        <div className="flex-1 overflow-y-auto">
-          {bookingsLoading || isLoading ? (
-            <div className="flex items-center justify-center py-16 text-muted-foreground">Đang tải...</div>
-          ) : upcomingBookings.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
-              <BookOpen className="w-10 h-10 opacity-30" />
-              <p>Không có buổi chụp nào sắp tới</p>
-            </div>
+      {/* ─── KANBAN VIEW ─────────────────────────────────────────────────────── */}
+      {viewMode === "kanban" && (
+        <>
+          <div className="flex gap-2 mb-4">
+            <Select value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)} className="text-sm">
+              <option value="">Tất cả nhân viên</option>
+              {staff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </Select>
+            <Select value={filterPrio} onChange={e => setFilterPrio(e.target.value)} className="text-sm">
+              <option value="">Tất cả độ ưu tiên</option>
+              <option value="high">🔴 Cao</option>
+              <option value="medium">🟡 Trung bình</option>
+              <option value="low">🟢 Thấp</option>
+            </Select>
+          </div>
+          {tasksLoading ? (
+            <div className="flex-1 flex items-center justify-center text-muted-foreground">Đang tải...</div>
           ) : (
-            <div className="space-y-2">
-              {upcomingBookings.map(booking => {
-                const bookingTasks = tasksByBookingId[booking.id] ?? [];
-                // Use server-provided taskCount as the authoritative source; fall back to local count
-                const apiTaskCount = booking.taskCount ?? bookingTasks.length;
-                const hasTasks = apiTaskCount > 0;
-                const isExpanded = expandedBookingId === booking.id;
-                const shootDate = booking.shootDate ? new Date(booking.shootDate) : null;
-                const isToday = shootDate && shootDate.toDateString() === today.toDateString();
-                const isPast = shootDate && shootDate < today && !isToday;
-                const daysUntil = shootDate ? Math.round((shootDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : null;
-
-                const doneTasks = bookingTasks.filter((t: { status: string }) => t.status === "done").length;
-                const pendingTasks = bookingTasks.filter((t: { status: string }) => t.status === "todo").length;
-                const inProgressTasks = bookingTasks.filter((t: { status: string }) => t.status === "in_progress").length;
-
+            <div className="flex gap-4 overflow-x-auto pb-4 flex-1">
+              {columns.map(col => {
+                const ColTasks = tasksByStatus[col.id];
                 return (
-                  <div
-                    key={booking.id}
-                    className={`rounded-xl border-l-4 border border-border bg-background shadow-sm overflow-hidden transition-all ${
-                      hasTasks ? "border-l-emerald-500" : "border-l-red-500"
-                    }`}
-                  >
-                    {/* Booking row — clickable to expand */}
-                    <button
-                      className="w-full px-4 py-3 flex items-center gap-3 hover:bg-muted/30 transition-colors text-left"
-                      onClick={() => setExpandedBookingId(isExpanded ? null : booking.id)}
-                    >
-                      {/* Status indicator icon */}
-                      {hasTasks
-                        ? <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0" />
-                        : <XCircle className="w-5 h-5 text-red-400 flex-shrink-0" />}
-
-                      {/* Main info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-sm">{booking.customerName}</span>
-                          <span className="text-xs text-muted-foreground font-mono">{booking.orderCode}</span>
-                          {booking.status && (
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${
-                              booking.status === "completed" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
-                              booking.status === "confirmed" ? "bg-blue-50 text-blue-700 border-blue-200" :
-                              booking.status === "cancelled" ? "bg-red-50 text-red-700 border-red-200" :
-                              "bg-slate-50 text-slate-700 border-slate-200"
-                            }`}>
-                              {BOOKING_STATUS_LABEL[booking.status] ?? booking.status}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            {shootDate ? (
-                              <span className={isToday ? "text-orange-600 font-bold" : isPast ? "text-slate-500" : "text-foreground font-medium"}>
-                                {formatDate(booking.shootDate!)}
-                                {isToday && " — Hôm nay!"}
-                                {!isToday && daysUntil !== null && daysUntil > 0 && ` (còn ${daysUntil} ngày)`}
-                                {!isToday && daysUntil !== null && daysUntil < 0 && ` (${Math.abs(daysUntil)} ngày trước)`}
-                              </span>
-                            ) : "—"}
-                          </span>
-                          <span>{booking.serviceLabel || booking.packageType}</span>
-                          {booking.location && <span>{booking.location}</span>}
-                        </div>
+                  <div key={col.id}
+                    className={`flex-1 min-w-72 rounded-2xl border ${col.border} ${col.bg} flex flex-col`}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={() => { if (dragId !== null) handleStatusChange(dragId, col.id); setDragId(null); }}>
+                    <div className={`px-4 py-3 flex items-center justify-between border-b ${col.border}`}>
+                      <div className="flex items-center gap-2">
+                        <col.icon className={`w-4 h-4 ${col.iconColor}`} />
+                        <span className="font-semibold text-sm">{col.label}</span>
                       </div>
-
-                      {/* Task count badge */}
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {hasTasks ? (
-                          <div className="flex items-center gap-1.5 text-xs">
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 font-medium">
-                              Đã giao {apiTaskCount} việc
-                            </span>
-                            {doneTasks > 0 && <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 font-medium">{doneTasks} xong</span>}
-                            {inProgressTasks > 0 && <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200 font-medium">{inProgressTasks} đang làm</span>}
-                            {pendingTasks > 0 && <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 font-medium">{pendingTasks} chờ</span>}
+                      <span className="text-xs font-bold bg-background border rounded-full px-2 py-0.5">{ColTasks.length}</span>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                      {ColTasks.map(task => {
+                        const prio = PRIO_CONFIG[task.priority as keyof typeof PRIO_CONFIG] ?? PRIO_CONFIG.medium;
+                        const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "done";
+                        return (
+                          <div key={task.id} draggable onDragStart={() => setDragId(task.id)}
+                            className="bg-background rounded-xl border shadow-sm p-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-all group">
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                              <p className="font-medium text-sm leading-snug flex-1">{task.title}</p>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium flex-shrink-0 ${prio.bg} ${prio.color}`}>{prio.label}</span>
+                            </div>
+                            {task.description && <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{task.description}</p>}
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              <div className="flex items-center gap-2">
+                                {task.assigneeName && <span className="flex items-center gap-1"><User className="w-3 h-3" />{task.assigneeName}</span>}
+                                {task.category && task.category !== "other" && <span className="bg-muted px-1.5 py-0.5 rounded text-[10px]">{CATEGORY_LABELS[task.category] ?? task.category}</span>}
+                              </div>
+                              {task.dueDate && (
+                                <span className={`flex items-center gap-1 ${isOverdue ? "text-red-600 font-medium" : ""}`}>
+                                  <Calendar className="w-3 h-3" />{formatDate(task.dueDate)}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {columns.filter(c => c.id !== col.id).map(c => (
+                                <button key={c.id} onClick={() => handleStatusChange(task.id, c.id)}
+                                  className={`text-[10px] px-2 py-1 rounded border ${c.bg} ${c.iconColor} font-medium hover:opacity-80 transition`}>
+                                  → {c.label}
+                                </button>
+                              ))}
+                            </div>
                           </div>
-                        ) : (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-600 border border-red-200 font-medium">Chưa giao việc</span>
-                        )}
-                        {isExpanded
-                          ? <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                          : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-                      </div>
-                    </button>
-
-                    {/* Expanded panel */}
-                    {isExpanded && (
-                      <div className="border-t border-border bg-muted/20 px-4 py-3">
-                        {/* Existing tasks for this booking */}
-                        {bookingTasks.length > 0 ? (
-                          <div className="space-y-2 mb-3">
-                            {bookingTasks.map(task => {
-                              const prio = PRIO_CONFIG[task.priority as keyof typeof PRIO_CONFIG] ?? PRIO_CONFIG.medium;
-                              const st = STATUS_CONFIG[task.status as TaskStatus] ?? STATUS_CONFIG.todo;
-                              const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "done";
-                              return (
-                                <div key={task.id} className="flex items-center gap-3 bg-background rounded-lg border px-3 py-2">
-                                  <st.icon className={`w-3.5 h-3.5 flex-shrink-0 ${st.iconColor}`} />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">{task.title}</p>
-                                    {task.description && <p className="text-xs text-muted-foreground truncate">{task.description}</p>}
-                                  </div>
-                                  <div className="flex items-center gap-2 flex-shrink-0">
-                                    {task.assigneeName && (
-                                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                        <User className="w-3 h-3" />{task.assigneeName}
-                                      </span>
-                                    )}
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${prio.bg} ${prio.color}`}>{prio.label}</span>
-                                    {task.dueDate && (
-                                      <span className={`text-xs flex items-center gap-1 ${isOverdue ? "text-red-600 font-medium" : "text-muted-foreground"}`}>
-                                        <Calendar className="w-3 h-3" />{formatDate(task.dueDate)}
-                                      </span>
-                                    )}
-                                    <Select
-                                      value={task.status}
-                                      onChange={e => handleStatusChange(task.id, e.target.value as TaskStatus)}
-                                      className="text-xs h-7 py-0 w-32"
-                                    >
-                                      {columns.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                                    </Select>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <p className="text-sm text-muted-foreground mb-3 italic">Chưa có công việc nào được giao cho buổi chụp này.</p>
-                        )}
-                        {/* Add task button */}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1.5 text-xs"
-                          onClick={() => openCreateForBooking(booking)}
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          Thêm việc cho buổi chụp này
-                        </Button>
-                      </div>
-                    )}
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               })}
             </div>
           )}
-        </div>
+        </>
       )}
 
-      {/* ─── KANBAN VIEW ──────────────────────────────────────────────────────── */}
-      {viewMode === "kanban" && (
-        isLoading ? (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground">Đang tải...</div>
-        ) : (
-          <div className="flex gap-4 overflow-x-auto pb-4 flex-1">
-            {columns.map(col => {
-              const ColTasks = tasksByStatus[col.id];
-              return (
-                <div
-                  key={col.id}
-                  className={`flex-1 min-w-72 rounded-2xl border ${col.border} ${col.bg} flex flex-col`}
-                  onDragOver={e => e.preventDefault()}
-                  onDrop={() => { if (dragId !== null) handleStatusChange(dragId, col.id); setDragId(null); }}
-                >
-                  <div className={`px-4 py-3 flex items-center justify-between border-b ${col.border}`}>
-                    <div className="flex items-center gap-2">
-                      <col.icon className={`w-4 h-4 ${col.iconColor}`} />
-                      <span className="font-semibold text-sm">{col.label}</span>
-                    </div>
-                    <span className="text-xs font-bold bg-background border rounded-full px-2 py-0.5">{ColTasks.length}</span>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                    {ColTasks.map(task => {
-                      const prio = PRIO_CONFIG[task.priority as keyof typeof PRIO_CONFIG] ?? PRIO_CONFIG.medium;
-                      const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "done";
-                      return (
-                        <div
-                          key={task.id}
-                          draggable
-                          onDragStart={() => setDragId(task.id)}
-                          className="bg-background rounded-xl border shadow-sm p-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-all group"
-                        >
-                          <div className="flex items-start justify-between gap-2 mb-2">
-                            <p className="font-medium text-sm leading-snug flex-1">{task.title}</p>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium flex-shrink-0 ${prio.bg} ${prio.color}`}>{prio.label}</span>
-                          </div>
-                          {task.description && <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{task.description}</p>}
-                          <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <div className="flex items-center gap-2">
-                              {task.assigneeName && <span className="flex items-center gap-1"><User className="w-3 h-3" />{task.assigneeName}</span>}
-                              {task.category && task.category !== "other" && <span className="bg-muted px-1.5 py-0.5 rounded text-[10px]">{CATEGORY_LABELS[task.category] ?? task.category}</span>}
-                            </div>
-                            {task.dueDate && (
-                              <span className={`flex items-center gap-1 ${isOverdue ? "text-red-600 font-medium" : ""}`}>
-                                <Calendar className="w-3 h-3" />
-                                {formatDate(task.dueDate)}
-                              </span>
-                            )}
-                          </div>
-                          {/* Status move buttons */}
-                          <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {columns.filter(c => c.id !== col.id).map(c => (
-                              <button key={c.id} onClick={() => handleStatusChange(task.id, c.id)} className={`text-[10px] px-2 py-1 rounded border ${c.bg} ${c.iconColor} font-medium hover:opacity-80 transition`}>
-                                → {c.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {ColTasks.length === 0 && <div className="text-center py-8 text-xs text-muted-foreground">Kéo thẻ vào đây</div>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )
-      )}
-
-      {/* ─── LIST VIEW ────────────────────────────────────────────────────────── */}
+      {/* ─── LIST VIEW ───────────────────────────────────────────────────────── */}
       {viewMode === "list" && (
-        isLoading ? (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground">Đang tải...</div>
-        ) : (
-          <div className="rounded-xl border overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-muted-foreground text-xs font-semibold uppercase">
-                <tr>
-                  <th className="px-4 py-3 text-left">Công việc</th>
-                  <th className="px-4 py-3 text-left">Nhân viên</th>
-                  <th className="px-4 py-3 text-center">Ưu tiên</th>
-                  <th className="px-4 py-3 text-center">Trạng thái</th>
-                  <th className="px-4 py-3 text-left">Hạn</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filteredTasks.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-muted-foreground">Không có công việc</td></tr>}
-                {filteredTasks.map(task => {
-                  const prio = PRIO_CONFIG[task.priority as keyof typeof PRIO_CONFIG] ?? PRIO_CONFIG.medium;
-                  const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "done";
-                  return (
-                    <tr key={task.id} className="hover:bg-muted/30">
-                      <td className="px-4 py-3">
-                        <p className="font-medium">{task.title}</p>
-                        {task.description && <p className="text-xs text-muted-foreground truncate max-w-xs">{task.description}</p>}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">{task.assigneeName || "—"}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${prio.bg} ${prio.color}`}>{prio.label}</span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <Select value={task.status} onChange={e => handleStatusChange(task.id, e.target.value as TaskStatus)} className="text-xs h-7 py-0 w-36 mx-auto">
-                          {columns.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                        </Select>
-                      </td>
-                      <td className={`px-4 py-3 text-sm ${isOverdue ? "text-red-600 font-medium" : "text-muted-foreground"}`}>
-                        {task.dueDate ? formatDate(task.dueDate) : "—"}
-                      </td>
-                      <td className="px-4 py-3"></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        <>
+          <div className="flex gap-2 mb-4">
+            <Select value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)} className="text-sm">
+              <option value="">Tất cả nhân viên</option>
+              {staff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </Select>
+            <Select value={filterPrio} onChange={e => setFilterPrio(e.target.value)} className="text-sm">
+              <option value="">Tất cả độ ưu tiên</option>
+              <option value="high">🔴 Cao</option>
+              <option value="medium">🟡 Trung bình</option>
+              <option value="low">🟢 Thấp</option>
+            </Select>
           </div>
-        )
+          {tasksLoading ? (
+            <div className="flex items-center justify-center py-16 text-muted-foreground">Đang tải...</div>
+          ) : filteredTasks.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
+              <CheckCircle2 className="w-10 h-10 opacity-30" />
+              <p>Không có công việc nào</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto flex-1">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 px-3 font-medium text-muted-foreground text-xs">Công việc</th>
+                    <th className="text-left py-2 px-3 font-medium text-muted-foreground text-xs">Người thực hiện</th>
+                    <th className="text-left py-2 px-3 font-medium text-muted-foreground text-xs">Trạng thái</th>
+                    <th className="text-left py-2 px-3 font-medium text-muted-foreground text-xs">Hạn</th>
+                    <th className="text-left py-2 px-3 font-medium text-muted-foreground text-xs">Ưu tiên</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTasks.map(task => {
+                    const prio = PRIO_CONFIG[task.priority as keyof typeof PRIO_CONFIG] ?? PRIO_CONFIG.medium;
+                    const st = STATUS_CONFIG[task.status as TaskStatus] ?? STATUS_CONFIG.todo;
+                    const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "done";
+                    return (
+                      <tr key={task.id} className="border-b hover:bg-muted/30 transition-colors">
+                        <td className="py-2 px-3">
+                          <p className="font-medium truncate max-w-xs">{task.title}</p>
+                          {task.description && <p className="text-xs text-muted-foreground truncate max-w-xs">{task.description}</p>}
+                        </td>
+                        <td className="py-2 px-3">
+                          {task.assigneeName
+                            ? <span className="flex items-center gap-1"><User className="w-3 h-3 text-muted-foreground" />{task.assigneeName}</span>
+                            : <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="py-2 px-3">
+                          <Select value={task.status} onChange={e => handleStatusChange(task.id, e.target.value as TaskStatus)} className="text-xs h-7 py-0 w-36">
+                            {columns.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                          </Select>
+                        </td>
+                        <td className="py-2 px-3">
+                          {task.dueDate
+                            ? <span className={`text-xs flex items-center gap-1 ${isOverdue ? "text-red-600 font-medium" : "text-muted-foreground"}`}>
+                                <Calendar className="w-3 h-3" />{formatDate(task.dueDate)}
+                              </span>
+                            : <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${prio.bg} ${prio.color}`}>{prio.label}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
 
-      {/* ─── Create Task Modal ─────────────────────────────────────────────────── */}
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {form.bookingId ? "Thêm việc cho buổi chụp" : "Tạo công việc mới"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            {form.bookingId && (
-              <div className="flex items-center gap-2 text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-                <BookOpen className="w-4 h-4 flex-shrink-0" />
-                <span>Công việc sẽ được gắn với buổi chụp <strong>#{form.bookingId}</strong></span>
-              </div>
-            )}
-            <div><label className="text-xs font-medium text-muted-foreground">Tiêu đề *</label><Input placeholder="Tên công việc..." value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} /></div>
-            <div><label className="text-xs font-medium text-muted-foreground">Mô tả</label><Textarea rows={2} placeholder="Chi tiết..." value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Giao cho</label>
-                <Select value={form.assigneeId} onChange={e => setForm(f => ({ ...f, assigneeId: e.target.value }))}>
-                  <option value="">-- Chọn nhân viên --</option>
-                  {staff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </Select>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Độ ưu tiên</label>
-                <Select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value as CreateTaskRequestPriority }))}>
-                  <option value="high">🔴 Cao</option>
-                  <option value="medium">🟡 Trung bình</option>
-                  <option value="low">🟢 Thấp</option>
-                </Select>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Danh mục</label>
-                <Select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-                  {Object.entries(CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                </Select>
-              </div>
-              <div><label className="text-xs font-medium text-muted-foreground">Hạn hoàn thành</label><Input type="date" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} /></div>
-            </div>
-            <div className="flex gap-2 pt-2">
-              <Button onClick={handleCreate} disabled={createTask.isPending} className="flex-1">{createTask.isPending ? "Đang tạo..." : "Tạo công việc"}</Button>
-              <Button variant="outline" onClick={() => setIsOpen(false)}>Hủy</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Assignment modal */}
+      {assigningBooking && (
+        <AssignmentModal booking={assigningBooking} onClose={() => setAssigningBooking(null)} staffList={staffList} />
+      )}
     </div>
   );
 }

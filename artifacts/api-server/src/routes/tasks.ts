@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import { tasksTable, staffTable, staffRatePricesTable, bookingsTable } from "@workspace/db/schema";
 import { eq, desc, and, or } from "drizzle-orm";
 
@@ -48,6 +48,93 @@ async function lookupCost(staffId: number | null, role: string | null, taskType:
   }
   return rate;
 }
+
+// ── Booking-centric view — MUST be before /tasks/:id ─────────────────────────
+router.get("/tasks/booking-view", async (req, res) => {
+  try {
+    const { search } = req.query as Record<string, string>;
+
+    const result = await pool.query(`
+      SELECT
+        b.id              AS booking_id,
+        b.order_code,
+        b.shoot_date,
+        b.created_at      AS booking_created_at,
+        b.package_type,
+        b.service_label,
+        b.status          AS booking_status,
+        b.location,
+        c.name            AS customer_name,
+        c.phone           AS customer_phone,
+        t.id              AS task_id,
+        t.title           AS task_title,
+        t.assignee_id,
+        s.name            AS assignee_name,
+        t.role,
+        t.task_type,
+        t.status          AS task_status,
+        t.cost,
+        t.notes           AS task_notes
+      FROM bookings b
+      JOIN customers c ON c.id = b.customer_id
+      LEFT JOIN tasks t ON t.booking_id = b.id
+      LEFT JOIN staff s ON s.id = t.assignee_id
+      WHERE b.status NOT IN ('cancelled')
+        AND (b.parent_id IS NULL OR b.is_parent_contract = true)
+      ORDER BY b.created_at DESC, t.created_at ASC
+    `);
+
+    // Group rows by booking_id
+    const map = new Map<number, Record<string, unknown> & { tasks: unknown[] }>();
+    for (const row of result.rows) {
+      const bid = Number(row.booking_id);
+      if (!map.has(bid)) {
+        map.set(bid, {
+          booking_id: bid,
+          order_code: row.order_code,
+          shoot_date: row.shoot_date,
+          booking_created_at: row.booking_created_at,
+          package_type: row.package_type,
+          service_label: row.service_label,
+          booking_status: row.booking_status,
+          location: row.location,
+          customer_name: row.customer_name,
+          customer_phone: row.customer_phone,
+          tasks: [],
+        });
+      }
+      if (row.task_id) {
+        (map.get(bid)!.tasks as unknown[]).push({
+          task_id: Number(row.task_id),
+          title: row.task_title,
+          assignee_id: row.assignee_id ? Number(row.assignee_id) : null,
+          assignee_name: row.assignee_name,
+          role: row.role,
+          task_type: row.task_type,
+          task_status: row.task_status,
+          cost: row.cost ? parseFloat(String(row.cost)) : 0,
+          notes: row.task_notes,
+        });
+      }
+    }
+
+    let data = Array.from(map.values());
+
+    if (search) {
+      const q = search.toLowerCase();
+      data = data.filter(b =>
+        String(b.customer_name ?? "").toLowerCase().includes(q) ||
+        String(b.customer_phone ?? "").toLowerCase().includes(q) ||
+        String(b.order_code ?? "").toLowerCase().includes(q) ||
+        String(b.shoot_date ?? "").includes(q)
+      );
+    }
+
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
 
 // GET /tasks
 router.get("/tasks", async (req, res) => {
