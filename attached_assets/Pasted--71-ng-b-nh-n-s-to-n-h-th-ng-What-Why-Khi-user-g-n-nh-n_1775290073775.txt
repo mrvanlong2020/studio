@@ -1,0 +1,60 @@
+#71 - Đồng bộ nhân sự toàn hệ thống
+
+What & Why
+Khi user gán nhân sự qua StaffAssignmentEditor trong "Chỉnh sửa show", dữ liệu thật được lưu vào items[i].assignedStaff (mảng StaffAssignment mới), nhưng các field cũ như photoName/makeupName không được cập nhật. Vì vậy các màn cũ như lịch tháng, lịch ngày, chi tiết show, hợp đồng vẫn đọc field cũ và hiển thị rỗng.
+
+Task #70 đã fix module Giao việc đọc đúng items[i].assignedStaff.
+Task #71 tiếp tục đồng bộ 4 màn còn lại bằng cách normalize dữ liệu ở backend.
+
+Source of truth:
+- Nguồn dữ liệu thật của nhân sự là items[i].assignedStaff
+- Các field cũ như photoName/makeupName chỉ là compatibility fields cho các màn cũ
+
+Mục tiêu:
+- Không sửa từng màn theo kiểu chắp vá
+- Chuẩn hóa booking payload ở backend để mọi màn dùng cùng một dữ liệu nhân sự
+
+Done looks like
+- Tạo show mới gán 3 nhân sự:
+  - TRUNG (nhiếp ảnh)
+  - DIỆU MAI (makeup)
+  - Nhân viên Test (trợ lý)
+- Lịch tháng hiển thị được nhân sự chính của show (ưu tiên photo + makeup; nếu thiếu chỗ có thể rút gọn)
+- Lịch ngày hiển thị đúng nhân sự phụ trách
+- Chi tiết show hiển thị đủ nhân sự theo vai trò, gồm cả Trợ lý / Hỗ trợ / Quay phim nếu có
+- Hợp đồng xuất ra có phần nhân sự phụ trách với đầy đủ vai trò liên quan
+- Giao việc tiếp tục hiển thị đúng theo Task #70
+- Tất cả các màn dùng chung cùng một nguồn dữ liệu nhân sự, không lệch nhau
+
+Out of scope
+- Không thay đổi cách StaffAssignmentEditor lưu dữ liệu
+- Không đổi schema DB
+- Không sửa module Giao việc (đã fix ở Task #70)
+
+Tasks
+1. Backend normalize helper
+- Thêm helper normalizeItemStaff(items) trong bookings.ts
+- Với mỗi item:
+  - nếu photoName trống nhưng assignedStaff có role photographer/photo thì tự điền photoName
+  - nếu makeupName trống nhưng assignedStaff có role makeup thì tự điền makeupName
+  - đồng thời sinh normalized staff data cho các vai trò bổ sung như assistant/support/video nếu có
+- Áp dụng helper này cho cả:
+  - GET /api/bookings
+  - GET /api/bookings/:id
+- Mọi booking payload trả ra để render lịch / detail phải đi qua normalize chung
+
+2. Contract export
+- Trong generateContractHTML của calendar, mở rộng block nhân sự:
+  - dùng photoName / makeupName đã được normalize
+  - đồng thời đọc thêm line.assignedStaff để hiển thị các vai trò phụ như Trợ lý / Hỗ trợ / Quay phim
+- Không chỉ giới hạn ở 2 field cũ
+
+3. Chi tiết show
+- Trong section hiển thị nhân sự của booking detail card:
+  - hiển thị photographer / makeup từ normalized fields
+  - hiển thị thêm các StaffAssignment có role khác từ item.assignedStaff
+- Không để thiếu Trợ lý / Hỗ trợ / Quay phim
+
+Relevant files
+- artifacts/api-server/src/routes/bookings.ts:19-49,51-157,345-452
+- artifacts/amazing-studio/src/pages/calendar.tsx:1468-1474,2219-2235,2633-2638,2812-2813

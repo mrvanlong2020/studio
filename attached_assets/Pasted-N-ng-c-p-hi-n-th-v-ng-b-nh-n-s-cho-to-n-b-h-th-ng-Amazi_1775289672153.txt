@@ -1,0 +1,85 @@
+Nâng cấp hiển thị và đồng bộ nhân sự cho toàn bộ hệ thống Amazing Studio.
+
+Mục tiêu:
+Sau khi tạo hoặc chỉnh sửa show trong Lịch show, nếu show đã có nhân sự (Nhiếp ảnh / Makeup / Trợ lý / Hỗ trợ), thì toàn bộ các nơi sau phải hiển thị đúng cùng dữ liệu đó:
+
+1. Lịch tổng theo tháng
+2. Lịch theo ngày / lịch 24h
+3. Chi tiết show / xem đơn
+4. Module Giao việc
+5. Hợp đồng xuất ra
+
+Business rule:
+- Nhân sự được chọn trong phần NHÂN SỰ của Lịch show là nguồn dữ liệu thật
+- Một lần lưu show xong, các màn khác phải thấy đúng nhân sự đó
+- Không được để Lịch show có nhân sự nhưng Lịch tổng / Lịch ngày / Giao việc / Hợp đồng không thấy
+- Tất cả phải dùng chung source of truth và đồng bộ chặt chẽ
+
+Yêu cầu hiển thị:
+A. Lịch tổng theo tháng
+- Trên card show trong lịch tháng, hiển thị ngắn gọn nhân sự chính
+- Ít nhất phải thấy tên người chụp
+- Nếu đủ chỗ thì hiện thêm makeup / trợ lý
+- Ví dụ:
+  TRUNG / DIỆU MAI
+  hoặc
+  Photo: TRUNG
+  MU: DIỆU MAI
+
+B. Lịch theo ngày / lịch 24h
+- Trong block show theo giờ, phải hiện rõ ai là người chụp / ai makeup / ai hỗ trợ
+- Không chỉ hiện tên khách + giờ + dịch vụ nữa
+- Phải nhìn vào là biết đơn này ai làm
+
+C. Chi tiết show / xem đơn
+- Hiển thị danh sách nhân sự đã gán theo vai trò
+- Ví dụ:
+  Nhiếp ảnh: TRUNG
+  Makeup: DIỆU MAI
+  Trợ lý: Nhân viên Test
+
+D. Module Giao việc
+- Booking/show đã có nhân sự từ Lịch show thì qua Giao việc phải hiện đúng nhân sự đó
+- Không được báo “Chưa có nhân sự” nếu show đã gán người rồi
+
+E. Hợp đồng xuất ra
+- Trong bản hợp đồng / PDF / file in ra phải có phần nhân sự phụ trách
+- Ít nhất gồm:
+  Nhiếp ảnh
+  Makeup
+  Trợ lý / Hỗ trợ
+- Quản lý xem hợp đồng là biết ai phụ trách đơn này
+
+Kỹ thuật cần làm:
+1. Xác định source of truth duy nhất cho assigned staff
+   - ưu tiên từ bookings.items[i].assignedStaff nếu đó là nơi Lịch show đang lưu thật
+2. Chuẩn hóa API trả staff cho các màn:
+   - calendar month view
+   - calendar day view
+   - booking detail
+   - tasks/booking-view
+   - contract export
+3. Không patch UI giả
+   - phải lấy từ data thật đã lưu
+4. Nếu cần, tạo helper normalizeAssignedStaff(booking) để mọi nơi dùng chung cùng 1 logic
+
+Cần trả lời trước khi code:
+1. Những API nào hiện đang trả booking/show cho:
+   - lịch tháng
+   - lịch ngày
+   - xem đơn
+   - giao việc
+   - xuất hợp đồng
+2. API nào đang thiếu assigned staff
+3. Đề xuất chỗ normalize chung để tránh mỗi màn parse một kiểu
+4. Sau đó mới implement
+
+Done looks like:
+- Tạo show mới có 3 nhân sự: TRUNG, DIỆU MAI, Nhân viên Test
+- Sau khi lưu:
+  + Lịch tháng thấy người chụp
+  + Lịch ngày thấy người chụp / makeup / hỗ trợ
+  + Xem đơn thấy đầy đủ nhân sự
+  + Giao việc thấy đúng nhân sự
+  + Hợp đồng xuất ra có tên nhân sự
+- Tất cả hiển thị cùng một dữ liệu, không lệch nhau
