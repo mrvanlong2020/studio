@@ -248,7 +248,16 @@ export default function ContractsPage() {
     },
   });
 
+  const syncMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`${BASE}/api/contracts/${id}/sync`);
+      if (!res.ok) throw new Error("Không tải được dữ liệu đồng bộ");
+      return res.json() as Promise<{ contract: Contract; booking: { customerId?: number } | null }>;
+    },
+  });
+
   const [sharedSignUrl, setSharedSignUrl] = useState("");
+  const [syncingId, setSyncingId] = useState<number | null>(null);
 
   const openCreate = () => { setForm({ ...EMPTY_FORM }); setEditingId(null); setIsOpen(true); };
   const openEdit = (c: Contract) => {
@@ -510,6 +519,27 @@ export default function ContractsPage() {
                   )}
                 </div>
               )}
+
+              <div className="p-3 bg-muted/30 rounded-xl border space-y-2">
+                <p className="font-semibold text-xs text-muted-foreground">Đồng bộ khách hàng & hóa đơn</p>
+                <Button
+                  variant="outline"
+                  className="w-full gap-2"
+                  onClick={async () => {
+                    setSyncingId(selected.id);
+                    try {
+                      const data = await syncMutation.mutateAsync(selected.id);
+                      qc.invalidateQueries({ queryKey: ["contracts"] });
+                      qc.invalidateQueries({ queryKey: ["customers"] });
+                      if (data.booking?.customerId) qc.invalidateQueries({ queryKey: ["bookings"] });
+                    } finally {
+                      setSyncingId(null);
+                    }
+                  }}
+                >
+                  {syncingId === selected.id ? "Đang đồng bộ..." : "Đồng bộ dữ liệu"}
+                </Button>
+              </div>
 
               <div className="flex gap-2 pt-2 border-t">
                 <Button
