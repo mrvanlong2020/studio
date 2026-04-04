@@ -2606,36 +2606,31 @@ function ShowDetailPanel({
 
 // ─── Month day cell ────────────────────────────────────────────────────────────
 const HOUR_PX = 64; // px per hour in day view
+const MAX_VISIBLE = 4;
 
 function MonthDayCell({
-  date, bookings, isSelected, isOtherMonth, onDayClick, onEventClick, density,
+  date, bookings, isSelected, isOtherMonth, onDayClick, onEventClick,
 }: {
   date: Date; bookings: Booking[]; isSelected: boolean; isOtherMonth?: boolean;
   onDayClick: (d: Date) => void; onEventClick: (b: Booking) => void;
-  density?: "compact" | "comfortable";
 }) {
   const { lunar, solarHoliday, lunarHoliday } = useMemo(() => getLunarInfo(date), [date]);
   const isSun = date.getDay() === 0;
   const isSat = date.getDay() === 6;
   const isLunarNew = lunar.day === 1;
   const isRam = lunar.day === 15;
-  const MAX_VISIBLE = density === "comfortable" ? 4 : 3;
-
-  const isComfortable = density === "comfortable";
 
   return (
     <div
       className={[
         "group relative flex flex-col border-r border-b border-border/50 cursor-pointer select-none overflow-hidden",
-        "transition-colors duration-100",
+        "transition-colors duration-100 min-h-[160px] sm:min-h-[180px]",
         isSelected ? "bg-primary/5" : isToday(date) ? "bg-orange-50/30 dark:bg-orange-950/10" : "hover:bg-muted/20",
         isOtherMonth ? "opacity-25" : "",
-        isComfortable ? "min-h-[160px] sm:min-h-[180px]" : "",
       ].join(" ")}
-      style={!isComfortable ? { minHeight: "clamp(130px, calc((100vh - 260px) / 6), 220px)" } : undefined}
       onClick={() => onDayClick(date)}
     >
-      {/* Day header — compact */}
+      {/* Day header */}
       <div className="flex items-center justify-between px-1.5 pt-1 pb-0.5 flex-shrink-0">
         <div className="flex items-center gap-1">
           <span className={[
@@ -2653,14 +2648,14 @@ function MonthDayCell({
           </span>
         </div>
         {(solarHoliday || lunarHoliday) && (
-          <span className="text-[7px] text-red-500 font-semibold leading-none truncate max-w-[36px] hidden sm:block">
+          <span className="text-[7px] text-red-500 font-semibold leading-none truncate max-w-[36px]">
             {(solarHoliday || lunarHoliday)?.slice(0, 7)}
           </span>
         )}
       </div>
 
-      {/* Event chips — ưu tiên: giờ → tên → photo → job */}
-      <div className="flex-1 px-1 pb-1 space-y-[3px] overflow-hidden">
+      {/* Show cards */}
+      <div className="flex-1 px-[2%] pb-1 space-y-[3px] overflow-hidden">
         {bookings
           .slice()
           .sort((a, b) => (a.shootTime ?? "").localeCompare(b.shootTime ?? ""))
@@ -2668,41 +2663,73 @@ function MonthDayCell({
           .map(b => {
             const st = STATUS[b.status as keyof typeof STATUS] ?? STATUS.pending;
             const item = b.items?.[0];
-            // Photo: lấy họ/tên cuối cùng (rút gọn)
-            const photoLast = item?.photoName?.split(" ").pop() ?? "";
-            const makeupLast = item?.makeupName?.split(" ").pop() ?? "";
-            // Job: rút gọn nếu dài
-            const jobText = (item?.serviceName || b.packageType?.split("(")[0].trim() || "").slice(0, 14);
-            // Giờ: "07h" hoặc "07:30"
+
+            // Line 1: time + customer name
             const hourStr = b.shootTime
               ? b.shootTime.endsWith(":00") ? b.shootTime.slice(0, 2) + "h" : b.shootTime.slice(0, 5)
               : "";
+
+            // Line 2: service name
+            const serviceName = item?.serviceName || b.packageType?.split("(")[0].trim() || "";
+
+            // Line 3: photographer last name
+            const photoLast = item?.photoName?.trim().split(/\s+/).pop() ?? "";
+
+            // Line 4: makeup last name
+            const makeupLast = item?.makeupName?.trim().split(/\s+/).pop() ?? "";
+
+            // Extra staff roles (assistant, support, video) from assignedStaff
+            const extraRoleMap: Record<string, string[]> = {};
+            if (Array.isArray(item?.assignedStaff)) {
+              for (const sa of item.assignedStaff as { role: string; staffName: string }[]) {
+                if (!sa.role || !sa.staffName) continue;
+                const r = sa.role.toLowerCase();
+                // Skip photographer and makeup roles (already shown)
+                if (r === "photo" || r === "photographer" || r === "makeup" || r === "make_up") continue;
+                const lastName = sa.staffName.trim().split(/\s+/).pop() ?? sa.staffName;
+                if (!extraRoleMap[sa.role]) extraRoleMap[sa.role] = [];
+                extraRoleMap[sa.role].push(lastName);
+              }
+            }
+
+            // Role display abbreviation map
+            const roleAbbr: Record<string, string> = {
+              assistant: "A", tro_ly: "A", tro_li: "A",
+              support: "HT", ho_tro: "HT",
+              video: "V",
+            };
 
             return (
               <button
                 key={b.id}
                 onClick={e => { e.stopPropagation(); onEventClick(b); }}
-                className={`w-full text-left rounded px-1.5 py-[3px] ${st.bar} hover:brightness-95 transition-all`}
+                className={`w-full text-left rounded px-1.5 py-1 ${st.bar} hover:brightness-95 transition-all`}
               >
-                {/* Dòng 1 (bắt buộc): Giờ + Tên khách */}
+                {/* Line 1: time + customer name */}
                 <div className="flex items-baseline gap-1 leading-tight">
-                  <span className="text-[10px] font-black flex-shrink-0">{hourStr}</span>
-                  <span className="text-[10px] font-semibold truncate">{b.customerName}</span>
+                  {hourStr && <span className="text-[11px] font-black flex-shrink-0">{hourStr}</span>}
+                  <span className="text-[11px] font-bold truncate">{b.customerName}</span>
                 </div>
-                {/* Dòng 2 (ưu tiên cao): Photo chính */}
+                {/* Line 2: service name */}
+                {serviceName && (
+                  <div className="text-[10px] leading-tight opacity-90 truncate">{serviceName}</div>
+                )}
+                {/* Line 3: photographer */}
                 {photoLast && (
-                  <div className="text-[9px] leading-tight font-medium opacity-90">
-                    P: {photoLast}{makeupLast ? ` · M: ${makeupLast}` : ""}
-                  </div>
+                  <div className="text-[10px] leading-tight font-medium opacity-90">P: {photoLast}</div>
                 )}
-                {/* Dòng 3 (nếu không có photo, hiện job): Job chụp */}
-                {!photoLast && jobText && (
-                  <div className="text-[9px] leading-tight opacity-85 truncate">{jobText}</div>
+                {/* Line 4: makeup */}
+                {makeupLast && (
+                  <div className="text-[10px] leading-tight font-medium opacity-90">M: {makeupLast}</div>
                 )}
-                {/* Dòng 3 bonus: job sau photo nếu vừa chỗ */}
-                {photoLast && jobText && (
-                  <div className="text-[8px] leading-tight opacity-75 truncate hidden sm:block">{jobText}</div>
-                )}
+                {/* Extra roles */}
+                {Object.entries(extraRoleMap).map(([role, names]) => {
+                  const abbr = roleAbbr[role.toLowerCase()] ?? role.slice(0, 2).toUpperCase();
+                  const display = names.length === 1 ? names[0] : `${names[0]} +${names.length - 1}`;
+                  return (
+                    <div key={role} className="text-[10px] leading-tight opacity-85">{abbr}: {display}</div>
+                  );
+                })}
               </button>
             );
           })}
@@ -2947,19 +2974,7 @@ function CalendarPageInner() {
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [viewingBooking, setViewingBooking] = useState<Booking | null>(null);
   const [showLunar, setShowLunar] = useState(true);
-  const [calendarDensity, setCalendarDensity] = useState<"compact" | "comfortable">(() => {
-    try {
-      const saved = localStorage.getItem("amazingCalDensity");
-      return (saved === "compact" || saved === "comfortable") ? saved : "comfortable";
-    } catch { return "comfortable"; }
-  });
-  const toggleDensity = () => {
-    setCalendarDensity(d => {
-      const next = d === "comfortable" ? "compact" : "comfortable";
-      try { localStorage.setItem("amazingCalDensity", next); } catch { /* ignore */ }
-      return next;
-    });
-  };
+
   const { isAdmin, toggle: toggleAdminMode } = useViewMode();
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -3181,17 +3196,6 @@ function CalendarPageInner() {
             )}
           </div>
           <div className="flex items-center gap-1">
-            <button
-              onClick={toggleDensity}
-              title={calendarDensity === "comfortable" ? "Đang: Rộng — bấm để thu gọn" : "Đang: Thu gọn — bấm để rộng hơn"}
-              className={`px-2 h-8 rounded-lg border text-xs font-medium transition-all ${
-                calendarDensity === "comfortable"
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : "border-border bg-background text-muted-foreground hover:border-primary/40"
-              }`}
-            >
-              {calendarDensity === "comfortable" ? "Rộng" : "Thu gọn"}
-            </button>
             <button onClick={prevMonth} className="w-8 h-8 rounded-lg border bg-background hover:bg-muted flex items-center justify-center transition-colors"><ChevronLeft className="w-4 h-4" /></button>
             <button
               onClick={() => { const t = new Date(); setCurrentDate(t); setSelectedDate(t); }}
@@ -3214,7 +3218,7 @@ function CalendarPageInner() {
             {/* Leading days from prev month */}
             {Array.from({ length: firstDayOfMonth }).map((_, i) => {
               const d = new Date(monthStart); d.setDate(d.getDate() - (firstDayOfMonth - i));
-              return <MonthDayCell key={`p${i}`} date={d} bookings={getBookingsForDay(d)} isSelected={false} isOtherMonth onDayClick={handleDayClick} onEventClick={handleEventClickFromMonth} density={calendarDensity} />;
+              return <MonthDayCell key={`p${i}`} date={d} bookings={getBookingsForDay(d)} isSelected={false} isOtherMonth onDayClick={handleDayClick} onEventClick={handleEventClickFromMonth} />;
             })}
             {/* Current month days */}
             {daysInMonth.map(day => (
@@ -3222,13 +3226,12 @@ function CalendarPageInner() {
                 isSelected={isSameDay(day, selectedDate)}
                 onDayClick={handleDayClick}
                 onEventClick={handleEventClickFromMonth}
-                density={calendarDensity}
               />
             ))}
             {/* Trailing days from next month */}
             {Array.from({ length: (7 - ((firstDayOfMonth + daysInMonth.length) % 7)) % 7 }).map((_, i) => {
               const d = new Date(monthEnd); d.setDate(d.getDate() + i + 1);
-              return <MonthDayCell key={`n${i}`} date={d} bookings={getBookingsForDay(d)} isSelected={false} isOtherMonth onDayClick={handleDayClick} onEventClick={handleEventClickFromMonth} density={calendarDensity} />;
+              return <MonthDayCell key={`n${i}`} date={d} bookings={getBookingsForDay(d)} isSelected={false} isOtherMonth onDayClick={handleDayClick} onEventClick={handleEventClickFromMonth} />;
             })}
           </div>
         </div>
