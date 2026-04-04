@@ -90,6 +90,7 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
       id: contractsTable.id,
       contractCode: contractsTable.contractCode,
       customerName: customersTable.name,
+      customerPhone: customersTable.phone,
       title: contractsTable.title,
       content: contractsTable.content,
       status: contractsTable.status,
@@ -97,6 +98,9 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
       expiresAt: contractsTable.expiresAt,
       totalValue: contractsTable.totalValue,
       notes: contractsTable.notes,
+      signatureImageUrl: contractsTable.signatureImageUrl,
+      signerName: contractsTable.signerName,
+      signerPhone: contractsTable.signerPhone,
     })
     .from(contractsTable)
     .innerJoin(customersTable, eq(contractsTable.customerId, customersTable.id))
@@ -107,6 +111,12 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
     return;
   }
 
+  const alreadySigned = row.status === "signed";
+  const signedTimeStr = row.signedAt ? new Date(row.signedAt).toLocaleString("vi-VN") : "";
+  const sigImgUrl = row.signatureImageUrl ?? "";
+  const sigName = row.signerName ?? row.customerName;
+  const sigPhone = row.signerPhone ?? row.customerPhone ?? "";
+
   const html = `<!doctype html>
 <html lang="vi">
 <head>
@@ -116,7 +126,7 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:Arial,sans-serif;background:#faf7fb;color:#222;min-height:100vh}
-    .wrap{max-width:580px;margin:0 auto;padding:28px 16px}
+    .wrap{max-width:600px;margin:0 auto;padding:28px 16px 40px}
     .header{text-align:center;margin-bottom:24px}
     .logo{font-size:22px;font-weight:800;color:#8B1A6B;margin-bottom:4px}
     .subtitle{font-size:14px;color:#999}
@@ -137,67 +147,96 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
     .btn{border:0;border-radius:10px;padding:13px 20px;font-weight:700;cursor:pointer;font-size:14px;flex:1;transition:opacity .15s}
     .btn-clear{background:#f3e8f3;color:#6b2d63}
     .btn-submit{background:#8B1A6B;color:#fff;box-shadow:0 4px 14px rgba(139,26,107,.3)}
+    .btn-print{background:#065f46;color:#fff;border:0;border-radius:10px;padding:13px 20px;font-weight:700;cursor:pointer;font-size:14px;width:100%;margin-top:14px;transition:opacity .15s}
+    .btn-print:hover{opacity:.88}
     .btn:hover{opacity:.88}
     .btn:disabled{opacity:.5;cursor:not-allowed}
     #msg{margin-top:16px;padding:14px 16px;border-radius:12px;font-weight:700;font-size:14px;display:none;text-align:center;line-height:1.6}
     .msg-ok{background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;display:block!important}
     .msg-err{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;display:block!important}
     .msg-info{background:#fdf4ff;color:#8B1A6B;border:1px solid #e8d0f0;display:block!important}
-    .signed-banner{background:#d1fae5;border:1px solid #6ee7b7;border-radius:16px;padding:28px;text-align:center}
-    .signed-banner h2{color:#065f46;margin-bottom:8px;font-size:18px}
-    .signed-banner p{color:#047857;font-size:13px;margin-top:6px}
+    .signed-section{background:#d1fae5;border:1.5px solid #6ee7b7;border-radius:18px;padding:28px}
+    .signed-section h2{color:#065f46;margin-bottom:8px;font-size:18px;text-align:center}
+    .signed-detail{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0;padding:16px;background:#fff;border-radius:12px;border:1px solid #a7f3d0}
+    .signed-sig-wrap{margin-top:16px;text-align:center;padding:16px;background:#fff;border-radius:12px;border:1px solid #a7f3d0}
+    .signed-sig-wrap p{font-size:11px;color:#6b7280;margin-bottom:8px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+    .signed-sig-wrap img{max-width:100%;max-height:120px;object-fit:contain;border-radius:8px;background:#fff;padding:8px;border:1px solid #e5e7eb}
+    .contract-content{background:#fff;border-radius:14px;border:1px solid #e0d0ec;padding:20px;margin:16px 0;font-size:13px;line-height:1.7;color:#444;white-space:pre-wrap;word-break:break-word}
     .footer{text-align:center;color:#ccc;font-size:11px;margin-top:20px}
+    .no-print{} 
+    @media print {
+      body{background:#fff}
+      .no-print{display:none!important}
+      .wrap{padding:0}
+      .card,.signed-section{box-shadow:none;border:1px solid #ddd}
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="header">
-      <div class="logo">Amazing Studio</div>
+    <div class="header no-print">
+      <div class="logo">✨ Amazing Studio</div>
       <div class="subtitle">Ký xác nhận hợp đồng online</div>
     </div>
 
-    ${row.status === "signed" ? `
-    <div class="signed-banner">
-      <div style="font-size:40px;margin-bottom:12px">✅</div>
-      <h2>Hợp đồng đã được ký</h2>
-      <p>Hợp đồng <strong>${row.contractCode}</strong> đã có chữ ký xác nhận.</p>
-      ${row.signedAt ? `<p style="margin-top:10px;color:#6b7280;font-size:12px">Ký lúc: ${new Date(row.signedAt).toLocaleString("vi-VN")}</p>` : ""}
-    </div>
-    ` : `
-    <div class="card">
-      <div class="info-grid">
-        <div class="info-item"><label>Mã hợp đồng</label><p>${row.contractCode}</p></div>
-        <div class="info-item"><label>Khách hàng</label><p>${row.customerName}</p></div>
-        <div class="info-item"><label>Dịch vụ</label><p>${row.title || "—"}</p></div>
-        <div class="info-item"><label>Tổng giá trị</label><p>${Number(row.totalValue || 0).toLocaleString("vi-VN")}đ</p></div>
-      </div>
-
-      <div class="field-group">
-        <label>Họ và tên người ký *</label>
-        <input type="text" id="signerName" placeholder="Nhập họ và tên đầy đủ" autocomplete="name" />
-      </div>
-      <div class="field-group">
-        <label>Số điện thoại *</label>
-        <input type="tel" id="signerPhone" placeholder="Nhập số điện thoại" autocomplete="tel" />
-      </div>
-
-      <div class="sig-section">
-        <h3>✍️ Chữ ký của bạn</h3>
-        <div class="sig-box">
-          <canvas id="sigCanvas"></canvas>
-          <div class="sig-hint">Dùng ngón tay hoặc chuột để ký tên vào ô trên</div>
+    <div id="signedView" style="${alreadySigned ? "" : "display:none"}">
+      <div class="signed-section">
+        <div style="font-size:36px;text-align:center;margin-bottom:10px">✅</div>
+        <h2>Hợp đồng đã được ký xác nhận</h2>
+        <p style="text-align:center;color:#047857;font-size:13px;margin-top:4px">Hợp đồng <strong>${row.contractCode}</strong> đã có chữ ký hợp lệ.</p>
+        <div class="signed-detail">
+          <div><div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Khách hàng</div><div style="font-weight:700;font-size:14px" id="viewName">${sigName}</div></div>
+          <div><div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Số điện thoại</div><div style="font-weight:700;font-size:14px" id="viewPhone">${sigPhone}</div></div>
+          <div><div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Dịch vụ</div><div style="font-size:13px;color:#374151">${row.title || "—"}</div></div>
+          <div><div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Thời gian ký</div><div style="font-size:13px;color:#374151" id="viewTime">${signedTimeStr}</div></div>
         </div>
+        <div class="signed-sig-wrap">
+          <p>✍️ Chữ ký xác nhận</p>
+          <img id="sigPreview" src="${sigImgUrl}" style="${sigImgUrl ? "" : "display:none"}" alt="Chữ ký" />
+          <div id="noSigMsg" style="${sigImgUrl ? "display:none" : ""};font-size:12px;color:#9ca3af;font-style:italic">Chữ ký đã được lưu an toàn</div>
+        </div>
+        ${row.content ? `<div style="margin-top:16px"><div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Nội dung hợp đồng</div><div class="contract-content">${row.content.replace(/</g, "&lt;")}</div></div>` : ""}
+        <button class="btn-print no-print" onclick="window.print()">🖨️ In / Lưu PDF hợp đồng có chữ ký</button>
       </div>
-
-      <div class="actions">
-        <button class="btn btn-clear" id="btnClear" onclick="clearSig()">Xóa nét ký</button>
-        <button class="btn btn-submit" id="btnSubmit" onclick="submitSign()">✅ Hoàn tất ký</button>
-      </div>
-      <div id="msg"></div>
     </div>
-    `}
 
-    <div class="footer">Amazing Studio · Hệ thống quản lý studio chuyên nghiệp</div>
+    <div id="signForm" style="${alreadySigned ? "display:none" : ""}">
+      <div class="card">
+        <div class="info-grid">
+          <div class="info-item"><label>Mã hợp đồng</label><p>${row.contractCode}</p></div>
+          <div class="info-item"><label>Khách hàng</label><p>${row.customerName}</p></div>
+          <div class="info-item"><label>Dịch vụ</label><p>${row.title || "—"}</p></div>
+          <div class="info-item"><label>Tổng giá trị</label><p>${Number(row.totalValue || 0).toLocaleString("vi-VN")}đ</p></div>
+        </div>
+
+        ${row.content ? `<div style="margin-bottom:20px"><div style="font-size:12px;font-weight:700;color:#8B1A6B;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">📄 Nội dung hợp đồng</div><div class="contract-content" style="max-height:240px;overflow-y:auto">${row.content.replace(/</g, "&lt;")}</div></div>` : ""}
+
+        <div class="field-group">
+          <label>Họ và tên người ký *</label>
+          <input type="text" id="signerName" placeholder="Nhập họ và tên đầy đủ" autocomplete="name" />
+        </div>
+        <div class="field-group">
+          <label>Số điện thoại *</label>
+          <input type="tel" id="signerPhone" placeholder="Nhập số điện thoại" autocomplete="tel" />
+        </div>
+
+        <div class="sig-section">
+          <h3>✍️ Chữ ký của bạn</h3>
+          <div class="sig-box">
+            <canvas id="sigCanvas"></canvas>
+            <div class="sig-hint">Dùng ngón tay hoặc chuột để ký tên vào ô trên</div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn-clear" id="btnClear" onclick="clearSig()">Xóa nét ký</button>
+          <button class="btn btn-submit" id="btnSubmit" onclick="submitSign()">✅ Hoàn tất ký</button>
+        </div>
+        <div id="msg"></div>
+      </div>
+    </div>
+
+    <div class="footer no-print">Amazing Studio · Hệ thống quản lý studio chuyên nghiệp</div>
   </div>
 
   <script>
@@ -259,9 +298,16 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
           if (resp.ok) {
             var pad = function(n) { return String(n).padStart(2, '0'); };
             var timeStr = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ' ngày ' + pad(now.getDate()) + '/' + pad(now.getMonth() + 1) + '/' + now.getFullYear();
-            showMsg('✅ Ký thành công! Cảm ơn <strong>' + name + '</strong>.<br/><span style="font-size:12px;font-weight:400;opacity:.85">Đã ký lúc ' + timeStr + '</span>', 'ok');
-            document.getElementById('signerName').disabled = true;
-            document.getElementById('signerPhone').disabled = true;
+            // Show signed view with the actual signature image
+            document.getElementById('viewName').textContent = name;
+            document.getElementById('viewPhone').textContent = phone;
+            document.getElementById('viewTime').textContent = timeStr;
+            var prevImg = document.getElementById('sigPreview');
+            prevImg.src = sigData;
+            prevImg.style.display = '';
+            document.getElementById('noSigMsg').style.display = 'none';
+            document.getElementById('signForm').style.display = 'none';
+            document.getElementById('signedView').style.display = '';
           } else {
             showMsg('❌ Lỗi khi lưu chữ ký. Vui lòng thử lại.', 'err');
             document.getElementById('btnSubmit').disabled = false;
