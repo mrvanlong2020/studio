@@ -314,7 +314,12 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
     operatingCost: selectedSvc.operatingCost,
     salePercent: selectedSvc.salePercent,
     addons: selectedSvc.addons,
-    items: selectedSvc.items,
+    items: selectedSvc.items?.map(item => ({
+      name: item.name,
+      quantity: Number(item.quantity),
+      unit: item.unit,
+      notes: item.notes,
+    })),
     products: selectedSvc.products,
     description: selectedSvc.description,
     notes: selectedSvc.notes,
