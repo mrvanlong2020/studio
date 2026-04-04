@@ -101,6 +101,14 @@ function fmtShootDate(d: string | null | undefined) {
   } catch { return d; }
 }
 
+function isFullyStaffed(b: BookingWithTasks): boolean {
+  return b.tasks.some(t => t.task_type === "chup") && b.tasks.some(t => t.task_type === "makeup");
+}
+
+function getStaffingStatus(b: BookingWithTasks): "du_nguoi" | "chua_du" {
+  return isFullyStaffed(b) ? "du_nguoi" : "chua_du";
+}
+
 function daysUntil(d: string | null | undefined): { days: number; label: string; color: string } | null {
   if (!d) return null;
   const today = new Date(); today.setHours(0,0,0,0);
@@ -234,9 +242,17 @@ function BookingCard({
   onAdd: () => void;
   onRemoveTask: (taskId: number) => void;
 }) {
-  const hasTasks = booking.tasks.length > 0;
+  const staffing = getStaffingStatus(booking);
+  const fully = staffing === "du_nguoi";
   const du = daysUntil(booking.shoot_date);
-  const borderColor = !hasTasks ? "border-l-red-400" : "border-l-emerald-400";
+  const borderColor = fully ? "border-l-emerald-400" : "border-l-red-400";
+
+  const hasTasks = booking.tasks.length > 0;
+  const statusBadge = !hasTasks
+    ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 dark:bg-red-900/30 font-medium">Chưa giao</span>
+    : !fully
+    ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 font-medium">Chưa đủ người</span>
+    : null;
 
   return (
     <div className={`rounded-xl border border-border border-l-4 ${borderColor} bg-card shadow-sm p-3 transition-all hover:shadow-md`}>
@@ -245,9 +261,7 @@ function BookingCard({
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-sm">{booking.customer_name}</span>
             <span className="text-xs text-muted-foreground font-mono">{booking.order_code}</span>
-            {!hasTasks && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 dark:bg-red-900/30 font-medium">Chưa giao</span>
-            )}
+            {statusBadge}
           </div>
           <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs text-muted-foreground">
             <span>{booking.customer_phone}</span>
@@ -255,10 +269,13 @@ function BookingCard({
           </div>
           <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs">
             <span className="flex items-center gap-1 text-muted-foreground">
-              <Calendar size={10} />{fmtShootDate(booking.shoot_date)}
+              <Calendar size={10} />Chụp: {fmtShootDate(booking.shoot_date)}
             </span>
             {du && <span className={du.color}>{du.label}</span>}
             {booking.location && <span className="text-muted-foreground">📍 {booking.location}</span>}
+          </div>
+          <div className="mt-0.5 text-xs text-muted-foreground/60">
+            Tạo: {fmtShootDate(booking.booking_created_at)}
           </div>
         </div>
         <button onClick={onAdd}
@@ -302,7 +319,7 @@ export default function TasksPage() {
 
   const [viewMode, setViewMode] = useState<"booking" | "kanban" | "list">("booking");
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<"all" | "chua_giao" | "da_giao">("all");
+  const [tab, setTab] = useState<"all" | "chua_du" | "du_nguoi">("all");
   const [assigningBooking, setAssigningBooking] = useState<BookingWithTasks | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
   const [filterAssignee, setFilterAssignee] = useState("");
@@ -325,8 +342,8 @@ export default function TasksPage() {
   // Filter booking-view data
   const filteredBookings = useMemo(() => {
     let data = [...bookingViewData];
-    if (tab === "chua_giao") data = data.filter(b => b.tasks.length === 0);
-    if (tab === "da_giao")   data = data.filter(b => b.tasks.length > 0);
+    if (tab === "chua_du")   data = data.filter(b => !isFullyStaffed(b));
+    if (tab === "du_nguoi")  data = data.filter(b => isFullyStaffed(b));
     if (search.trim()) {
       const q = search.toLowerCase();
       data = data.filter(b =>
@@ -349,7 +366,12 @@ export default function TasksPage() {
     if (!confirm("Bỏ giao việc này?")) return;
     setRemovingId(taskId);
     try {
-      await authFetch(`${BASE}/api/tasks/${taskId}`, { method: "DELETE" });
+      const res = await authFetch(`${BASE}/api/tasks/${taskId}`, { method: "DELETE" });
+      if (!res.ok && res.status !== 204) {
+        const e = await res.json().catch(() => ({}));
+        alert(e.error || "Không thể xoá giao việc này");
+        return;
+      }
       qc.invalidateQueries({ queryKey: ["tasks-booking-view"] });
       qc.invalidateQueries({ queryKey: ["/api/tasks"] });
     } finally { setRemovingId(null); }
@@ -366,7 +388,11 @@ export default function TasksPage() {
     done:        filteredTasks.filter(t => t.status === "done"),
   };
 
-  const counts = { all: bookingViewData.length, chua_giao: bookingViewData.filter(b => b.tasks.length === 0).length, da_giao: bookingViewData.filter(b => b.tasks.length > 0).length };
+  const counts = {
+    all:      bookingViewData.length,
+    chua_du:  bookingViewData.filter(b => !isFullyStaffed(b)).length,
+    du_nguoi: bookingViewData.filter(b => isFullyStaffed(b)).length,
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -414,9 +440,9 @@ export default function TasksPage() {
           {/* Tabs */}
           <div className="flex gap-1">
             {([
-              { key: "all",       label: `Tất cả (${counts.all})` },
-              { key: "chua_giao", label: `Chưa giao (${counts.chua_giao})` },
-              { key: "da_giao",   label: `Đã giao (${counts.da_giao})` },
+              { key: "all",      label: `Tất cả (${counts.all})` },
+              { key: "chua_du",  label: `Chưa đủ (${counts.chua_du})` },
+              { key: "du_nguoi", label: `Đủ người (${counts.du_nguoi})` },
             ] as { key: typeof tab; label: string }[]).map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
                 className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${tab === t.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
