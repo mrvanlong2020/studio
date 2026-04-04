@@ -2608,17 +2608,22 @@ function ShowDetailPanel({
 const HOUR_PX = 64; // px per hour in day view
 
 function MonthDayCell({
-  date, bookings, isSelected, isOtherMonth, onDayClick, onEventClick,
+  date, bookings, isSelected, isOtherMonth, onDayClick, onEventClick, density,
 }: {
   date: Date; bookings: Booking[]; isSelected: boolean; isOtherMonth?: boolean;
   onDayClick: (d: Date) => void; onEventClick: (b: Booking) => void;
+  density?: "compact" | "comfortable";
 }) {
   const { lunar, solarHoliday, lunarHoliday } = useMemo(() => getLunarInfo(date), [date]);
   const isSun = date.getDay() === 0;
   const isSat = date.getDay() === 6;
   const isLunarNew = lunar.day === 1;
   const isRam = lunar.day === 15;
-  const MAX_VISIBLE = 3;
+  const MAX_VISIBLE = density === "comfortable" ? 4 : 3;
+
+  const cellMinHeight = density === "comfortable"
+    ? "160px"
+    : "clamp(130px, calc((100vh - 260px) / 6), 220px)";
 
   return (
     <div
@@ -2628,7 +2633,7 @@ function MonthDayCell({
         isSelected ? "bg-primary/5" : isToday(date) ? "bg-orange-50/30 dark:bg-orange-950/10" : "hover:bg-muted/20",
         isOtherMonth ? "opacity-25" : "",
       ].join(" ")}
-      style={{ minHeight: "clamp(130px, calc((100vh - 260px) / 6), 220px)" }}
+      style={{ minHeight: cellMinHeight }}
       onClick={() => onDayClick(date)}
     >
       {/* Day header — compact */}
@@ -2943,6 +2948,19 @@ function CalendarPageInner() {
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [viewingBooking, setViewingBooking] = useState<Booking | null>(null);
   const [showLunar, setShowLunar] = useState(true);
+  const [calendarDensity, setCalendarDensity] = useState<"compact" | "comfortable">(() => {
+    try {
+      const saved = localStorage.getItem("amazingCalDensity");
+      return (saved === "compact" || saved === "comfortable") ? saved : "comfortable";
+    } catch { return "comfortable"; }
+  });
+  const toggleDensity = () => {
+    setCalendarDensity(d => {
+      const next = d === "comfortable" ? "compact" : "comfortable";
+      try { localStorage.setItem("amazingCalDensity", next); } catch { /* ignore */ }
+      return next;
+    });
+  };
   const { isAdmin, toggle: toggleAdminMode } = useViewMode();
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -3163,6 +3181,17 @@ function CalendarPageInner() {
             )}
           </div>
           <div className="flex items-center gap-1">
+            <button
+              onClick={toggleDensity}
+              title={calendarDensity === "comfortable" ? "Đang: Rộng — bấm để thu gọn" : "Đang: Thu gọn — bấm để rộng hơn"}
+              className={`px-2 h-8 rounded-lg border text-xs font-medium transition-all ${
+                calendarDensity === "comfortable"
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border bg-background text-muted-foreground hover:border-primary/40"
+              }`}
+            >
+              {calendarDensity === "comfortable" ? "Rộng" : "Thu gọn"}
+            </button>
             <button onClick={prevMonth} className="w-8 h-8 rounded-lg border bg-background hover:bg-muted flex items-center justify-center transition-colors"><ChevronLeft className="w-4 h-4" /></button>
             <button
               onClick={() => { const t = new Date(); setCurrentDate(t); setSelectedDate(t); }}
@@ -3179,26 +3208,29 @@ function CalendarPageInner() {
           ))}
         </div>
 
-        {/* Grid */}
-        <div className="grid grid-cols-7">
-          {/* Leading days from prev month */}
-          {Array.from({ length: firstDayOfMonth }).map((_, i) => {
-            const d = new Date(monthStart); d.setDate(d.getDate() - (firstDayOfMonth - i));
-            return <MonthDayCell key={`p${i}`} date={d} bookings={getBookingsForDay(d)} isSelected={false} isOtherMonth onDayClick={handleDayClick} onEventClick={handleEventClickFromMonth} />;
-          })}
-          {/* Current month days */}
-          {daysInMonth.map(day => (
-            <MonthDayCell key={day.toISOString()} date={day} bookings={getBookingsForDay(day)}
-              isSelected={isSameDay(day, selectedDate)}
-              onDayClick={handleDayClick}
-              onEventClick={handleEventClickFromMonth}
-            />
-          ))}
-          {/* Trailing days from next month */}
-          {Array.from({ length: (7 - ((firstDayOfMonth + daysInMonth.length) % 7)) % 7 }).map((_, i) => {
-            const d = new Date(monthEnd); d.setDate(d.getDate() + i + 1);
-            return <MonthDayCell key={`n${i}`} date={d} bookings={getBookingsForDay(d)} isSelected={false} isOtherMonth onDayClick={handleDayClick} onEventClick={handleEventClickFromMonth} />;
-          })}
+        {/* Grid — scrollable body */}
+        <div className="overflow-y-auto" style={{ maxHeight: "calc(100svh - 260px)" }}>
+          <div className="grid grid-cols-7">
+            {/* Leading days from prev month */}
+            {Array.from({ length: firstDayOfMonth }).map((_, i) => {
+              const d = new Date(monthStart); d.setDate(d.getDate() - (firstDayOfMonth - i));
+              return <MonthDayCell key={`p${i}`} date={d} bookings={getBookingsForDay(d)} isSelected={false} isOtherMonth onDayClick={handleDayClick} onEventClick={handleEventClickFromMonth} density={calendarDensity} />;
+            })}
+            {/* Current month days */}
+            {daysInMonth.map(day => (
+              <MonthDayCell key={day.toISOString()} date={day} bookings={getBookingsForDay(day)}
+                isSelected={isSameDay(day, selectedDate)}
+                onDayClick={handleDayClick}
+                onEventClick={handleEventClickFromMonth}
+                density={calendarDensity}
+              />
+            ))}
+            {/* Trailing days from next month */}
+            {Array.from({ length: (7 - ((firstDayOfMonth + daysInMonth.length) % 7)) % 7 }).map((_, i) => {
+              const d = new Date(monthEnd); d.setDate(d.getDate() + i + 1);
+              return <MonthDayCell key={`n${i}`} date={d} bookings={getBookingsForDay(d)} isSelected={false} isOtherMonth onDayClick={handleDayClick} onEventClick={handleEventClickFromMonth} density={calendarDensity} />;
+            })}
+          </div>
         </div>
 
         {/* Footer legend */}
