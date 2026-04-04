@@ -2063,20 +2063,139 @@ function ShowDetailPanel({
 
   const handleViewInvoice = async () => {
     try {
-      const res = await authFetch(`${BASE}/api/contracts?customerId=${booking.customerId}`);
-      const rows = res.ok ? await res.json() : [];
-      const contract = Array.isArray(rows) ? rows[0] : null;
-      if (!contract) {
-        alert("Không tìm thấy hóa đơn của show này");
-        return;
+      // 1. Tìm hóa đơn theo bookingId trước
+      let contractId: number | null = null;
+
+      const byBookingRes = await authFetch(`${BASE}/api/contracts?bookingId=${booking.id}`);
+      const byBookingRows = byBookingRes.ok ? await byBookingRes.json() : [];
+      if (Array.isArray(byBookingRows) && byBookingRows.length > 0) {
+        contractId = byBookingRows[0].id;
       }
-      const linkRes = await authFetch(`${BASE}/api/contracts/${contract.id}/sign-link`, { method: "POST" });
+
+      // 2. Nếu chưa có → tìm theo customerId
+      if (!contractId && booking.customerId) {
+        const byCustomerRes = await authFetch(`${BASE}/api/contracts?customerId=${booking.customerId}`);
+        const byCustomerRows = byCustomerRes.ok ? await byCustomerRes.json() : [];
+        if (Array.isArray(byCustomerRows) && byCustomerRows.length > 0) {
+          contractId = byCustomerRows[0].id;
+        }
+      }
+
+      // 3. Nếu vẫn không có → tự tạo mới từ dữ liệu booking
+      if (!contractId) {
+        if (!booking.customerId) {
+          alert("Show này chưa có khách hàng để tạo hóa đơn");
+          return;
+        }
+        const createRes = await authFetch(`${BASE}/api/contracts`, {
+          method: "POST",
+          body: JSON.stringify({
+            bookingId: booking.id,
+            customerId: booking.customerId,
+            title: booking.packageType || booking.serviceCategory || "Dịch vụ chụp ảnh",
+            totalValue: (fullDetail ?? booking).totalAmount ?? 0,
+            status: "active",
+          }),
+        });
+        if (!createRes.ok) throw new Error("Không tạo được hóa đơn");
+        const created = await createRes.json();
+        contractId = created.id;
+        qc.invalidateQueries({ queryKey: ["contracts"] });
+      }
+
+      // 4. Tạo link ký + QR
+      const linkRes = await authFetch(`${BASE}/api/contracts/${contractId}/sign-link`, { method: "POST" });
       if (!linkRes.ok) throw new Error("Không tạo được link ký");
       const data = await linkRes.json();
-      const qr = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(data.signUrl)}`;
-      const win = window.open("", "_blank", "width=980,height=760");
-      if (!win) return;
-      win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8" /><title>Xem hóa đơn</title><style>body{font-family:Arial,sans-serif;margin:0;background:#faf7fb;color:#222}.wrap{max-width:980px;margin:0 auto;padding:24px}.card{background:#fff;border:1px solid #eadcec;border-radius:18px;padding:24px;box-shadow:0 10px 30px rgba(139,26,107,.08)}img{width:260px;height:260px;border:1px solid #eee;border-radius:16px}</style></head><body><div class="wrap"><div class="card"><h1 style="margin:0 0 8px;color:#8B1A6B">Xem hóa đơn & ký online</h1><p style="margin:0 0 16px">Gửi link/QR cho khách ký tên online.</p><div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap"><img src="${qr}" alt="QR ký online" /><div><p><strong>Link ký:</strong></p><p style="word-break:break-all">${data.signUrl}</p><button onclick="navigator.clipboard.writeText('${data.signUrl}')" style="background:#8B1A6B;color:#fff;border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer">Sao chép link</button></div></div></div></div></body></html>`);
+      const signUrl = data.signUrl as string;
+      const qr = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(signUrl)}`;
+
+      // 5. Mở popup với hóa đơn + QR
+      const win = window.open("", "_blank", "width=1020,height=820");
+      if (!win) { alert("Trình duyệt đã chặn popup. Vui lòng cho phép popup từ trang này."); return; }
+      win.document.write(`<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Hóa đơn ký online – ${booking.customerName}</title>
+<style>
+  body{font-family:Arial,sans-serif;margin:0;background:#f6f0fb;color:#222}
+  .wrap{max-width:860px;margin:0 auto;padding:28px 20px}
+  .card{background:#fff;border:1px solid #e0d0ec;border-radius:20px;padding:28px;box-shadow:0 8px 32px rgba(139,26,107,.10)}
+  h1{margin:0 0 4px;color:#8B1A6B;font-size:22px}
+  .sub{margin:0 0 22px;color:#888;font-size:14px}
+  .row{display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap}
+  .qr-box{flex-shrink:0;text-align:center}
+  .qr-box img{width:260px;height:260px;border:3px solid #e8d0f0;border-radius:16px;display:block}
+  .qr-label{margin-top:8px;font-size:12px;color:#888}
+  .info{flex:1;min-width:240px}
+  .info-row{margin-bottom:10px}
+  .info-row label{display:block;font-size:11px;font-weight:700;color:#9b59b6;text-transform:uppercase;margin-bottom:3px}
+  .info-row p{margin:0;font-size:15px;font-weight:600;color:#222}
+  .link-box{background:#fdf4ff;border:1px solid #e0c8f0;border-radius:12px;padding:14px;margin-top:16px}
+  .link-box p{margin:0 0 6px;font-size:12px;color:#888}
+  .link-url{font-size:13px;color:#6b2d63;word-break:break-all;margin:0 0 12px;font-weight:600}
+  .btn{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:10px;padding:11px 18px;font-size:14px;font-weight:700;cursor:pointer}
+  .btn-primary{background:#8B1A6B;color:#fff}
+  .btn-ghost{background:#f3e8f3;color:#6b2d63}
+  .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+  .badge-pending{background:#fef3c7;color:#d97706}
+  .badge-signed{background:#d1fae5;color:#065f46}
+  #copyMsg{display:none;color:#27ae60;font-size:12px;font-weight:700;margin-left:8px}
+  .divider{border:none;border-top:1px solid #f0e0f0;margin:20px 0}
+  .footer{text-align:center;color:#ccc;font-size:11px;margin-top:20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>🧾 Hóa đơn & ký tên online</h1>
+    <p class="sub">Gửi link hoặc QR cho khách ký tên điện tử</p>
+    <div class="row">
+      <div class="qr-box">
+        <img src="${qr}" alt="QR Code" />
+        <p class="qr-label">Khách quét QR để ký</p>
+      </div>
+      <div class="info">
+        <div class="info-row">
+          <label>Khách hàng</label>
+          <p>${booking.customerName}</p>
+        </div>
+        <div class="info-row">
+          <label>Dịch vụ</label>
+          <p>${booking.packageType || booking.serviceCategory || "—"}</p>
+        </div>
+        <div class="info-row">
+          <label>Ngày chụp</label>
+          <p>${booking.shootDate ? new Date(booking.shootDate).toLocaleDateString("vi-VN") : "—"} ${booking.shootTime?.slice(0, 5) ?? ""}</p>
+        </div>
+        <div class="link-box">
+          <p>Link ký online:</p>
+          <p class="link-url">${signUrl}</p>
+          <button class="btn btn-primary" onclick="copyLink()">📋 Sao chép link</button>
+          <span id="copyMsg">✓ Đã sao chép!</span>
+        </div>
+      </div>
+    </div>
+    <hr class="divider" />
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <button class="btn btn-ghost" onclick="window.open('${signUrl}','_blank')">✍️ Mở trang ký</button>
+      <button class="btn btn-ghost" onclick="window.print()">🖨️ In trang này</button>
+    </div>
+    <p class="footer">Hóa đơn được tạo bởi Amazing Studio</p>
+  </div>
+</div>
+<script>
+  function copyLink(){
+    navigator.clipboard.writeText('${signUrl}').then(()=>{
+      const m=document.getElementById('copyMsg');
+      m.style.display='inline';
+      setTimeout(()=>m.style.display='none',2500);
+    });
+  }
+</script>
+</body></html>`);
       win.document.close();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Không mở được hóa đơn");

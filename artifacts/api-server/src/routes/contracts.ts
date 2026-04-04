@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { contractsTable, customersTable, bookingsTable } from "@workspace/db/schema";
+import { contractsTable, customersTable, bookingsTable, notificationsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import crypto from "node:crypto";
 
@@ -8,6 +8,7 @@ const router: IRouter = Router();
 
 router.get("/contracts", async (req, res) => {
   const customerId = req.query.customerId ? parseInt(req.query.customerId as string) : undefined;
+  const bookingId = req.query.bookingId ? parseInt(req.query.bookingId as string) : undefined;
   const rows = await db
     .select({
       id: contractsTable.id,
@@ -33,6 +34,7 @@ router.get("/contracts", async (req, res) => {
 
   let filtered = rows;
   if (customerId) filtered = filtered.filter(c => c.customerId === customerId);
+  if (bookingId) filtered = filtered.filter(c => c.bookingId === bookingId);
   res.json(filtered);
 });
 
@@ -68,8 +70,9 @@ router.post("/contracts/:id/sign-link", async (req, res): Promise<void> => {
     return;
   }
 
-  const baseUrl = process.env.PUBLIC_APP_URL || process.env.REPLIT_DEV_DOMAIN || "";
-  const signUrl = `${baseUrl.replace(/\/$/, "")}/contracts/${id}/sign`;
+  const rawBase = process.env.PUBLIC_APP_URL || process.env.REPLIT_DEV_DOMAIN || "";
+  const baseUrl = rawBase.startsWith("http") ? rawBase : `https://${rawBase}`;
+  const signUrl = `${baseUrl.replace(/\/$/, "")}/api/contracts/${id}/sign`;
 
   res.json({
     signUrl,
@@ -160,7 +163,27 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
     c.addEventListener('pointermove', e => { if(!drawing) return; const p = pos(e); ctx.lineWidth = 2.5; ctx.lineCap='round'; ctx.strokeStyle='#222'; ctx.beginPath(); ctx.moveTo(last[0], last[1]); ctx.lineTo(p[0], p[1]); ctx.stroke(); last = p; });
     c.addEventListener('pointerup', () => { drawing = false; last = null; });
     function clearSig(){ ctx.clearRect(0,0,c.width,c.height); }
-    async function submitSign(){ document.getElementById('msg').textContent = 'Đã ghi nhận chữ ký mẫu. Kết nối backend lưu chữ ký là bước tiếp theo.'; }
+    async function submitSign(){
+      const msg = document.getElementById('msg');
+      const empty = ctx.getImageData(0,0,c.width,c.height).data.every(v=>v===0);
+      if(empty){ msg.textContent='⚠️ Vui lòng ký tên trước khi hoàn tất.'; msg.style.color='#c0392b'; return; }
+      msg.textContent='Đang lưu chữ ký...'; msg.style.color='#8B1A6B';
+      try{
+        const sigData = c.toDataURL('image/png');
+        const r = await fetch(window.location.href.replace('/sign','') + '/mark-signed', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ signedAt: new Date().toISOString(), signatureData: sigData })
+        });
+        if(r.ok){
+          msg.textContent='✅ Chữ ký đã được lưu thành công! Cảm ơn bạn.';
+          msg.style.color='#27ae60';
+          document.querySelectorAll('button').forEach(b=>b.disabled=true);
+        } else {
+          msg.textContent='❌ Lỗi khi lưu chữ ký. Vui lòng thử lại.'; msg.style.color='#c0392b';
+        }
+      } catch(e){ msg.textContent='❌ Lỗi kết nối. Vui lòng thử lại.'; msg.style.color='#c0392b'; }
+    }
   </script>
 </body>
 </html>`;
@@ -261,6 +284,17 @@ router.post("/contracts/:id/mark-signed", async (req, res): Promise<void> => {
       status: "completed",
     }).where(eq(bookingsTable.id, existing.bookingId));
   }
+
+  // Tạo thông báo nội bộ
+  const [customer] = existing.customerId
+    ? await db.select({ name: customersTable.name }).from(customersTable).where(eq(customersTable.id, existing.customerId))
+    : [null];
+  await db.insert(notificationsTable).values({
+    type: "contract_signed",
+    title: "Khách ký hợp đồng online",
+    body: `${customer?.name ?? "Khách hàng"} vừa ký hợp đồng ${existing.contractCode} online thành công.`,
+    isRead: false,
+  } as Record<string, unknown>).catch(() => null);
 
   res.json({ ok: true });
 });
