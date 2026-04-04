@@ -2061,6 +2061,28 @@ function ShowDetailPanel({
     win.document.close();
   };
 
+  const handleViewInvoice = async () => {
+    try {
+      const res = await authFetch(`${BASE}/api/contracts?customerId=${booking.customerId}`);
+      const rows = res.ok ? await res.json() : [];
+      const contract = Array.isArray(rows) ? rows.find((c: { bookingId?: number }) => c.bookingId === booking.id) : null;
+      if (!contract) {
+        alert("Không tìm thấy hóa đơn của show này");
+        return;
+      }
+      const linkRes = await authFetch(`${BASE}/api/contracts/${contract.id}/sign-link`, { method: "POST" });
+      if (!linkRes.ok) throw new Error("Không tạo được link ký");
+      const data = await linkRes.json();
+      const qr = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(data.signUrl)}`;
+      const win = window.open("", "_blank", "width=980,height=760");
+      if (!win) return;
+      win.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8" /><title>Xem hóa đơn</title><style>body{font-family:Arial,sans-serif;margin:0;background:#faf7fb;color:#222}.wrap{max-width:980px;margin:0 auto;padding:24px}.card{background:#fff;border:1px solid #eadcec;border-radius:18px;padding:24px;box-shadow:0 10px 30px rgba(139,26,107,.08)}img{width:260px;height:260px;border:1px solid #eee;border-radius:16px}</style></head><body><div class="wrap"><div class="card"><h1 style="margin:0 0 8px;color:#8B1A6B">Xem hóa đơn & ký online</h1><p style="margin:0 0 16px">Gửi link/QR cho khách ký tên online.</p><div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap"><img src="${qr}" alt="QR ký online" /><div><p><strong>Link ký:</strong></p><p style="word-break:break-all">${data.signUrl}</p><button onclick="navigator.clipboard.writeText('${data.signUrl}')" style="background:#8B1A6B;color:#fff;border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer">Sao chép link</button></div></div></div></div></body></html>`);
+      win.document.close();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Không mở được hóa đơn");
+    }
+  };
+
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background">
       {/* ── Header bar ── */}
@@ -2097,6 +2119,13 @@ function ShowDetailPanel({
           onClick={handlePrintContract}
           className="p-1.5 rounded-lg text-violet-500 hover:text-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950/30 transition-colors flex-shrink-0"
           title="Xuất hợp đồng PDF"
+        >
+          <FileText className="w-4 h-4" />
+        </button>
+        <button
+          onClick={handleViewInvoice}
+          className="p-1.5 rounded-lg text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors flex-shrink-0"
+          title="Xem hóa đơn và QR ký online"
         >
           <FileText className="w-4 h-4" />
         </button>
