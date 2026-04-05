@@ -1241,7 +1241,7 @@ export default function PaymentsPage() {
                                 onClick={() => { setProofPreviewUrl(p.proofImageUrl!); setProofPreview(true); }}
                                 className="text-[10px] px-2 py-1 bg-primary/10 text-primary rounded-lg flex items-center gap-0.5 font-medium"
                               >
-                                <Eye className="w-3 h-3" /> Ảnh
+                                <Eye className="w-3 h-3" /> {p.paymentType === "deposit" ? "Ảnh cọc" : "Ảnh"}
                               </button>
                             )}
                             {effectiveIsAdmin && (
@@ -1267,6 +1267,16 @@ export default function PaymentsPage() {
                           )}
                           {p.notes && (
                             <p className="pl-4 italic">"{p.notes}"</p>
+                          )}
+                          {p.paymentType === "deposit" && p.proofImageUrl && (
+                            <div className="pl-4 pt-1">
+                              <img
+                                src={p.proofImageUrl}
+                                alt="Ảnh cọc"
+                                className="w-20 h-20 rounded-xl object-cover border border-border cursor-pointer"
+                                onClick={() => { setProofPreviewUrl(p.proofImageUrl!); setProofPreview(true); }}
+                              />
+                            </div>
                           )}
                         </div>
                       </div>
