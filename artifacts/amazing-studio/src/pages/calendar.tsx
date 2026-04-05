@@ -841,6 +841,7 @@ function ShowFormPanel({
 
   const save = async () => {
     setError("");
+    setProofWarning("");
     if (!customerName.trim()) { setError("Vui lòng nhập tên khách hàng"); return; }
     if (!shootDate) { setError("Vui lòng chọn ngày hợp đồng"); return; }
     const isMulti = subDrafts.length >= 2;
@@ -996,6 +997,8 @@ function ShowFormPanel({
                 body: JSON.stringify({ proofImageUrl: depositProofImage }),
               });
               if (!patchRes.ok) proofUploadFailed = true;
+            } else {
+              proofUploadFailed = true;
             }
           } catch {
             proofUploadFailed = true;
@@ -1089,6 +1092,8 @@ function ShowFormPanel({
               body: JSON.stringify({ proofImageUrl: depositProofImage }),
             });
             if (!patchRes.ok) singleProofUploadFailed = true;
+          } else {
+            singleProofUploadFailed = true;
           }
         } catch {
           singleProofUploadFailed = true;
