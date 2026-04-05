@@ -554,8 +554,7 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
         </div>
       </div>
 
-      {/* Panel lợi nhuận (chỉ hiện khi gói được chọn) */}
-      {isPkg && line.price > 0 && (
+      {isAdmin && isPkg && line.price > 0 && (
         <div className="text-[11px] rounded-lg border overflow-hidden">
           <div className="bg-emerald-600 text-white px-3 py-1.5 flex justify-between items-center">
             <span className="font-bold">📊 Dự tính lợi nhuận</span>
@@ -580,21 +579,18 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
           </div>
           <div className="bg-red-50 px-3 py-1.5 space-y-0.5 text-[10px]">
             <p className="font-semibold text-red-800">(-) Chi phí sản xuất</p>
-            {/* Cast chụp: thực tế nếu có nhân sự */}
             {photoCast > 0 && (
               <div className="flex justify-between text-blue-700">
                 <span>📷 Cast chụp{line.photoId ? ` — ${photographers.find(p => p.id === line.photoId)?.name ?? ""}` : ""}</span>
                 <span>{fmtVND(photoCast)}</span>
               </div>
             )}
-            {/* Cast makeup: thực tế nếu có nhân sự */}
             {makeupCast > 0 && (
               <div className="flex justify-between text-pink-700">
                 <span>💄 Cast makeup{line.makeupId ? ` — ${makeupArtists.find(m => m.id === line.makeupId)?.name ?? ""}` : ""}</span>
                 <span>{fmtVND(makeupCast)}</span>
               </div>
             )}
-            {/* PTS cast */}
             {ptsCast > 0 && (
               <div className="flex justify-between text-purple-700">
                 <span>🖥️ PTS chỉnh ảnh</span>
