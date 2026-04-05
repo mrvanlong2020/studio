@@ -249,6 +249,7 @@ router.post("/bookings", async (req, res) => {
         paymentType:   "deposit",
         collectorName: depCollector,
         paidDate:      shootDate || null,
+        proofImageUrl: depositProofImageUrl || null,
         notes:         "Cọc giữ lịch",
       });
     }
@@ -356,6 +357,7 @@ router.post("/bookings", async (req, res) => {
       paymentType:   "deposit",
       collectorName: depCollector,
       paidDate:      shootDate || null,
+      proofImageUrl: depositProofImageUrl || null,
       notes:         "Cọc giữ lịch",
     });
   }
