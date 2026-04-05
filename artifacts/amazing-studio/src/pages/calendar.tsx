@@ -208,7 +208,7 @@ function lookupCastByPkg(staffId: number | null, role: string, packageId: number
   return found?.amount ?? null;
 }
 
-function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRates, allCastRates, allStaff, onChange, onRemove }: {
+function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRates, allCastRates, allStaff, onChange, onRemove, isAdmin }: {
   line: OrderLine;
   photographers: Staff[];
   makeupArtists: Staff[];
@@ -218,6 +218,7 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
   allStaff: Staff[];
   onChange: (u: OrderLine) => void;
   onRemove?: () => void;
+  isAdmin: boolean;
 }) {
   const [useCustom, setUseCustom] = useState(!line.serviceId && !line.serviceKey && !!line.serviceName);
   const [uploadingConcept, setUploadingConcept] = useState(false);
@@ -616,7 +617,7 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
 
 // ─── Show form (create / edit booking) ────────────────────────────────────────
 function ShowFormPanel({
-  date, initialTime = "07:00", onDateChange, booking, onClose, onSaved, siblingBookings = [],
+  date, initialTime = "07:00", onDateChange, booking, onClose, onSaved, siblingBookings = [], isAdmin,
 }: {
   date: Date;
   initialTime?: string;
@@ -625,6 +626,7 @@ function ShowFormPanel({
   onClose: () => void;
   onSaved: () => void;
   siblingBookings?: Booking[];
+  isAdmin: boolean;
 }) {
   const qc = useQueryClient();
   const isEdit = !!booking;
@@ -1251,7 +1253,7 @@ function ShowFormPanel({
                       <label className="text-[10px] text-muted-foreground mb-1 block">Gói / dịch vụ</label>
                       <div className="space-y-1.5">
                         {sub.items.map(line => (
-                          <OrderLineRow key={line.tempId} line={line} photographers={photographers} makeupArtists={makeupArtists} services={allServices} allStaffRates={allStaffRates} allCastRates={allCastRates} allStaff={allStaff}
+                          <OrderLineRow key={line.tempId} line={line} photographers={photographers} makeupArtists={makeupArtists} services={allServices} allStaffRates={allStaffRates} allCastRates={allCastRates} allStaff={allStaff} isAdmin={isAdmin}
                             onChange={updated => updateSubDraft(sub.id, { items: sub.items.map(l => l.tempId === line.tempId ? updated : l) })}
                             onRemove={sub.items.length > 1 ? () => updateSubDraft(sub.id, { items: sub.items.filter(l => l.tempId !== line.tempId) }) : undefined}
                           />
@@ -3480,6 +3482,7 @@ function CalendarPageInner() {
           onClose={editingBooking && viewingBooking ? () => { setCalView("detail"); setEditingBooking(null); } : handleBackToDay}
           onSaved={handleFormSaved}
           siblingBookings={editingSiblings}
+          isAdmin={isAdmin}
         />
       </div>
     );
