@@ -321,7 +321,8 @@ router.post("/payments/sync-deposits", async (_req, res) => {
 
     // Lấy tất cả deposit payments cho booking này, sắp xếp theo id (cũ nhất trước)
     const depPayments = await pool.query(`
-      SELECT id, amount FROM payments
+      SELECT id, amount, proof_image_url
+      FROM payments
       WHERE booking_id = $1 AND payment_type = 'deposit'
       ORDER BY id ASC
     `, [bkId]);
@@ -329,8 +330,8 @@ router.post("/payments/sync-deposits", async (_req, res) => {
     if (depPayments.rows.length === 0) {
       // Không có deposit record → tạo mới
       await pool.query(`
-        INSERT INTO payments (booking_id, amount, payment_method, payment_type, paid_date, notes, paid_at)
-        VALUES ($1, $2, 'cash', 'deposit', $3, 'Cọc giữ lịch', NOW())
+        INSERT INTO payments (booking_id, amount, payment_method, payment_type, paid_date, notes, proof_image_url, paid_at)
+        VALUES ($1, $2, 'cash', 'deposit', $3, 'Cọc giữ lịch', NULL, NOW())
       `, [bkId, String(depAmount), bk.shoot_date || null]);
       report.created++;
       affectedBookingIds.push(bkId);
@@ -353,6 +354,12 @@ router.post("/payments/sync-deposits", async (_req, res) => {
         );
         report.updated++;
         affectedBookingIds.push(bkId);
+      }
+      if (!depPayments.rows[0].proof_image_url && bk.status !== null) {
+        await pool.query(
+          `UPDATE payments SET proof_image_url = COALESCE(proof_image_url, NULL) WHERE id = $1`,
+          [depPayments.rows[0].id]
+        );
       }
     }
   }
