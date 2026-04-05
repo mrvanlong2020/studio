@@ -699,6 +699,7 @@ function ShowFormPanel({
     return raw.map((s: { name: string; amount: number }, i: number) => ({ id: `s${i}`, ...s }));
   });
   const [error, setError] = useState("");
+  const [proofWarning, setProofWarning] = useState("");
   const [saving, setSaving] = useState(false);
   const hasSiblingEdit = siblingBookings.length > 0;
 
@@ -809,7 +810,32 @@ function ShowFormPanel({
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = ev => setDepositProofImage(ev.target?.result as string);
+    reader.onload = ev => {
+      const original = ev.target?.result as string;
+      const img = new Image();
+      img.onload = () => {
+        const MAX_BYTES = 1.5 * 1024 * 1024;
+        const canvas = document.createElement("canvas");
+        let { width, height } = img;
+        const MAX_DIM = 1600;
+        if (width > MAX_DIM || height > MAX_DIM) {
+          const scale = MAX_DIM / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+        let quality = 0.85;
+        let compressed = canvas.toDataURL("image/jpeg", quality);
+        while (compressed.length * 0.75 > MAX_BYTES && quality > 0.3) {
+          quality -= 0.1;
+          compressed = canvas.toDataURL("image/jpeg", quality);
+        }
+        setDepositProofImage(compressed);
+      };
+      img.src = original;
+    };
     reader.readAsDataURL(file);
   };
 
@@ -959,6 +985,7 @@ function ShowFormPanel({
         }).then(r => { if (!r.ok) throw new Error("Lỗi tạo hợp đồng"); return r.json(); });
 
         // Upload ảnh cọc riêng sau khi booking tạo xong (tách luồng để không làm fail booking)
+        let proofUploadFailed = false;
         if (depositProofImage && depositNum > 0 && saved?.id) {
           try {
             const pmts = await authFetch(`${BASE}/api/payments?bookingId=${saved.id}`).then(r => r.ok ? r.json() : []).catch(() => []);
@@ -968,15 +995,21 @@ function ShowFormPanel({
                 method: "PATCH", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ proofImageUrl: depositProofImage }),
               });
-              if (!patchRes.ok) setError("Ảnh cọc chưa lưu được — đơn đã tạo thành công");
+              if (!patchRes.ok) proofUploadFailed = true;
             }
           } catch {
-            setError("Ảnh cọc chưa lưu được — đơn đã tạo thành công");
+            proofUploadFailed = true;
           }
         }
 
         qc.invalidateQueries({ queryKey: ["bookings"] });
         qc.invalidateQueries({ queryKey: ["customers"] });
+        if (proofUploadFailed) {
+          // Booking tạo xong, chỉ ảnh cọc chưa lưu — giữ form mở để hiện warning
+          setSaving(false);
+          setProofWarning("Ảnh cọc chưa lưu được — đơn đã tạo thành công. Bạn có thể đóng form.");
+          return;
+        }
         onSaved();
         return;
       }
@@ -1044,7 +1077,8 @@ function ShowFormPanel({
         }).then(r => { if (!r.ok) throw new Error("Lỗi tạo đơn"); return r.json(); });
       }
 
-      // Upload ảnh cọc riêng sau khi booking tạo/cập nhật xong (tách luồng, không làm fail booking)
+      // Upload ảnh cọc riêng sau khi booking tạo xong (tách luồng, không làm fail booking)
+      let singleProofUploadFailed = false;
       if (!isEdit && depositProofImage && finalDeposit > 0 && saved?.id) {
         try {
           const pmts = await authFetch(`${BASE}/api/payments?bookingId=${saved.id}`).then(r => r.ok ? r.json() : []).catch(() => []);
@@ -1054,15 +1088,21 @@ function ShowFormPanel({
               method: "PATCH", headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ proofImageUrl: depositProofImage }),
             });
-            if (!patchRes.ok) setError("Ảnh cọc chưa lưu được — đơn đã tạo thành công");
+            if (!patchRes.ok) singleProofUploadFailed = true;
           }
         } catch {
-          setError("Ảnh cọc chưa lưu được — đơn đã tạo thành công");
+          singleProofUploadFailed = true;
         }
       }
 
       qc.invalidateQueries({ queryKey: ["bookings"] });
       qc.invalidateQueries({ queryKey: ["customers"] });
+      if (singleProofUploadFailed) {
+        // Booking tạo xong, chỉ ảnh cọc chưa lưu — giữ form mở để hiện warning
+        setSaving(false);
+        setProofWarning("Ảnh cọc chưa lưu được — đơn đã tạo thành công. Bạn có thể đóng form.");
+        return;
+      }
       onSaved();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Có lỗi, thử lại");
@@ -1103,6 +1143,11 @@ function ShowFormPanel({
           {error && (
             <div className="flex items-center gap-2 p-3 bg-destructive/10 rounded-xl text-destructive text-sm">
               <AlertCircle className="w-4 h-4 flex-shrink-0" /> {error}
+            </div>
+          )}
+          {proofWarning && (
+            <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-300 rounded-xl text-yellow-800 text-sm">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 text-yellow-500" /> {proofWarning}
             </div>
           )}
 
