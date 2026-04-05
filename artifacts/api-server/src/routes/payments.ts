@@ -355,7 +355,7 @@ router.post("/payments/sync-deposits", async (_req, res) => {
         report.updated++;
         affectedBookingIds.push(bkId);
       }
-      if (!depPayments.rows[0].proof_image_url && bk.status !== null) {
+      if (!depPayments.rows[0].proof_image_url) {
         await pool.query(
           `UPDATE payments SET proof_image_url = COALESCE(proof_image_url, NULL) WHERE id = $1`,
           [depPayments.rows[0].id]
