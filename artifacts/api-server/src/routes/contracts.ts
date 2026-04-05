@@ -323,6 +323,10 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
         }
       };
       window.goBack = function goBack() {
+        if (window.opener && !window.opener.closed) {
+          window.close();
+          return;
+        }
         if (window.history.length > 1) {
           window.history.back();
           return;
