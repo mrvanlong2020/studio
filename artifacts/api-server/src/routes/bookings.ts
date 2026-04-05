@@ -197,7 +197,7 @@ router.post("/bookings", async (req, res) => {
     totalAmount, depositAmount, discountAmount, items, surcharges, notes, internalNotes,
     assignedStaff, parentId, serviceLabel, isParentContract, includedRetouchedPhotosSnapshot,
     // Deposit payment fields
-    depositPaymentMethod, depositCollector,
+    depositPaymentMethod, depositCollector, depositProofImageUrl,
     // Multi-service contract support
     subServices,
     // Task #24: link to package (tracking only)
