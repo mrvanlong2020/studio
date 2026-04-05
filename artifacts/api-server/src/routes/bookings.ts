@@ -197,7 +197,7 @@ router.post("/bookings", async (req, res) => {
     totalAmount, depositAmount, discountAmount, items, surcharges, notes, internalNotes,
     assignedStaff, parentId, serviceLabel, isParentContract, includedRetouchedPhotosSnapshot,
     // Deposit payment fields
-    depositPaymentMethod, depositCollector, depositProofImageUrl,
+    depositPaymentMethod, depositCollector,
     // Multi-service contract support
     subServices,
     // Task #24: link to package (tracking only)
@@ -249,7 +249,6 @@ router.post("/bookings", async (req, res) => {
         paymentType:   "deposit",
         collectorName: depCollector,
         paidDate:      shootDate || null,
-        proofImageUrl: depositProofImageUrl || null,
         notes:         "Cọc giữ lịch",
       });
     }
@@ -357,7 +356,6 @@ router.post("/bookings", async (req, res) => {
       paymentType:   "deposit",
       collectorName: depCollector,
       paidDate:      shootDate || null,
-      proofImageUrl: depositProofImageUrl || null,
       notes:         "Cọc giữ lịch",
     });
   }
