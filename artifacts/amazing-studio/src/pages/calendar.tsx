@@ -689,6 +689,8 @@ function ShowFormPanel({
 
   const [deposit, setDeposit] = useState(booking?.depositAmount?.toString() ?? "0");
   const [depositMethod, setDepositMethod] = useState<"cash" | "bank_transfer">("cash");
+  const [depositDate, setDepositDate] = useState(booking?.shootDate ?? format(date, "yyyy-MM-dd"));
+  const [depositProofImage, setDepositProofImage] = useState<string | null>(null);
   const [discount, setDiscount] = useState(booking?.discountAmount?.toString() ?? "0");
   const [notes, setNotes] = useState(booking?.notes ?? "");
   const [photoCount, setPhotoCount] = useState<string>(() => String(booking?.photoCount ?? ""));
@@ -800,6 +802,14 @@ function ShowFormPanel({
     if (!file) return;
     const reader = new FileReader();
     reader.onload = ev => setAvatar(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleDepositProofChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => setDepositProofImage(ev.target?.result as string);
     reader.readAsDataURL(file);
   };
 
@@ -934,6 +944,8 @@ function ShowFormPanel({
           totalAmount: subDraftsTotal,
           depositAmount: depositNum,
           depositPaymentMethod: depositMethod,
+          depositPaidDate: depositDate || null,
+          depositProofImageUrl: depositProofImage || null,
           discountAmount: discountNum,
           isParentContract: true,
           packageType: subDrafts.map(s => s.serviceLabel || "Dịch vụ").join(" + "),
@@ -996,6 +1008,8 @@ function ShowFormPanel({
         location: location || null, status: finalStatus,
         totalAmount: finalTotal, depositAmount: finalDeposit,
         depositPaymentMethod: finalDeposit > 0 ? depositMethod : undefined,
+        depositPaidDate: finalDeposit > 0 ? depositDate || null : undefined,
+        depositProofImageUrl: finalDeposit > 0 ? depositProofImage || null : undefined,
         discountAmount: discountNum,
         items: hasServices ? validLines.map(({ tempId: _t, ...rest }) => rest) : [],
         surcharges: cleanedSurcharges,
@@ -1320,6 +1334,10 @@ function ShowFormPanel({
                 <span className="text-sm text-muted-foreground flex-shrink-0">Đặt cọc:</span>
                 <CurrencyInput className="h-8 text-sm text-right w-40" value={deposit} placeholder="0" onChange={setDeposit} />
               </div>
+              <div className="flex justify-between items-center gap-3">
+                <span className="text-sm text-muted-foreground flex-shrink-0">Ngày cọc:</span>
+                <Input type="date" className="h-8 text-sm text-right w-40" value={depositDate} onChange={e => setDepositDate(e.target.value)} />
+              </div>
               {parseFloat(deposit) > 0 && (
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-muted-foreground flex-shrink-0">H.thức cọc:</span>
@@ -1335,6 +1353,32 @@ function ShowFormPanel({
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+              {parseFloat(deposit) > 0 && (
+                <div className="space-y-1.5">
+                  <span className="text-xs text-muted-foreground">Ảnh bằng chứng:</span>
+                  {depositProofImage ? (
+                    <div className="relative rounded-xl overflow-hidden border border-border">
+                      <img src={depositProofImage} alt="Bằng chứng cọc" className="w-full max-h-36 object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setDepositProofImage(null)}
+                        className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 text-white"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => document.getElementById("deposit-proof-input")?.click()}
+                      className="w-full border-2 border-dashed border-border rounded-xl py-3 text-xs text-muted-foreground hover:border-primary/40 hover:bg-muted/20 transition-all"
+                    >
+                      Tải ảnh bằng chứng cọc
+                    </button>
+                  )}
+                  <input id="deposit-proof-input" type="file" accept="image/*" className="hidden" onChange={handleDepositProofChange} />
                 </div>
               )}
               <div className="flex justify-between items-center border-t border-border/60 pt-2">
