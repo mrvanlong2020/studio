@@ -1269,16 +1269,18 @@ export default function PaymentsPage() {
                           {p.notes && (
                             <p className="pl-4 italic">"{p.notes}"</p>
                           )}
-                          {p.paymentType === "deposit" && (p.proofImageUrl || depositProofImage) && (
-                            <div className="pl-4 pt-1">
+                        {p.paymentType === "deposit" && (p.proofImageUrl || depositProofImage) && (
+                          <div className="pl-4 pt-1">
+                            <div className="inline-flex rounded-xl overflow-hidden border border-border bg-background shadow-sm">
                               <img
                                 src={p.proofImageUrl || depositProofImage || ""}
                                 alt="Ảnh cọc"
-                                className="w-20 h-20 rounded-xl object-cover border border-border cursor-pointer"
+                                className="w-28 h-20 object-cover cursor-pointer"
                                 onClick={() => { setProofPreviewUrl(p.proofImageUrl || depositProofImage || ""); setProofPreview(true); }}
                               />
                             </div>
-                          )}
+                          </div>
+                        )}
                         </div>
                       </div>
                     ))}
