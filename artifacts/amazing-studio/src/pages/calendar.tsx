@@ -1334,10 +1334,6 @@ function ShowFormPanel({
                 <span className="text-sm text-muted-foreground flex-shrink-0">Đặt cọc:</span>
                 <CurrencyInput className="h-8 text-sm text-right w-40" value={deposit} placeholder="0" onChange={setDeposit} />
               </div>
-              <div className="flex justify-between items-center gap-3">
-                <span className="text-sm text-muted-foreground flex-shrink-0">Ngày cọc:</span>
-                <Input type="date" className="h-8 text-sm text-right w-40" value={depositDate} onChange={e => setDepositDate(e.target.value)} />
-              </div>
               {parseFloat(deposit) > 0 && (
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-muted-foreground flex-shrink-0">H.thức cọc:</span>
