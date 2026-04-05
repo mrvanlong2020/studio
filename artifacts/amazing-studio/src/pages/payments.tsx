@@ -433,6 +433,7 @@ export default function PaymentsPage() {
     enabled: !!selectedBooking,
     staleTime: 0,
   });
+  const depositProofImage = paymentHistory.find(p => p.paymentType === "deposit" && p.proofImageUrl)?.proofImageUrl ?? null;
 
   /* Recent payment history section */
   const [period, setPeriod] = useState<Period>("today");
@@ -1268,13 +1269,13 @@ export default function PaymentsPage() {
                           {p.notes && (
                             <p className="pl-4 italic">"{p.notes}"</p>
                           )}
-                          {p.paymentType === "deposit" && p.proofImageUrl && (
+                          {p.paymentType === "deposit" && (p.proofImageUrl || depositProofImage) && (
                             <div className="pl-4 pt-1">
                               <img
-                                src={p.proofImageUrl}
+                                src={p.proofImageUrl || depositProofImage || ""}
                                 alt="Ảnh cọc"
                                 className="w-20 h-20 rounded-xl object-cover border border-border cursor-pointer"
-                                onClick={() => { setProofPreviewUrl(p.proofImageUrl!); setProofPreview(true); }}
+                                onClick={() => { setProofPreviewUrl(p.proofImageUrl || depositProofImage || ""); setProofPreview(true); }}
                               />
                             </div>
                           )}
