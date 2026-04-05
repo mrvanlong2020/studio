@@ -1,7 +1,8 @@
 export function getPublicBaseUrl(): string {
   if (process.env.PUBLIC_APP_URL) {
     const u = process.env.PUBLIC_APP_URL;
-    return u.startsWith("http") ? u.replace(/\/$/, "") : `https://${u}`;
+    const full = u.startsWith("http") ? u : `https://${u}`;
+    return full.replace(/\/+$/, "");
   }
 
   const domains = (process.env.REPLIT_DOMAINS || "").split(",").map(d => d.trim()).filter(Boolean);
