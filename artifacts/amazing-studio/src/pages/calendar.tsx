@@ -1357,26 +1357,28 @@ function ShowFormPanel({
               )}
               {parseFloat(deposit) > 0 && (
                 <div className="space-y-1.5">
-                  <span className="text-xs text-muted-foreground">Ảnh bằng chứng:</span>
-                  {depositProofImage ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Ngày cọc:</span>
+                    <Input type="date" value={depositDate} onChange={(e) => setDepositDate(e.target.value)} className="h-8 w-[170px]" />
+                    {depositProofImage ? (
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => document.getElementById("deposit-proof-input")?.click()} className="h-8 px-3 rounded-lg text-xs font-medium border border-primary/30 bg-primary/10 text-primary">
+                          Ảnh cọc
+                        </button>
+                        <button type="button" onClick={() => setDepositProofImage(null)} className="h-8 px-2 rounded-lg bg-black/60 text-white">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={() => document.getElementById("deposit-proof-input")?.click()} className="h-8 px-3 rounded-lg text-xs font-medium border border-dashed border-border text-muted-foreground hover:border-primary/40 hover:bg-muted/20 transition-all">
+                        Ảnh cọc
+                      </button>
+                    )}
+                  </div>
+                  {depositProofImage && (
                     <div className="relative rounded-xl overflow-hidden border border-border">
                       <img src={depositProofImage} alt="Bằng chứng cọc" className="w-full max-h-36 object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => setDepositProofImage(null)}
-                        className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 text-white"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
                     </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => document.getElementById("deposit-proof-input")?.click()}
-                      className="w-full border-2 border-dashed border-border rounded-xl py-3 text-xs text-muted-foreground hover:border-primary/40 hover:bg-muted/20 transition-all"
-                    >
-                      Tải ảnh bằng chứng cọc
-                    </button>
                   )}
                   <input id="deposit-proof-input" type="file" accept="image/*" className="hidden" onChange={handleDepositProofChange} />
                 </div>
