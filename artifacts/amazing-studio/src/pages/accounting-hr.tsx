@@ -6,6 +6,7 @@ import { Button, Input, Select, Textarea, Dialog, DialogContent, DialogHeader, D
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Plus, TrendingUp, TrendingDown, DollarSign, Briefcase, Receipt, Users, Wallet, Trash2, Edit, User, ExternalLink } from "lucide-react";
 import { Link } from "wouter";
+import { useStaffAuth } from "@/contexts/StaffAuthContext";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const getAuthHeaders = (): Record<string, string> => {
@@ -35,6 +36,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 export default function AccountingHrPage() {
   const qc = useQueryClient();
+  const { effectiveIsAdmin } = useStaffAuth();
   const { data: summary, isLoading: loadingSummary } = useGetAccountingSummary();
   const { data: transactions = [] } = useListTransactions();
   const { data: staff = [] } = useListStaff();
@@ -80,6 +82,7 @@ export default function AccountingHrPage() {
   const totalExpenses = expenses.reduce((s: number, e: any) => s + parseFloat(e.amount || 0), 0);
   const totalPayrolls = payrolls.reduce((s: number, p: any) => s + parseFloat(p.netSalary || 0), 0);
   const pendingPayrolls = payrolls.filter((p: any) => p.status === "pending");
+  const canManageExpenses = effectiveIsAdmin;
 
   return (
     <div className="space-y-4">
@@ -185,12 +188,12 @@ export default function AccountingHrPage() {
                 <p className="text-xl font-bold">{expenses.length}</p>
               </div>
             </div>
-            <Button onClick={() => setShowExpenseForm(true)} className="gap-1.5">
+            <Button onClick={() => setShowExpenseForm(true)} className="gap-1.5" disabled={!canManageExpenses}>
               <Plus className="w-4 h-4" /> Thêm chi phí
             </Button>
           </div>
 
-          {showExpenseForm && (
+          {showExpenseForm && canManageExpenses && (
             <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
               <h4 className="font-semibold text-sm">Thêm khoản chi phí mới</h4>
               <div className="grid grid-cols-2 gap-3">
@@ -211,7 +214,7 @@ export default function AccountingHrPage() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button onClick={() => createExpense.mutate({ ...expForm, amount: parseFloat(expForm.amount) })} disabled={!expForm.description || !expForm.amount || createExpense.isPending}>
+                <Button onClick={() => createExpense.mutate({ ...expForm, amount: Number(expForm.amount.replace(/[^\d]/g, "")) })} disabled={!expForm.description || !expForm.amount || createExpense.isPending}>
                   {createExpense.isPending ? "Đang lưu..." : "Lưu chi phí"}
                 </Button>
                 <Button variant="outline" onClick={() => setShowExpenseForm(false)}>Hủy</Button>
@@ -241,9 +244,11 @@ export default function AccountingHrPage() {
                     <td className="px-4 py-3 text-xs">{e.paymentMethod === "cash" ? "Tiền mặt" : e.paymentMethod === "transfer" ? "Chuyển khoản" : e.paymentMethod}</td>
                     <td className="px-4 py-3 text-right font-bold text-red-600">{formatVND(e.amount)}</td>
                     <td className="px-4 py-3">
-                      <button onClick={() => { if (confirm("Xóa chi phí?")) deleteExpense.mutate(e.id); }} className="p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {canManageExpenses && (
+                        <button onClick={() => { if (confirm("Xóa chi phí?")) deleteExpense.mutate(e.id); }} className="p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
