@@ -400,35 +400,6 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
         </div>
       )}
 
-      {/* Gói: hiện "Bao gồm" */}
-      {isPkg && selectedSvc?.items && selectedSvc.items.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-2">
-          <p className="text-[10px] font-semibold text-blue-800 mb-1">✅ Bao gồm</p>
-          <div className="space-y-0.5">
-            {selectedSvc.items.map((item, i) => (
-              <div key={i} className="text-[10px] text-blue-700 flex gap-1">
-                <span className="text-blue-400">•</span>
-                <span>{item.quantity} {item.unit} {item.name}{item.notes ? ` (${item.notes})` : ""}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Gói: sản phẩm đầu ra */}
-      {isPkg && selectedSvc?.products && selectedSvc.products.length > 0 && (
-        <div className="bg-purple-50 border border-purple-200 rounded-lg px-2.5 py-2">
-          <p className="text-[10px] font-semibold text-purple-800 mb-1">🎁 Sản phẩm nhận được</p>
-          <div className="space-y-0.5">
-            {selectedSvc.products.map((p, i) => (
-              <div key={i} className="text-[10px] text-purple-700 flex gap-1">
-                <span className="text-purple-400">•</span><span>{p}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Chọn nhân sự — Dynamic staff list */}
       <StaffAssignmentEditor
         value={line.assignedStaff}
@@ -1644,28 +1615,7 @@ function generateContractHTML(
       const pkg = pkgId ? allPackages.find(p => p.id === pkgId) : null;
       const pkgName = pkg?.name || line.serviceName || "—";
 
-      // Bao gồm (items from pricing DB)
-      const pkgItems = pkg?.items || [];
-      const pkgProducts = pkg?.products || [];
       const pkgDescription = pkg?.description || "";
-
-      const includesHTML = pkgItems.length > 0
-        ? `<div style="margin-top:10px;">
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#6c3483;margin-bottom:6px;">Bao gồm:</div>
-            <ul style="margin:0;padding-left:18px;space-y:4px;">
-              ${pkgItems.map(it => `<li style="font-size:13px;color:#444;padding:2px 0;">${it.quantity ? `<strong>${it.quantity}${it.unit ? " " + it.unit : ""}</strong> ` : ""}${it.name}</li>`).join("")}
-            </ul>
-           </div>`
-        : "";
-
-      const productsHTML = pkgProducts.length > 0
-        ? `<div style="margin-top:10px;">
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#27ae60;margin-bottom:6px;">Sản phẩm nhận:</div>
-            <ul style="margin:0;padding-left:18px;">
-              ${pkgProducts.map(p => `<li style="font-size:13px;color:#444;padding:2px 0;">✅ ${p}</li>`).join("")}
-            </ul>
-           </div>`
-        : "";
 
       const _staffLines: string[] = [];
       if (line.photoName) _staffLines.push(`📷 Nhiếp ảnh: <strong>${line.photoName}</strong>`);
@@ -1685,18 +1635,6 @@ function generateContractHTML(
       const staffHTML = _staffLines.length > 0
         ? `<div style="margin-top:8px;padding:6px 10px;background:#f0f4ff;border-radius:6px;font-size:12px;color:#555;">
             ${_staffLines.join("&nbsp;&nbsp;|&nbsp;&nbsp;")}
-           </div>`
-        : "";
-
-      const lineSurcharges = (line.surcharges || []) as { name: string; amount: number }[];
-      const lineSurchHTML = lineSurcharges.length > 0
-        ? `<div style="margin-top:10px;padding:8px 12px;background:#fff5f5;border-radius:8px;border:1px solid #fce4e4;">
-             <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#c0392b;margin-bottom:6px;">⚡ Phụ thu kèm gói:</div>
-             ${lineSurcharges.map(s => `
-               <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;">
-                 <span style="color:#c0392b;">+ ${s.name}</span>
-                 <span style="font-weight:600;color:#c0392b;">${fmtVNDStr(s.amount)}</span>
-               </div>`).join("")}
            </div>`
         : "";
 
@@ -1722,9 +1660,6 @@ function generateContractHTML(
             <div style="font-size:16px;font-weight:800;color:#8B1A6B;white-space:nowrap;margin-left:16px;">${fmtVNDStr(line.price || 0)}</div>
           </div>
           ${staffHTML}
-          ${includesHTML}
-          ${productsHTML}
-          ${lineSurchHTML}
           ${lineDeductHTML}
         </div>
       `;
@@ -2607,35 +2542,6 @@ function ShowDetailPanel({
                         {pkgDetail.description.split("\n").filter(Boolean).map((line, i) => (
                           <p key={i} className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">{line}</p>
                         ))}
-                      </div>
-                    )}
-
-                    {/* Package items (bao gồm) */}
-                    {pkgDetail.items && pkgDetail.items.length > 0 && (
-                      <div className="px-3 py-2 bg-blue-50/40 dark:bg-blue-950/10 border-t border-border/30">
-                        <p className="text-[10px] font-bold text-blue-700 dark:text-blue-300 mb-1.5">✅ Bao gồm</p>
-                        <div className="space-y-0.5">
-                          {pkgDetail.items.map((pi, i) => (
-                            <div key={i} className="text-xs text-blue-700 dark:text-blue-400 flex gap-1">
-                              <span className="text-blue-400">•</span>
-                              <span>{pi.quantity} {pi.unit} {pi.name}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Products */}
-                    {pkgDetail.products && pkgDetail.products.length > 0 && (
-                      <div className="px-3 py-2 bg-purple-50/40 dark:bg-purple-950/10 border-t border-border/30">
-                        <p className="text-[10px] font-bold text-purple-700 dark:text-purple-300 mb-1.5">🎁 Sản phẩm nhận được</p>
-                        <div className="space-y-0.5">
-                          {pkgDetail.products.map((p, i) => (
-                            <div key={i} className="text-xs text-purple-700 dark:text-purple-400 flex gap-1">
-                              <span className="text-purple-400">•</span><span>{p}</span>
-                            </div>
-                          ))}
-                        </div>
                       </div>
                     )}
 
