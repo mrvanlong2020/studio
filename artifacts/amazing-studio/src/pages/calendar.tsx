@@ -945,7 +945,6 @@ function ShowFormPanel({
           depositAmount: depositNum,
           depositPaymentMethod: depositMethod,
           depositPaidDate: depositDate || null,
-          depositProofImageUrl: depositProofImage || null,
           discountAmount: discountNum,
           isParentContract: true,
           packageType: subDrafts.map(s => s.serviceLabel || "Dịch vụ").join(" + "),
@@ -958,6 +957,23 @@ function ShowFormPanel({
         saved = await authFetch(`${BASE}/api/bookings`, {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
         }).then(r => { if (!r.ok) throw new Error("Lỗi tạo hợp đồng"); return r.json(); });
+
+        // Upload ảnh cọc riêng sau khi booking tạo xong (tách luồng để không làm fail booking)
+        if (depositProofImage && depositNum > 0 && saved?.id) {
+          try {
+            const pmts = await authFetch(`${BASE}/api/payments?bookingId=${saved.id}`).then(r => r.ok ? r.json() : []).catch(() => []);
+            const depPmt = Array.isArray(pmts) ? pmts.find((p: any) => p.paymentType === "deposit") : null;
+            if (depPmt?.id) {
+              const patchRes = await authFetch(`${BASE}/api/payments/${depPmt.id}`, {
+                method: "PATCH", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ proofImageUrl: depositProofImage }),
+              });
+              if (!patchRes.ok) setError("Ảnh cọc chưa lưu được — đơn đã tạo thành công");
+            }
+          } catch {
+            setError("Ảnh cọc chưa lưu được — đơn đã tạo thành công");
+          }
+        }
 
         qc.invalidateQueries({ queryKey: ["bookings"] });
         qc.invalidateQueries({ queryKey: ["customers"] });
@@ -1009,7 +1025,6 @@ function ShowFormPanel({
         totalAmount: finalTotal, depositAmount: finalDeposit,
         depositPaymentMethod: finalDeposit > 0 ? depositMethod : undefined,
         depositPaidDate: finalDeposit > 0 ? depositDate || null : undefined,
-        depositProofImageUrl: finalDeposit > 0 ? depositProofImage || null : undefined,
         discountAmount: discountNum,
         items: hasServices ? validLines.map(({ tempId: _t, ...rest }) => rest) : [],
         surcharges: cleanedSurcharges,
@@ -1027,6 +1042,23 @@ function ShowFormPanel({
         saved = await authFetch(`${BASE}/api/bookings`, {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
         }).then(r => { if (!r.ok) throw new Error("Lỗi tạo đơn"); return r.json(); });
+      }
+
+      // Upload ảnh cọc riêng sau khi booking tạo/cập nhật xong (tách luồng, không làm fail booking)
+      if (!isEdit && depositProofImage && finalDeposit > 0 && saved?.id) {
+        try {
+          const pmts = await authFetch(`${BASE}/api/payments?bookingId=${saved.id}`).then(r => r.ok ? r.json() : []).catch(() => []);
+          const depPmt = Array.isArray(pmts) ? pmts.find((p: any) => p.paymentType === "deposit") : null;
+          if (depPmt?.id) {
+            const patchRes = await authFetch(`${BASE}/api/payments/${depPmt.id}`, {
+              method: "PATCH", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ proofImageUrl: depositProofImage }),
+            });
+            if (!patchRes.ok) setError("Ảnh cọc chưa lưu được — đơn đã tạo thành công");
+          }
+        } catch {
+          setError("Ảnh cọc chưa lưu được — đơn đã tạo thành công");
+        }
       }
 
       qc.invalidateQueries({ queryKey: ["bookings"] });

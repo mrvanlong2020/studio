@@ -391,6 +391,28 @@ router.post("/payments/sync-deposits", async (_req, res) => {
   }
 });
 
+// PATCH /payments/:id — chỉ cập nhật proofImageUrl cho payment đã tồn tại
+router.patch("/payments/:id", async (req, res) => {
+  try {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "ID không hợp lệ" });
+  const { proofImageUrl } = req.body;
+  if (proofImageUrl === undefined) return res.status(400).json({ error: "Thiếu proofImageUrl" });
+
+  const [updated] = await db
+    .update(paymentsTable)
+    .set({ proofImageUrl: proofImageUrl || null })
+    .where(eq(paymentsTable.id, id))
+    .returning();
+
+  if (!updated) return res.status(404).json({ error: "Không tìm thấy phiếu thu" });
+  res.json({ ...updated, amount: parseFloat(updated.amount) });
+  } catch (err) {
+    console.error("PATCH /payments/:id error:", err);
+    res.status(500).json({ error: "Lỗi hệ thống khi cập nhật ảnh cọc" });
+  }
+});
+
 // DELETE /payments/:id
 router.delete("/payments/:id", async (req, res) => {
   try {
