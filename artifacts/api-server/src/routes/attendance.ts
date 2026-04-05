@@ -7,11 +7,10 @@ import {
 import { eq, desc, and } from "drizzle-orm";
 import { verifyToken } from "./auth";
 import { createHmac, timingSafeEqual, randomBytes } from "crypto";
-
-const DOMAIN = process.env.REPLIT_DEV_DOMAIN || "localhost:8080";
+import { getPublicBaseUrl } from "../lib/publicUrl";
 
 function getStaticQrUrl(): string {
-  return `https://${DOMAIN}/attendance/check-in`;
+  return `${getPublicBaseUrl()}/attendance/check-in`;
 }
 
 function todayVN(): string {

@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { contractsTable, customersTable, bookingsTable, notificationsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import crypto from "node:crypto";
+import { getPublicBaseUrl } from "../lib/publicUrl";
 
 const router: IRouter = Router();
 
@@ -70,9 +71,7 @@ router.post("/contracts/:id/sign-link", async (req, res): Promise<void> => {
     return;
   }
 
-  const rawBase = process.env.PUBLIC_APP_URL || process.env.REPLIT_DEV_DOMAIN || "";
-  const baseUrl = rawBase.startsWith("http") ? rawBase : `https://${rawBase}`;
-  const signUrl = `${baseUrl.replace(/\/$/, "")}/api/contracts/${id}/sign`;
+  const signUrl = `${getPublicBaseUrl()}/api/contracts/${id}/sign`;
 
   res.json({
     signUrl,
