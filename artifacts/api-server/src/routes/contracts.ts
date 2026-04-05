@@ -145,6 +145,7 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
     .actions{display:flex;gap:10px;margin-top:18px}
     .btn{border:0;border-radius:10px;padding:13px 20px;font-weight:700;cursor:pointer;font-size:14px;flex:1;transition:opacity .15s}
     .btn-clear{background:#f3e8f3;color:#6b2d63}
+    .btn-reset{background:#fff3cd;color:#8a5a00}
     .btn-submit{background:#8B1A6B;color:#fff;box-shadow:0 4px 14px rgba(139,26,107,.3)}
     .btn-print{background:#065f46;color:#fff;border:0;border-radius:10px;padding:13px 20px;font-weight:700;cursor:pointer;font-size:14px;width:100%;margin-top:14px;transition:opacity .15s}
     .btn-back{background:#7f8c8d;color:#fff;border:0;border-radius:10px;padding:13px 20px;font-weight:700;cursor:pointer;font-size:14px;width:100%;margin-top:10px;transition:opacity .15s}
@@ -231,6 +232,7 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
         </div>
 
         <div class="actions">
+          <button class="btn btn-reset" id="btnReset" onclick="resetSign()">Ký lại từ đầu</button>
           <button class="btn btn-clear" id="btnClear" onclick="clearSig()">Xóa nét ký</button>
           <button class="btn btn-submit" id="btnSubmit" onclick="submitSign()">✅ Hoàn tất ký</button>
         </div>
@@ -270,6 +272,12 @@ router.get("/contracts/:id/sign", async (req, res): Promise<void> => {
       c.addEventListener('pointerup', function() { drawing = false; last = null; });
 
       window.clearSig = function clearSig() { ctx.clearRect(0, 0, c.width, c.height); };
+      window.resetSign = function resetSign() {
+        document.getElementById('signerName').value = '';
+        document.getElementById('signerPhone').value = '';
+        window.clearSig();
+        showMsg('Đã xóa toàn bộ thông tin, bạn có thể ký lại từ đầu.', 'info');
+      };
 
       function showMsg(html, type) {
         var m = document.getElementById('msg');
