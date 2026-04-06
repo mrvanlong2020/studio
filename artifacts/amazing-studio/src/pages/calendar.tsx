@@ -3162,12 +3162,12 @@ function DayView({
   date, bookings, isLoading,
   onBack, onPrevDay, onNextDay,
   onTimeClick, onEventClick,
-  isAdmin, onToggleMode,
+  isAdmin, onToggleMode, rawIsAdmin,
 }: {
   date: Date; bookings: Booking[]; isLoading: boolean;
   onBack: () => void; onPrevDay: () => void; onNextDay: () => void;
   onTimeClick: (time: string) => void; onEventClick: (b: Booking) => void;
-  isAdmin: boolean; onToggleMode: () => void;
+  isAdmin: boolean; onToggleMode: () => void; rawIsAdmin?: boolean;
 }) {
   const { lunar, tietKhi, solarHoliday, lunarHoliday } = useMemo(() => getLunarInfo(date), [date]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -3220,14 +3220,16 @@ function DayView({
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <button
-              onClick={onToggleMode}
-              title={isAdmin ? "Admin mode — Bấm để xem chế độ nhân viên" : "Nhân viên mode — Bấm để xem chế độ admin"}
-              className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-medium transition-all ${isAdmin ? "border-emerald-400 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400" : "border-orange-300 bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400"}`}
-            >
-              {isAdmin ? <ShieldCheck className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-              {isAdmin ? "Admin" : "NV"}
-            </button>
+            {rawIsAdmin && (
+              <button
+                onClick={onToggleMode}
+                title={isAdmin ? "Admin mode — Bấm để xem chế độ nhân viên" : "Nhân viên mode — Bấm để xem chế độ admin"}
+                className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-medium transition-all ${isAdmin ? "border-emerald-400 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400" : "border-orange-300 bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400"}`}
+              >
+                {isAdmin ? <ShieldCheck className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                {isAdmin ? "Admin" : "NV"}
+              </button>
+            )}
             <button onClick={onPrevDay} className="p-2 rounded-lg hover:bg-muted transition-colors"><ChevronLeft className="w-4 h-4" /></button>
             <button onClick={onNextDay} className="p-2 rounded-lg hover:bg-muted transition-colors"><ChevronRight className="w-4 h-4" /></button>
           </div>
@@ -3541,6 +3543,7 @@ function CalendarPageInner() {
           onEventClick={handleEventClickFromDay}
           isAdmin={isAdmin}
           onToggleMode={toggleAdminMode}
+          rawIsAdmin={rawIsAdmin}
         />
       </div>
     );
