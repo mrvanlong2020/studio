@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useRef, useEffect, Component } from "react";
 import type { ReactNode, ErrorInfo } from "react";
+import { useStaffAuth } from "@/contexts/StaffAuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   convertSolarToLunar, getCanChi, getLunarMonthName, getTietKhi,
@@ -3330,19 +3331,6 @@ function DayView({
 // ─── Main Calendar Page ────────────────────────────────────────────────────────
 type CalView = "month" | "day" | "detail" | "form";
 
-// Simple role management — persisted to localStorage
-function useViewMode() {
-  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
-    try { return localStorage.getItem("cal_view_mode") !== "staff"; } catch { return true; }
-  });
-  const toggle = () => setIsAdmin(prev => {
-    const next = !prev;
-    try { localStorage.setItem("cal_view_mode", next ? "admin" : "staff"); } catch { /* ignore */ }
-    return next;
-  });
-  return { isAdmin, toggle };
-}
-
 // ─── Error boundary: catches render crashes in CalendarPage, logs stack ────────
 interface EBState { hasError: boolean; error: Error | null }
 class CalendarErrorBoundary extends Component<{ children: ReactNode }, EBState> {
@@ -3389,7 +3377,9 @@ function CalendarPageInner() {
   const [viewingBooking, setViewingBooking] = useState<Booking | null>(null);
   const [showLunar, setShowLunar] = useState(true);
 
-  const { isAdmin, toggle: toggleAdminMode } = useViewMode();
+  const { effectiveIsAdmin, isAdmin: rawIsAdmin, viewMode, setViewMode } = useStaffAuth();
+  const isAdmin = effectiveIsAdmin;
+  const toggleAdminMode = () => setViewMode(viewMode === "admin" ? "staff" : "admin");
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const { data: bookings = [], isLoading } = useQuery<Booking[]>({
@@ -3574,15 +3564,17 @@ function CalendarPageInner() {
           >
             <Moon className="w-3.5 h-3.5" /> Âm lịch
           </button>
-          {/* Role toggle */}
-          <button
-            onClick={toggleAdminMode}
-            title={isAdmin ? "Đang xem chế độ Admin — Bấm để chuyển sang Nhân viên" : "Đang xem chế độ Nhân viên — Bấm để chuyển sang Admin"}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all ${isAdmin ? "border-emerald-400 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400" : "border-orange-300 bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400"}`}
-          >
-            {isAdmin ? <ShieldCheck className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-            {isAdmin ? "Admin" : "Nhân viên"}
-          </button>
+          {/* Role toggle — chỉ hiện với tài khoản admin thật */}
+          {rawIsAdmin && (
+            <button
+              onClick={toggleAdminMode}
+              title={isAdmin ? "Đang xem chế độ Admin — Bấm để chuyển sang Nhân viên" : "Đang xem chế độ Nhân viên — Bấm để chuyển sang Admin"}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all ${isAdmin ? "border-emerald-400 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400" : "border-orange-300 bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400"}`}
+            >
+              {isAdmin ? <ShieldCheck className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              {isAdmin ? "Admin" : "Nhân viên"}
+            </button>
+          )}
           <Button onClick={() => { setEditingBooking(null); setViewingBooking(null); setSelectedTime("07:00"); setCalView("form"); }} className="gap-2 h-9">
             <Plus className="w-4 h-4" /> Tạo show
           </Button>
