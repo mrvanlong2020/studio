@@ -186,6 +186,53 @@ function PhoneAutocomplete({ value, onChange, onSelect }: {
   );
 }
 
+function CustomerNameSuggest({ value, phone, onSelect }: {
+  value: string;
+  phone: string;
+  onSelect: (c: Customer) => void;
+}) {
+  const normalizedPhone = phone.replace(/\D/g, "");
+  const query = value.trim();
+  const { data: results = [] } = useQuery<Customer[]>({
+    queryKey: ["customer-name-search", query],
+    queryFn: () => authFetch(`${BASE}/api/customers?search=${encodeURIComponent(query)}`).then(r => r.json()),
+    enabled: query.length >= 2,
+    staleTime: 5_000,
+  });
+  const filtered = results.filter(c => {
+    const p = c.phone.replace(/\D/g, "");
+    return !normalizedPhone || p !== normalizedPhone;
+  }).slice(0, 5);
+  if (!query || filtered.length === 0) return null;
+  return (
+    <div className="mt-2 space-y-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Khách cũ gợi ý</p>
+      <div className="grid gap-2">
+        {filtered.map(c => (
+          <button
+            key={c.id}
+            type="button"
+            onMouseDown={() => onSelect(c)}
+            className="w-full text-left rounded-xl border border-border bg-background px-3 py-2.5 hover:bg-muted/60 transition-colors"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-semibold text-sm truncate">{c.name}</p>
+                <p className="text-xs text-muted-foreground">{c.phone}</p>
+              </div>
+              {c.totalDebt && c.totalDebt > 0 ? (
+                <span className="text-[10px] rounded-full bg-amber-100 text-amber-800 px-2 py-1 whitespace-nowrap">Nợ {formatVND(c.totalDebt)}</span>
+              ) : (
+                <span className="text-[10px] rounded-full bg-emerald-100 text-emerald-700 px-2 py-1 whitespace-nowrap">Khách cũ</span>
+              )}
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Order line row ────────────────────────────────────────────────────────────
 function fmtVND(n: number | null | undefined) {
   return ((n ?? 0) || 0).toLocaleString("vi-VN") + "đ";
@@ -1132,6 +1179,7 @@ function ShowFormPanel({
             </h4>
             {/* 1. Tên khách hàng */}
             <Input className="h-10" placeholder="Tên khách hàng *" value={customerName} onChange={e => setCustomerName(e.target.value)} />
+            <CustomerNameSuggest value={customerName} phone={phone} onSelect={handleSelectCustomer} />
             {/* 2. Số điện thoại */}
             <PhoneAutocomplete value={phone} onChange={v => { setPhone(v); setCustomerId(null); }} onSelect={handleSelectCustomer} />
             {customerId && (
