@@ -194,24 +194,12 @@ function CustomerNameSuggest({ value, phone, onSelect }: {
 }) {
   const normalizedPhone = phone.replace(/\D/g, "");
   const query = value.trim();
-  const [results, setResults] = useState<Customer[]>([]);
-  useEffect(() => {
-    let alive = true;
-    if (query.length < 2) {
-      setResults([]);
-      return;
-    }
-    authFetch(`${BASE}/api/customers?search=${encodeURIComponent(query)}`)
-      .then(r => (r.ok ? r.json() : []))
-      .then((data: Customer[]) => {
-        if (!alive) return;
-        setResults(Array.isArray(data) ? data : []);
-      })
-      .catch(() => {
-        if (alive) setResults([]);
-      });
-    return () => { alive = false; };
-  }, [query]);
+  const { data: results = [] } = useQuery<Customer[]>({
+    queryKey: ["customer-name-search", query],
+    queryFn: () => authFetch(`${BASE}/api/customers?search=${encodeURIComponent(query)}`).then(r => r.json()),
+    enabled: query.length >= 2,
+    staleTime: 5_000,
+  });
   const filtered = results.filter(c => {
     const p = c.phone.replace(/\D/g, "");
     return !normalizedPhone || p !== normalizedPhone;
