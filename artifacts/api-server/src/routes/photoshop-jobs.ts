@@ -17,7 +17,7 @@ async function clearExtraRetouchedItem(bookingId: number) {
 // ── Helper: sync extra_retouched booking_item after job update ────────────────
 // extra = max(0, donePhotos - includedSnapshot)
 // Keeps canonical row (highest id), deactivates duplicates, inserts when none exists
-async function syncExtraRetouchedItem(bookingId: number, donePhotos: number) {
+async function syncExtraRetouchedItem(bookingId: number, donePhotos: number, extraRetouchPrice?: number) {
   const [booking] = await db
     .select({ snap: bookingsTable.includedRetouchedPhotosSnapshot })
     .from(bookingsTable)
@@ -42,19 +42,22 @@ async function syncExtraRetouchedItem(bookingId: number, donePhotos: number) {
       }
     }
     if (canonical) {
-      const unitPrice = parseFloat(String(canonical.unitPrice)) || 0;
+      const unitPrice = extraRetouchPrice !== undefined
+        ? extraRetouchPrice
+        : (parseFloat(String(canonical.unitPrice)) || 0);
       await db
         .update(bookingItemsTable)
-        .set({ qty: extra, totalPrice: String(unitPrice * extra), isActive: 1 })
+        .set({ qty: extra, unitPrice: String(unitPrice), totalPrice: String(unitPrice * extra), isActive: 1 })
         .where(eq(bookingItemsTable.id, canonical.id));
     } else {
+      const unitPrice = extraRetouchPrice ?? 0;
       await db.insert(bookingItemsTable).values({
         bookingId,
         type: "extra_retouched",
         title: "Ảnh hậu kỳ vượt gói",
         qty: extra,
-        unitPrice: "0",
-        totalPrice: "0",
+        unitPrice: String(unitPrice),
+        totalPrice: String(unitPrice * extra),
         isActive: 1,
         notes: `Vượt ${included} ảnh bao gồm`,
       });
@@ -78,6 +81,12 @@ router.get("/photoshop-jobs/booking-view", async (req, res) => {
         b.created_at      AS booking_created_at,
         b.package_type,
         b.service_label,
+        b.total_amount,
+        b.notes                           AS booking_notes,
+        b.items                           AS booking_items,
+        b.surcharges                      AS booking_surcharges,
+        b.assigned_staff                  AS booking_assigned_staff,
+        b.included_retouched_photos_snapshot,
         c.name            AS customer_name,
         c.phone           AS customer_phone,
         pj.id             AS job_id,
@@ -92,6 +101,8 @@ router.get("/photoshop-jobs/booking-view", async (req, res) => {
         pj.done_photos,
         pj.progress_percent,
         pj.notes,
+        pj.photoshop_note,
+        pj.extra_retouch_price,
         pj.updated_at     AS job_updated_at
       FROM bookings b
       JOIN customers c ON c.id = b.customer_id
@@ -105,7 +116,6 @@ router.get("/photoshop-jobs/booking-view", async (req, res) => {
     let data = result.rows as Record<string, unknown>[];
 
     // Filter theo tháng phát sinh (YYYY-MM)
-    // booking_created_at có thể là Date object từ pg hoặc ISO string
     if (month && month !== "all") {
       data = data.filter(r => {
         const raw = r.booking_created_at;
@@ -164,7 +174,6 @@ router.get("/photoshop-jobs/my-stats", async (req, res) => {
       : await pool.query(`SELECT COUNT(*) FROM photoshop_jobs WHERE assigned_staff_id = $1 AND status = 'hoan_thanh' AND updated_at >= $2 AND is_active = true`, [callerId, monthStart]);
 
     // Đơn tồn: tất cả booking trong màn hậu kỳ chưa hoàn thành (khớp với booking-view)
-    // = non-cancelled + non-child bookings mà không có job is_active=true với status='hoan_thanh'
     const backlogQ = await pool.query(`
       SELECT COUNT(*) FROM bookings b
       WHERE b.status NOT IN ('cancelled')
@@ -260,7 +269,7 @@ router.post("/photoshop-jobs", async (req, res) => {
       jobCode, bookingId, customerName, customerPhone, serviceName,
       assignedStaffId, assignedStaffName, shootDate, receivedFileDate,
       internalDeadline, customerDeadline, status, progressPercent,
-      totalPhotos, donePhotos, notes
+      totalPhotos, donePhotos, notes, photoshopNote, extraRetouchPrice
     } = req.body;
 
     if (!bookingId) {
@@ -293,10 +302,12 @@ router.post("/photoshop-jobs", async (req, res) => {
       totalPhotos: totalPhotos ?? 0,
       donePhotos: donePhotos ?? 0,
       notes: notes || "",
+      photoshopNote: photoshopNote || "",
+      extraRetouchPrice: extraRetouchPrice ?? 0,
     }).returning();
 
     if (row.bookingId && row.donePhotos > 0) {
-      await syncExtraRetouchedItem(row.bookingId, row.donePhotos).catch(err =>
+      await syncExtraRetouchedItem(row.bookingId, row.donePhotos, row.extraRetouchPrice ?? undefined).catch(err =>
         console.error("[photoshop-jobs] syncExtraRetouchedItem (POST) failed:", err)
       );
     }
@@ -312,7 +323,7 @@ router.put("/photoshop-jobs/:id", async (req, res) => {
       jobCode, bookingId, customerName, customerPhone, serviceName,
       assignedStaffId, assignedStaffName, shootDate, receivedFileDate,
       internalDeadline, customerDeadline, status, progressPercent,
-      totalPhotos, donePhotos, notes, isActive
+      totalPhotos, donePhotos, notes, isActive, photoshopNote, extraRetouchPrice
     } = req.body;
 
     const [oldJob] = await db
@@ -339,6 +350,8 @@ router.put("/photoshop-jobs/:id", async (req, res) => {
     if (donePhotos !== undefined) updates.donePhotos = donePhotos;
     if (notes !== undefined) updates.notes = notes;
     if (isActive !== undefined) updates.isActive = isActive;
+    if (photoshopNote !== undefined) updates.photoshopNote = photoshopNote;
+    if (extraRetouchPrice !== undefined) updates.extraRetouchPrice = extraRetouchPrice;
 
     const [row] = await db
       .update(photoshopJobsTable)
@@ -356,8 +369,8 @@ router.put("/photoshop-jobs/:id", async (req, res) => {
       );
     }
 
-    if ((donePhotos !== undefined || bookingIdChanged) && newBookingId) {
-      await syncExtraRetouchedItem(newBookingId, row.donePhotos ?? 0).catch(err =>
+    if ((donePhotos !== undefined || extraRetouchPrice !== undefined || bookingIdChanged) && newBookingId) {
+      await syncExtraRetouchedItem(newBookingId, row.donePhotos ?? 0, row.extraRetouchPrice ?? undefined).catch(err =>
         console.error("[photoshop-jobs] syncExtraRetouchedItem (PUT) failed:", err)
       );
     }

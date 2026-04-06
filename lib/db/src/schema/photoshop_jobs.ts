@@ -18,6 +18,8 @@ export const photoshopJobsTable = pgTable("photoshop_jobs", {
   totalPhotos: integer("total_photos").default(0),
   donePhotos: integer("done_photos").default(0),
   notes: text("notes").default(""),
+  photoshopNote: text("photoshop_note").default(""),
+  extraRetouchPrice: integer("extra_retouch_price").default(0),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

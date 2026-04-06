@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Search, CheckCircle2, AlertTriangle, UserCheck, Camera,
   Clock, User, X, ChevronRight, Loader2, ImageIcon, BarChart3,
-  PauseCircle, PlayCircle, Filter
+  PauseCircle, PlayCircle, Filter, Package, Users, FileText,
+  Palette, Zap, MessageSquare, ChevronDown, ChevronUp
 } from "lucide-react";
 import { useStaffAuth } from "@/contexts/StaffAuthContext";
 
@@ -16,6 +17,34 @@ const authHeaders = () => ({
 });
 const fetchAuth = (url: string, opts?: RequestInit) =>
   fetch(url, { headers: authHeaders(), ...opts });
+
+type BookingItem = {
+  id?: string;
+  label?: string;
+  serviceName?: string;
+  quantity?: number;
+  unitPrice?: number;
+  totalPrice?: number;
+  includedRetouchedPhotos?: number;
+  albumName?: string | null;
+  rawFilesIncluded?: boolean | null;
+  conceptImages?: string[] | null;
+};
+
+type BookingSurcharge = {
+  id?: string;
+  label?: string;
+  amount?: number;
+  quantity?: number;
+  note?: string | null;
+};
+
+type AssignedStaffItem = {
+  role?: string;
+  name?: string;
+  staffName?: string;
+  staffId?: string | number;
+};
 
 type BookingEditRow = {
   booking_id: number;
@@ -38,6 +67,14 @@ type BookingEditRow = {
   done_photos: number | null;
   progress_percent: number | null;
   notes: string | null;
+  total_amount: number | null;
+  booking_notes: string | null;
+  booking_items: unknown;
+  booking_surcharges: unknown;
+  booking_assigned_staff: unknown;
+  included_retouched_photos_snapshot: number | null;
+  photoshop_note: string | null;
+  extra_retouch_price: number | null;
 };
 
 type Stats = { myActive: number; myDoneThisMonth: number; backlog: number };
@@ -52,6 +89,8 @@ type DetailForm = {
   notes: string;
   assignedStaffId: string;
   assignedStaffName: string;
+  photoshopNote: string;
+  extraRetouchPrice: string;
 };
 
 // ── Shared helper: "Chưa nhận" dùng thống nhất ở 3 nơi ─────────────────────
@@ -68,14 +107,14 @@ function sortPriority(row: BookingEditRow): number {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const dl = new Date(row.internal_deadline);
     const days = Math.ceil((dl.getTime() - today.getTime()) / 86400000);
-    if (days < 0) return 10;                    // quá hạn → đầu tiên
-    if (isUnassigned(row)) return 20;           // chưa nhận (sau quá hạn)
-    if (days <= 3) return 30;                   // gần hạn <= 3 ngày
-    if (days <= 5) return 40;                   // gần hạn <= 5 ngày
+    if (days < 0) return 10;
+    if (isUnassigned(row)) return 20;
+    if (days <= 3) return 30;
+    if (days <= 5) return 40;
   }
 
-  if (isUnassigned(row)) return 20;             // chưa nhận (không có deadline)
-  return 50;                                    // còn lại
+  if (isUnassigned(row)) return 20;
+  return 50;
 }
 
 // ── Urgency ───────────────────────────────────────────────────────────────────
@@ -125,9 +164,13 @@ function formatDate(d: string | null | undefined): string {
 }
 
 function formatMonth(ym: string): string {
-  // "2026-04" → "Tháng 04/2026"
   const [y, m] = ym.split("-");
   return `Tháng ${m}/${y}`;
+}
+
+function formatVND(n: number | null | undefined): string {
+  if (n == null) return "—";
+  return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(n);
 }
 
 function daysLeft(deadline: string | null | undefined): string {
@@ -138,6 +181,15 @@ function daysLeft(deadline: string | null | undefined): string {
   if (days < 0) return `Trễ ${Math.abs(days)} ngày`;
   if (days === 0) return "Hôm nay";
   return `Còn ${days} ngày`;
+}
+
+function parseJson<T>(val: unknown): T | null {
+  if (!val) return null;
+  if (typeof val === "object") return val as T;
+  if (typeof val === "string") {
+    try { return JSON.parse(val) as T; } catch { return null; }
+  }
+  return null;
 }
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
@@ -174,6 +226,51 @@ function ProgressBar({ percent }: { percent: number }) {
   );
 }
 
+// ── Collapsible section ───────────────────────────────────────────────────────
+function Section({ icon: Icon, title, children, defaultOpen = true }: {
+  icon: React.ElementType; title: string; children: React.ReactNode; defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border border-border rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-3 py-2.5 bg-muted/40 hover:bg-muted/60 transition-colors"
+      >
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <Icon size={14} className="text-muted-foreground" />
+          {title}
+        </div>
+        {open ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+      </button>
+      {open && <div className="px-3 py-3 space-y-2">{children}</div>}
+    </div>
+  );
+}
+
+// ── Concept image gallery ─────────────────────────────────────────────────────
+function ConceptGallery({ images }: { images: string[] }) {
+  const [lightbox, setLightbox] = useState<string | null>(null);
+  return (
+    <>
+      <div className="flex flex-wrap gap-2">
+        {images.map((src, i) => (
+          <button key={i} type="button" onClick={() => setLightbox(src)}
+            className="w-16 h-16 rounded-lg overflow-hidden border border-border bg-muted flex-shrink-0 hover:opacity-90 transition-opacity">
+            <img src={src} alt={`concept-${i}`} className="w-full h-full object-cover" />
+          </button>
+        ))}
+      </div>
+      {lightbox && (
+        <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="concept" className="max-w-full max-h-full rounded-xl shadow-2xl" />
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── Detail Modal ──────────────────────────────────────────────────────────────
 function DetailModal({ row, onClose, staffList, isAdmin, viewerId, viewerName }: {
   row: BookingEditRow; onClose: () => void; staffList: StaffItem[];
@@ -189,6 +286,8 @@ function DetailModal({ row, onClose, staffList, isAdmin, viewerId, viewerName }:
     notes: row.notes ?? "",
     assignedStaffId: row.assigned_staff_id != null ? String(row.assigned_staff_id) : "",
     assignedStaffName: row.assigned_staff_name ?? "",
+    photoshopNote: row.photoshop_note ?? "",
+    extraRetouchPrice: String(row.extra_retouch_price ?? ""),
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -197,6 +296,44 @@ function DetailModal({ row, onClose, staffList, isAdmin, viewerId, viewerName }:
     qc.invalidateQueries({ queryKey: ["photoshop-booking-view"] });
     qc.invalidateQueries({ queryKey: ["photoshop-stats"] });
   };
+
+  // Parsed booking data
+  const bookingItemsRaw = parseJson<unknown>(row.booking_items);
+  const bookingItems: BookingItem[] = Array.isArray(bookingItemsRaw) ? bookingItemsRaw as BookingItem[] : [];
+  const surchargesRaw = parseJson<unknown>(row.booking_surcharges);
+  const surcharges: BookingSurcharge[] = Array.isArray(surchargesRaw) ? surchargesRaw as BookingSurcharge[] : [];
+  const assignedStaffRaw = parseJson<unknown>(row.booking_assigned_staff);
+  const assignedStaff: AssignedStaffItem[] = Array.isArray(assignedStaffRaw) ? assignedStaffRaw as AssignedStaffItem[] : [];
+
+  const getStaffDisplayName = (s: AssignedStaffItem) => s.staffName || s.name || "";
+  const photographer = assignedStaff.find(s => ["photographer", "photo", "Photographer"].includes(s.role ?? ""));
+  const makeupArtist = assignedStaff.find(s => ["makeup", "Makeup", "makeup_artist"].includes(s.role ?? ""));
+
+  const allConceptImages = bookingItems.flatMap(item => item.conceptImages ?? []);
+
+  const included = row.included_retouched_photos_snapshot ?? 0;
+  const doneNum = Number(form.donePhotos) || 0;
+  const extraCount = Math.max(0, doneNum - included);
+  const extraPrice = Number(form.extraRetouchPrice) || 0;
+  const extraTotal = extraCount * extraPrice;
+
+  const pct = Number(form.totalPhotos) > 0
+    ? Math.round((doneNum / Number(form.totalPhotos)) * 100) : 0;
+
+  const urgency = getCardUrgency(row);
+  const headerBg = urgency === "red" ? "bg-red-50 dark:bg-red-900/20"
+    : urgency === "yellow" ? "bg-amber-50 dark:bg-amber-900/20"
+    : urgency === "done" ? "bg-emerald-50 dark:bg-emerald-900/20"
+    : urgency === "paused" ? "bg-purple-50 dark:bg-purple-900/20"
+    : "bg-muted/30";
+
+  const dlDaysInternal = form.internalDeadline ? daysLeft(form.internalDeadline) : null;
+  const dlColorInternal = (() => {
+    if (!form.internalDeadline) return "";
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const days = Math.ceil((new Date(form.internalDeadline).getTime() - today.getTime()) / 86400000);
+    return days < 0 ? "text-red-600 font-semibold" : days <= 3 ? "text-amber-600 font-semibold" : "text-foreground";
+  })();
 
   const claimJob = async () => {
     setSaving(true); setErr("");
@@ -252,6 +389,8 @@ function DetailModal({ row, onClose, staffList, isAdmin, viewerId, viewerName }:
         internalDeadline: form.internalDeadline,
         customerDeadline: form.customerDeadline,
         notes: form.notes,
+        photoshopNote: form.photoshopNote,
+        extraRetouchPrice: Number(form.extraRetouchPrice) || 0,
         ...(isAdmin ? { assignedStaffId: staffId, assignedStaffName: staffName } : {}),
         ...extraFields,
       };
@@ -275,19 +414,10 @@ function DetailModal({ row, onClose, staffList, isAdmin, viewerId, viewerName }:
     finally { setSaving(false); }
   };
 
-  const urgency = getCardUrgency(row);
-  const pct = form.totalPhotos && Number(form.totalPhotos) > 0
-    ? Math.round((Number(form.donePhotos) / Number(form.totalPhotos)) * 100) : 0;
-
-  const headerBg = urgency === "red" ? "bg-red-50 dark:bg-red-900/20"
-    : urgency === "yellow" ? "bg-amber-50 dark:bg-amber-900/20"
-    : urgency === "done" ? "bg-emerald-50 dark:bg-emerald-900/20"
-    : urgency === "paused" ? "bg-purple-50 dark:bg-purple-900/20"
-    : "bg-muted/30";
-
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
-      <div className="bg-background rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[92vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="bg-background rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[95vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+
         {/* Header */}
         <div className={`px-4 pt-4 pb-3 rounded-t-2xl ${headerBg}`}>
           <div className="flex items-start justify-between">
@@ -312,18 +442,7 @@ function DetailModal({ row, onClose, staffList, isAdmin, viewerId, viewerName }:
           </div>
         </div>
 
-        <div className="p-4 space-y-4">
-          {/* Info row */}
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div>
-              <div className="text-xs text-muted-foreground">Ngày chụp</div>
-              <div className="font-medium">{formatDate(row.shoot_date)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground">Người phụ trách</div>
-              <div className="font-medium">{row.assigned_staff_name || "—"}</div>
-            </div>
-          </div>
+        <div className="p-3 space-y-3">
 
           {/* Nhận việc */}
           {isUnassigned(row) && !saving && (
@@ -333,71 +452,216 @@ function DetailModal({ row, onClose, staffList, isAdmin, viewerId, viewerName }:
               {viewerName ? `Tôi nhận việc này (${viewerName})` : "Nhận việc"}
             </button>
           )}
-
           {err && <div className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">{err}</div>}
 
-          {/* Assign staff (admin only) */}
-          {isAdmin && (
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Giao việc cho nhân viên</label>
-              <select className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                value={form.assignedStaffId}
-                onChange={e => {
-                  const found = staffList.find(s => String(s.id) === e.target.value);
-                  setForm(f => ({ ...f, assignedStaffId: e.target.value, assignedStaffName: found?.name ?? "" }));
-                }}>
-                <option value="">— Chưa giao —</option>
-                {staffList.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
-              </select>
+          {/* Section 1: Thông tin đơn */}
+          <Section icon={Package} title="📦 Thông tin đơn" defaultOpen={true}>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+              <div>
+                <div className="text-xs text-muted-foreground">Mã đơn</div>
+                <div className="font-medium">{row.order_code || "—"}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Gói dịch vụ</div>
+                <div className="font-medium">{row.service_label || row.package_type || "—"}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Giá gói</div>
+                <div className="font-medium">{formatVND(row.total_amount)}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Ngày chụp</div>
+                <div className="font-medium">{formatDate(row.shoot_date)}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Ngày bắt đầu HK</div>
+                <div className="font-medium">{formatDate(form.receivedFileDate) || "—"}</div>
+              </div>
             </div>
-          )}
+          </Section>
 
-          {/* Ngày bắt đầu */}
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Ngày bắt đầu hậu kỳ</label>
-            <input type="date" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-              value={form.receivedFileDate} onChange={e => setForm(f => ({ ...f, receivedFileDate: e.target.value }))} />
-          </div>
+          {/* Section 2: Nhân sự */}
+          <Section icon={Users} title="👥 Nhân sự" defaultOpen={true}>
+            {assignedStaff.length === 0 ? (
+              <div className="text-xs text-muted-foreground italic">Chưa có nhân sự được giao</div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {photographer && getStaffDisplayName(photographer) && (
+                  <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/20 px-2.5 py-1.5 rounded-lg">
+                    <Camera size={13} className="text-blue-500" />
+                    <span className="text-xs font-medium">📷 {getStaffDisplayName(photographer)}</span>
+                  </div>
+                )}
+                {makeupArtist && getStaffDisplayName(makeupArtist) && (
+                  <div className="flex items-center gap-1.5 bg-pink-50 dark:bg-pink-900/20 px-2.5 py-1.5 rounded-lg">
+                    <User size={13} className="text-pink-500" />
+                    <span className="text-xs font-medium">💄 {getStaffDisplayName(makeupArtist)}</span>
+                  </div>
+                )}
+                {assignedStaff.filter(s => s !== photographer && s !== makeupArtist).map((s, i) => (
+                  <div key={i} className="flex items-center gap-1.5 bg-muted px-2.5 py-1.5 rounded-lg">
+                    <User size={13} className="text-muted-foreground" />
+                    <span className="text-xs font-medium">{getStaffDisplayName(s)} ({s.role})</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {isAdmin && (
+              <div className="mt-2">
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Giao việc cho nhân viên HK</label>
+                <select className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  value={form.assignedStaffId}
+                  onChange={e => {
+                    const found = staffList.find(s => String(s.id) === e.target.value);
+                    setForm(f => ({ ...f, assignedStaffId: e.target.value, assignedStaffName: found?.name ?? "" }));
+                  }}>
+                  <option value="">— Chưa giao —</option>
+                  {staffList.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
+                </select>
+              </div>
+            )}
+          </Section>
 
-          {/* Deadlines */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Section 3: Sản phẩm phải giao */}
+          <Section icon={FileText} title="📋 Sản phẩm phải giao" defaultOpen={true}>
+            <div className="space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Ảnh trong gói</span>
+                <span className="font-medium">{included > 0 ? `${included} ảnh` : "—"}</span>
+              </div>
+              {bookingItems.map((item, i) => (
+                <div key={i} className="rounded-lg bg-muted/50 px-2.5 py-1.5 text-xs space-y-0.5">
+                  <div className="font-medium">{item.label || item.serviceName || `Dịch vụ ${i + 1}`}</div>
+                  {item.albumName && <div className="text-muted-foreground">Album: {item.albumName}</div>}
+                  {item.rawFilesIncluded && <div className="text-muted-foreground">Có file gốc</div>}
+                  {item.includedRetouchedPhotos != null && (
+                    <div className="text-muted-foreground">Ảnh hậu kỳ: {item.includedRetouchedPhotos}</div>
+                  )}
+                </div>
+              ))}
+              {surcharges.length > 0 && (
+                <div className="pt-1">
+                  <div className="text-xs text-muted-foreground mb-1 font-medium">Phát sinh đã chốt</div>
+                  {surcharges.map((s, i) => (
+                    <div key={i} className="flex justify-between text-xs py-0.5">
+                      <span className="text-muted-foreground">{s.label || `Phát sinh ${i + 1}`}{s.quantity && s.quantity > 1 ? ` ×${s.quantity}` : ""}</span>
+                      <span className="font-medium">{formatVND(s.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Section>
+
+          {/* Section 4: Concept tham khảo */}
+          <Section icon={Palette} title="🎨 Concept tham khảo" defaultOpen={false}>
+            {allConceptImages.length === 0 ? (
+              <div className="text-xs text-muted-foreground italic">Chưa upload concept</div>
+            ) : (
+              <ConceptGallery images={allConceptImages} />
+            )}
+          </Section>
+
+          {/* Section 5: Ảnh vượt gói + tính tiền */}
+          <Section icon={Zap} title="⚡ Tiến độ & Ảnh vượt gói" defaultOpen={true}>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Tổng số ảnh</label>
+                <input type="number" min="0" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  value={form.totalPhotos} onChange={e => setForm(f => ({ ...f, totalPhotos: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Đã hậu kỳ xong</label>
+                <input type="number" min="0" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  value={form.donePhotos} onChange={e => setForm(f => ({ ...f, donePhotos: e.target.value }))} />
+              </div>
+            </div>
+            {Number(form.totalPhotos) > 0 && <ProgressBar percent={pct} />}
+
+            <div className="mt-2 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 px-3 py-2.5 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Ảnh trong gói</span>
+                <span className="font-medium">{included > 0 ? included : "—"}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Ảnh đã làm</span>
+                <span className="font-medium">{doneNum}</span>
+              </div>
+              {included > 0 && (
+                <div className="flex justify-between text-sm font-semibold">
+                  <span className={extraCount > 0 ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}>
+                    Vượt gói
+                  </span>
+                  <span className={extraCount > 0 ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}>
+                    {extraCount} ảnh
+                  </span>
+                </div>
+              )}
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Đơn giá / ảnh thêm (VND)</label>
+                <input type="number" min="0" step="1000"
+                  className="w-full rounded-lg border border-amber-300 dark:border-amber-700 bg-background px-3 py-2 text-sm"
+                  value={form.extraRetouchPrice}
+                  onChange={e => setForm(f => ({ ...f, extraRetouchPrice: e.target.value }))}
+                  placeholder="0" />
+              </div>
+              {extraCount > 0 && extraPrice > 0 && (
+                <div className="flex justify-between text-sm font-bold pt-0.5 border-t border-amber-200 dark:border-amber-800">
+                  <span>Tổng phát sinh</span>
+                  <span className="text-amber-700 dark:text-amber-400">{formatVND(extraTotal)}</span>
+                </div>
+              )}
+            </div>
+          </Section>
+
+          {/* Section 6: Ghi chú */}
+          <Section icon={MessageSquare} title="📝 Ghi chú" defaultOpen={true}>
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Deadline nội bộ</label>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Ghi chú khách hàng (sale nhập)</label>
+              <div className="w-full rounded-lg border border-border bg-blue-50/60 dark:bg-blue-900/10 px-3 py-2 text-sm min-h-[44px] whitespace-pre-wrap">
+                {row.booking_notes
+                  ? <span className="text-muted-foreground">{row.booking_notes}</span>
+                  : <span className="text-muted-foreground/50 italic">Không có ghi chú từ sale</span>
+                }
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Ghi chú hậu kỳ</label>
+              <textarea rows={2} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm resize-none"
+                value={form.photoshopNote}
+                onChange={e => setForm(f => ({ ...f, photoshopNote: e.target.value }))}
+                placeholder="Ghi chú nội bộ cho hậu kỳ..." />
+            </div>
+          </Section>
+
+          {/* Section 7: Deadlines */}
+          <Section icon={Clock} title="⏱ Deadlines" defaultOpen={true}>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Ngày bắt đầu hậu kỳ</label>
               <input type="date" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                value={form.internalDeadline} onChange={e => setForm(f => ({ ...f, internalDeadline: e.target.value }))} />
+                value={form.receivedFileDate} onChange={e => setForm(f => ({ ...f, receivedFileDate: e.target.value }))} />
             </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Deadline khách</label>
-              <input type="date" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                value={form.customerDeadline} onChange={e => setForm(f => ({ ...f, customerDeadline: e.target.value }))} />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={`text-xs font-medium mb-1 block ${dlColorInternal || "text-muted-foreground"}`}>
+                  Deadline nội bộ{dlDaysInternal ? ` (${dlDaysInternal})` : ""}
+                </label>
+                <input type="date" className={`w-full rounded-lg border bg-background px-3 py-2 text-sm
+                  ${dlColorInternal.includes("red") ? "border-red-400" : dlColorInternal.includes("amber") ? "border-amber-400" : "border-border"}`}
+                  value={form.internalDeadline} onChange={e => setForm(f => ({ ...f, internalDeadline: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                  Deadline khách{row.customer_deadline ? ` (${daysLeft(row.customer_deadline)})` : ""}
+                </label>
+                <input type="date" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  value={form.customerDeadline} onChange={e => setForm(f => ({ ...f, customerDeadline: e.target.value }))} />
+              </div>
             </div>
-          </div>
+          </Section>
 
-          {/* Progress */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Tổng số ảnh</label>
-              <input type="number" min="0" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                value={form.totalPhotos} onChange={e => setForm(f => ({ ...f, totalPhotos: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Đã hậu kỳ xong</label>
-              <input type="number" min="0" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                value={form.donePhotos} onChange={e => setForm(f => ({ ...f, donePhotos: e.target.value }))} />
-            </div>
-          </div>
-          {Number(form.totalPhotos) > 0 && <ProgressBar percent={pct} />}
-
-          {/* Notes */}
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Ghi chú</label>
-            <textarea rows={2} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm resize-none"
-              value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Ghi chú nội bộ..." />
-          </div>
-
-          {/* Action buttons */}
+          {/* Section 8: Hành động */}
           <div className="grid grid-cols-2 gap-2 pt-1">
-            {/* Tạm hoãn / Tiếp tục */}
             {row.status !== "hoan_thanh" && row.status !== "tam_hoan" && (
               <button onClick={() => save({ status: "tam_hoan" })} disabled={saving}
                 className="py-2.5 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-700 dark:bg-purple-900/30 dark:hover:bg-purple-900/50 dark:text-purple-300 font-semibold text-sm transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50">
@@ -413,7 +677,6 @@ function DetailModal({ row, onClose, staffList, isAdmin, viewerId, viewerName }:
               </button>
             )}
 
-            {/* Hoàn thành */}
             {row.status !== "hoan_thanh" && (
               <button onClick={() => save({ status: "hoan_thanh" })} disabled={saving}
                 className="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50">
@@ -422,7 +685,6 @@ function DetailModal({ row, onClose, staffList, isAdmin, viewerId, viewerName }:
               </button>
             )}
 
-            {/* Lưu tiến độ — chiếm full row nếu chỉ có 1 button khác */}
             <button onClick={() => save()} disabled={saving}
               className={`py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50
                 ${row.status === "hoan_thanh" ? "col-span-2" : ""}`}>
@@ -430,6 +692,7 @@ function DetailModal({ row, onClose, staffList, isAdmin, viewerId, viewerName }:
               Lưu tiến độ
             </button>
           </div>
+
         </div>
       </div>
     </div>
@@ -452,7 +715,6 @@ function BookingCard({ row, onClick }: { row: BookingEditRow; onClick: () => voi
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
             <span className="font-semibold text-sm truncate">{row.customer_name}</span>
-            {/* Status badge */}
             {isUnassigned(row) ? (
               <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 dark:bg-red-900/40 font-medium">Chưa nhận</span>
             ) : row.status === "hoan_thanh" ? (
@@ -530,13 +792,11 @@ export default function PhotoshopJobsPage() {
     enabled: isAdmin,
   });
 
-  // Derive available months from data
   const availableMonths = useMemo(() => {
     const months = new Set(rows.map(r => r.booking_created_at?.slice(0, 7)).filter(Boolean) as string[]);
     return Array.from(months).sort().reverse();
   }, [rows]);
 
-  // Staff list with jobs in the data (for staff filter)
   const staffsInData = useMemo(() => {
     const map = new Map<number, string>();
     rows.forEach(r => { if (r.assigned_staff_id && r.assigned_staff_name) map.set(r.assigned_staff_id, r.assigned_staff_name); });
@@ -546,7 +806,6 @@ export default function PhotoshopJobsPage() {
   const filtered = useMemo(() => {
     let data = [...rows];
 
-    // Tab filter
     if (tab === "all") {
       data = data.filter(r => r.status !== "hoan_thanh");
     } else if (tab === "mine") {
@@ -561,7 +820,6 @@ export default function PhotoshopJobsPage() {
       data = data.filter(r => r.status === "hoan_thanh");
     }
 
-    // Dropdown filters
     if (filterMonth !== "all") {
       data = data.filter(r => r.booking_created_at?.slice(0, 7) === filterMonth);
     }
@@ -576,7 +834,6 @@ export default function PhotoshopJobsPage() {
       data = data.filter(r => String(r.assigned_staff_id) === filterStaff);
     }
 
-    // Search
     if (search.trim()) {
       const q = search.toLowerCase();
       data = data.filter(r =>
@@ -587,7 +844,6 @@ export default function PhotoshopJobsPage() {
       );
     }
 
-    // Sort: quá hạn → chưa nhận → gần hạn ≤3 → ≤5 → còn lại → tạm hoãn → hoàn thành
     data.sort((a, b) => sortPriority(a) - sortPriority(b));
     return data;
   }, [rows, tab, filterMonth, filterStatus, filterStaff, search, viewer?.id]);

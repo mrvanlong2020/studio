@@ -8,6 +8,9 @@ async function runMigrations() {
     await client.query(`ALTER TABLE crm_leads ADD COLUMN IF NOT EXISTS notes TEXT`);
     await client.query(`ALTER TABLE customers ALTER COLUMN phone DROP NOT NULL`);
 
+    await client.query(`ALTER TABLE photoshop_jobs ADD COLUMN IF NOT EXISTS photoshop_note text DEFAULT ''`);
+    await client.query(`ALTER TABLE photoshop_jobs ADD COLUMN IF NOT EXISTS extra_retouch_price integer DEFAULT 0`);
+
     await client.query("COMMIT");
     console.log("[migrations] Hoàn thành.");
   } catch (err) {
