@@ -1,0 +1,128 @@
+#84 - Full Workflow Photoshop (Không sai sót – Chuẩn vận hành studio)
+
+## 🎯 Mục tiêu
+Biến module Photoshop thành một phần của Booking lifecycle, đảm bảo:
+- Nhân viên hậu kỳ KHÔNG cần hỏi lại
+- KHÔNG làm sai sản phẩm
+- TỰ động tính tiền phát sinh (upsell)
+- Đồng bộ từ chụp → hậu kỳ → giao file → thu tiền
+
+---
+
+## 1. 🧠 Photoshop phải đọc FULL Booking Context
+
+### Trong modal Photoshop, hiển thị đầy đủ:
+
+📦 THÔNG TIN ĐƠN
+- Gói: (Premium / Silver / Luxury…)
+- Giá gói
+- Ngày chụp
+- Deadline nội bộ
+- Deadline khách
+
+📸 NHÂN SỰ
+- Photographer
+- Makeup (nếu có)
+
+📋 SẢN PHẨM PHẢI GIAO
+- Số ảnh retouch
+- Album
+- File gốc
+
+---
+
+## 2. 🎨 Concept bắt buộc phải sync
+
+Hiển thị trong Photoshop:
+
+🎨 CONCEPT THAM KHẢO
+- Danh sách ảnh concept từ booking (booking.conceptImages)
+
+→ Photoshop nhìn là biết tone, KHÔNG cần hỏi lại
+
+---
+
+## 3. 📊 Quản lý số lượng ảnh + tiền phát sinh
+
+Thêm fields:
+
+- packageRetouchCount (ảnh trong gói)
+- extraRetouchCount (ảnh khách yêu cầu thêm)
+- extraRetouchPrice (đơn giá ảnh thêm)
+
+Tự động tính:
+extraCost = extraRetouchCount × extraRetouchPrice
+
+→ Sync sang module thanh toán
+
+---
+
+## 4. 📝 Tách 2 loại ghi chú
+
+- customerNote (sale nhập)
+- photoshopNote (nhân viên hậu kỳ nhập)
+
+→ Tránh ghi chú bị loạn
+
+---
+
+## 5. ⏱ Deadline rõ ràng
+
+Hiển thị:
+
+- Ngày chụp
+- Ngày nhận file
+- Deadline nội bộ
+- Deadline khách
+
+Logic:
+- Quá hạn → đỏ
+- Còn 1–3 ngày → vàng
+
+---
+
+## 6. 💰 Upsell / phát sinh
+
+KHÔNG sửa gói gốc
+
+Thêm block:
+
+⚡ PHÁT SINH
+- Album nâng cấp
+- In thêm
+- Ảnh chỉnh thêm
+
+→ Tổng tiền = gói + phát sinh  
+→ Photoshop phải nhìn thấy để biết làm gì
+
+---
+
+## 7. 🔗 Photoshop = Stage của Booking
+
+Không phải module riêng
+
+Flow:
+
+Booking → Chụp → Upload file → Photoshop → Hoàn thành → Thu tiền
+
+---
+
+## 8. ✅ Done khi:
+
+- Photoshop thấy đầy đủ:
+  + Gói
+  + Sản phẩm
+  + Concept
+  + Note
+- Không cần hỏi lại sale
+- Có thể tính tiền ảnh thêm
+- Không sai sản phẩm khi in
+
+---
+
+## 💣 Kết luận
+
+Nếu thiếu context → chắc chắn sai  
+Nếu đủ context → nhân viên mới vẫn làm đúng
+
+→ Đây là module quyết định chất lượng studio
