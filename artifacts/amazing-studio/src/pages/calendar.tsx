@@ -194,12 +194,24 @@ function CustomerNameSuggest({ value, phone, onSelect }: {
 }) {
   const normalizedPhone = phone.replace(/\D/g, "");
   const query = value.trim();
-  const { data: results = [] } = useQuery<Customer[]>({
-    queryKey: ["customer-name-search", query],
-    queryFn: () => authFetch(`${BASE}/api/customers?search=${encodeURIComponent(query)}`).then(r => r.json()),
-    enabled: query.length >= 2,
-    staleTime: 5_000,
-  });
+  const [results, setResults] = useState<Customer[]>([]);
+  useEffect(() => {
+    let alive = true;
+    if (query.length < 2) {
+      setResults([]);
+      return;
+    }
+    authFetch(`${BASE}/api/customers?search=${encodeURIComponent(query)}`)
+      .then(r => (r.ok ? r.json() : []))
+      .then((data: Customer[]) => {
+        if (!alive) return;
+        setResults(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (alive) setResults([]);
+      });
+    return () => { alive = false; };
+  }, [query]);
   const filtered = results.filter(c => {
     const p = c.phone.replace(/\D/g, "");
     return !normalizedPhone || p !== normalizedPhone;
@@ -603,7 +615,7 @@ function OrderLineRow({ line, photographers, makeupArtists, services, allStaffRa
         </div>
       </div>
 
-      {isAdmin && isPkg && line.price > 0 && (
+      {isPkg && line.price > 0 && (
         <div className="text-[11px] rounded-lg border overflow-hidden">
           <div className="bg-emerald-600 text-white px-3 py-1.5 flex justify-between items-center">
             <span className="font-bold">📊 Dự tính lợi nhuận</span>
