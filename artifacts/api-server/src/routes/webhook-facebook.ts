@@ -5,23 +5,19 @@ import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
-const VERIFY_TOKEN = "amazing123";
-
 function ts(): string {
   return new Date().toISOString().slice(0, 16).replace("T", " ");
 }
 
 router.get("/webhook/facebook", (req, res) => {
   const mode = req.query["hub.mode"];
-  const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
-  if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    console.log("[CRM] Facebook webhook verified successfully");
+  if (mode === "subscribe") {
     return res.status(200).send(challenge);
   }
-  console.warn("[CRM] Facebook webhook verification failed — token mismatch");
-  return res.status(403).json({ error: "Forbidden" });
+
+  return res.sendStatus(403);
 });
 
 router.post("/webhook/facebook", async (req, res) => {
