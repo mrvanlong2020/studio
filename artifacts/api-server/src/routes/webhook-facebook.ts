@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
-const VERIFY_TOKEN = process.env["FACEBOOK_VERIFY_TOKEN"] ?? "amazing_studio_webhook";
+const VERIFY_TOKEN = "amazing123";
 
 function ts(): string {
   return new Date().toISOString().slice(0, 16).replace("T", " ");
