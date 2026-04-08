@@ -154,6 +154,8 @@ export default function SettingsPage() {
   const [openAiApiKey, setOpenAiApiKey] = useState("");
   const [fbAutoReplyEnabled, setFbAutoReplyEnabled] = useState(false);
   const [fbSaved, setFbSaved] = useState(false);
+  const [pageInfo, setPageInfo] = useState<{ pageId: string; pageName: string; fanCount?: number; picture?: string | null } | null>(null);
+  const [pageInfoError, setPageInfoError] = useState("");
 
   const { data: settings, isLoading } = useQuery<Settings>({
     queryKey: ["settings"],
@@ -188,6 +190,28 @@ export default function SettingsPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     },
+  });
+
+  const checkPageMut = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`${BASE}/api/fb-ai/page-info`, { headers: authH() });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Lỗi kiểm tra fanpage");
+      return d as { pageId: string; pageName: string; fanCount?: number; picture?: string | null };
+    },
+    onSuccess: (data) => { setPageInfo(data); setPageInfoError(""); },
+    onError: (e: Error) => { setPageInfoError(e.message); setPageInfo(null); },
+  });
+
+  const subscribeWebhookMut = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`${BASE}/api/fb-ai/subscribe-webhook`, { method: "POST", headers: authH() });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Đăng ký webhook thất bại");
+      return d as { success: boolean; pageId: string; pageName: string };
+    },
+    onSuccess: (data) => { setPageInfo(p => p ? { ...p, pageId: data.pageId, pageName: data.pageName } : { pageId: data.pageId, pageName: data.pageName }); setPageInfoError(""); },
+    onError: (e: Error) => { setPageInfoError(e.message); },
   });
 
   const saveFbMut = useMutation({
@@ -431,6 +455,37 @@ export default function SettingsPage() {
             <p>
               Trạng thái hiện tại: FB Token <strong className={fbAiConfig?.hasPageAccessToken ? "text-green-600" : "text-red-500"}>{fbAiConfig?.hasPageAccessToken ? "✓ OK" : "✗ Thiếu"}</strong> | Verify Token <strong className={fbAiConfig?.hasVerifyToken ? "text-green-600" : "text-red-500"}>{fbAiConfig?.hasVerifyToken ? "✓ OK" : "✗ Thiếu"}</strong> | OpenAI <strong className={fbAiConfig?.hasOpenAiKey ? "text-green-600" : "text-red-500"}>{fbAiConfig?.hasOpenAiKey ? "✓ OK" : "✗ Thiếu"}</strong> | Auto <strong>{fbAiConfig?.autoReplyEnabled ? "Bật" : "Tắt"}</strong>
             </p>
+          </div>
+
+          {/* Fanpage Info + Subscribe */}
+          <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+            <p className="text-sm font-semibold flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-primary" /> Fanpage đang kết nối
+            </p>
+            {pageInfo && (
+              <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
+                {pageInfo.picture && <img src={pageInfo.picture} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />}
+                <div>
+                  <p className="font-semibold text-sm text-green-800 dark:text-green-300">{pageInfo.pageName}</p>
+                  <p className="text-xs text-green-700 dark:text-green-400">ID: {pageInfo.pageId}{pageInfo.fanCount ? ` · ${pageInfo.fanCount.toLocaleString("vi-VN")} người theo dõi` : ""}</p>
+                </div>
+              </div>
+            )}
+            {pageInfoError && <p className="text-sm text-red-600">{pageInfoError}</p>}
+            {subscribeWebhookMut.isSuccess && (
+              <p className="text-sm text-green-600 font-medium">✓ Đã đăng ký webhook thành công cho fanpage: {subscribeWebhookMut.data?.pageName}</p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" className="gap-2" onClick={() => checkPageMut.mutate()} disabled={checkPageMut.isPending || !fbAiConfig?.hasPageAccessToken}>
+                {checkPageMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bot className="w-3.5 h-3.5" />}
+                Kiểm tra Fanpage hiện tại
+              </Button>
+              <Button size="sm" className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => subscribeWebhookMut.mutate()} disabled={subscribeWebhookMut.isPending || !fbAiConfig?.hasPageAccessToken}>
+                {subscribeWebhookMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                Kết nối Fanpage mới (đăng ký webhook)
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">Sau khi lưu Page Access Token của Fanpage mới, nhấn <strong>"Kết nối Fanpage mới"</strong> để đăng ký nhận tin nhắn từ fanpage đó. Nếu không nhấn, hệ thống vẫn nhận tin từ fanpage cũ.</p>
           </div>
 
           {/* Save button inside the card */}

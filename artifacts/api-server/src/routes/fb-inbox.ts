@@ -380,6 +380,46 @@ router.put("/fb-ai/config", async (req, res) => {
   res.json({ success: true });
 });
 
+// GET /fb-ai/page-info — lấy thông tin fanpage đang được kết nối (dùng token lưu trong DB)
+router.get("/fb-ai/page-info", async (req, res) => {
+  const caller = await getCaller(req);
+  if (!isAdmin(caller)) return res.status(403).json({ error: "Không có quyền" });
+  const cfg = await getConfig();
+  if (!cfg.pageAccessToken) return res.status(400).json({ error: "Chưa cấu hình Page Access Token" });
+  try {
+    const r = await fetch(`https://graph.facebook.com/me?fields=id,name,fan_count,picture&access_token=${encodeURIComponent(cfg.pageAccessToken)}`);
+    const data = await r.json() as Record<string, unknown>;
+    if (!r.ok) return res.status(400).json({ error: (data as { error?: { message?: string } }).error?.message ?? "Lỗi Facebook API" });
+    res.json({ pageId: data.id, pageName: data.name, fanCount: data.fan_count, picture: (data.picture as { data?: { url?: string } })?.data?.url ?? null });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+// POST /fb-ai/subscribe-webhook — đăng ký webhook cho fanpage (dùng token lưu trong DB)
+router.post("/fb-ai/subscribe-webhook", async (req, res) => {
+  const caller = await getCaller(req);
+  if (!isAdmin(caller)) return res.status(403).json({ error: "Không có quyền" });
+  const cfg = await getConfig();
+  if (!cfg.pageAccessToken) return res.status(400).json({ error: "Chưa cấu hình Page Access Token" });
+  try {
+    // Lấy page ID
+    const meRes = await fetch(`https://graph.facebook.com/me?fields=id,name&access_token=${encodeURIComponent(cfg.pageAccessToken)}`);
+    const meData = await meRes.json() as { id?: string; name?: string; error?: { message?: string } };
+    if (!meRes.ok || !meData.id) return res.status(400).json({ error: meData.error?.message ?? "Không lấy được Page ID" });
+    // Đăng ký webhook subscriptions
+    const subRes = await fetch(
+      `https://graph.facebook.com/${meData.id}/subscribed_apps?subscribed_fields=messages,messaging_postbacks,messaging_optins,message_deliveries,message_reads&access_token=${encodeURIComponent(cfg.pageAccessToken)}`,
+      { method: "POST" },
+    );
+    const subData = await subRes.json() as { success?: boolean; error?: { message?: string } };
+    if (!subRes.ok || !subData.success) return res.status(400).json({ error: subData.error?.message ?? "Đăng ký webhook thất bại" });
+    res.json({ success: true, pageId: meData.id, pageName: meData.name });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
 router.get("/fb-inbox/threads", async (req, res) => {
   const caller = await getCaller(req);
   if (!caller) return res.status(401).json({ error: "Chưa đăng nhập" });
