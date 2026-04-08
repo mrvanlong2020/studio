@@ -47,3 +47,14 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Local-only / release artifacts
+.config/
+release/
+
+# Local database dumps
+*-db.sql
+*.dump
+
+# Generated image attachments
+attached_assets/image_*.png
