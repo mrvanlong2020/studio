@@ -43,6 +43,7 @@ async function loadSettings() {
     studio_lat: parseFloat(map["studio_lat"] ?? String(DEFAULT_SETTINGS.studio_lat)),
     studio_lng: parseFloat(map["studio_lng"] ?? String(DEFAULT_SETTINGS.studio_lng)),
     attendance_radius_m: parseFloat(map["attendance_radius_m"] ?? String(DEFAULT_SETTINGS.attendance_radius_m)),
+    aiPricingInfo: map["aiPricingInfo"] ?? null,
   };
 }
 
@@ -126,6 +127,26 @@ router.post("/settings/ai-key/test", async (req, res) => {
     res.json({ ok: true, message: "Kết nối Gemini thành công!" });
   } catch (e) {
     res.json({ ok: false, message: "Key không hợp lệ hoặc lỗi mạng: " + String(e) });
+  }
+});
+
+// GET /public/pricing — trả bảng giá công khai, không cần đăng nhập
+router.get("/public/pricing", async (_req, res) => {
+  try {
+    const rows = await db.select().from(settingsTable);
+    const map: Record<string, string> = {};
+    for (const r of rows) map[r.key] = r.value;
+    const studioName = map["studioName"] ?? "Amazing Studio";
+    const aiPricingInfo = map["aiPricingInfo"] ?? null;
+    const services = await pool.query(`
+      SELECT name, code, price, description
+      FROM services
+      WHERE is_active = 1
+      ORDER BY id ASC
+    `);
+    res.json({ studioName, aiPricingInfo, services: services.rows });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
   }
 });
 

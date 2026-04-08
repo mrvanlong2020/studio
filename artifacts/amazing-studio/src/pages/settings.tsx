@@ -126,6 +126,7 @@ type Settings = {
   studio_lat: number;
   studio_lng: number;
   attendance_radius_m: number;
+  aiPricingInfo: string | null;
 };
 
 type FbAiConfig = {
@@ -339,6 +340,28 @@ export default function SettingsPage() {
             <p>💡 <strong>Cách đơn giản nhất:</strong> Mở trang này <em>tại tiệm</em>, bấm nút "Lấy vị trí hiện tại" → tọa độ tự động điền.</p>
             <p>📌 Hoặc mở Google Maps, nhấp chuột phải vào studio → chọn <em>"What's here?"</em> để thấy lat/lng.</p>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* AI Pricing Info */}
+      <Card>
+        <div className="p-6 border-b bg-muted/30">
+          <h3 className="text-lg font-bold flex items-center gap-2">
+            <Bot className="w-5 h-5 text-primary" /> Nội dung bảng giá / thông tin cho AI trả lời
+          </h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            AI sẽ đọc nội dung này để trả lời khách hàng qua Facebook Inbox. Paste nội dung từ trang báo giá của bạn vào đây.
+          </p>
+        </div>
+        <CardContent className="p-6 space-y-4">
+          <textarea
+            className="w-full min-h-[280px] rounded-xl border border-border bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 resize-y font-mono"
+            placeholder={`Ví dụ:\n\nGÓI CHỤP ẢNH CƯỚI:\n- Gói Studio Cơ Bản: 5.500.000đ — Chụp tại studio, 1 bộ váy, makeup, 40 ảnh chỉnh sửa\n- Gói Ngoại Cảnh: 8.500.000đ — 2 địa điểm, 2 bộ váy, makeup, 80 ảnh\n- Gói Premium: 15.000.000đ — Trọn gói A-Z, album, ảnh phóng\n\nCHO THUÊ VÁY CƯỚI:\n- Váy ngắn từ 500.000đ/ngày\n- Váy dài từ 800.000đ/ngày\n- Váy cao cấp từ 2.000.000đ/ngày\n\nLIÊN HỆ: 0901 234 567`}
+            {...f("aiPricingInfo")}
+          />
+          <p className="text-xs text-muted-foreground">
+            Nội dung này sẽ được đưa vào prompt AI khi trả lời khách qua Facebook. Bạn có thể nhập bảng giá, chính sách đặt cọc, thời gian làm việc, địa chỉ và bất kỳ thông tin nào muốn AI biết.
+          </p>
         </CardContent>
       </Card>
 

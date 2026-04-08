@@ -95,20 +95,33 @@ async function sendFacebookMessage(psid: string, text: string, pageAccessToken: 
 
 async function buildStudioContext(): Promise<string> {
   const lines: string[] = [];
+
+  // Bảng giá / thông tin studio tùy chỉnh từ Admin (ưu tiên cao nhất)
+  try {
+    const settingRows = await db.select().from(settingsTable).where(eq(settingsTable.key, "aiPricingInfo")).limit(1);
+    const aiPricingInfo = settingRows[0]?.value?.trim();
+    if (aiPricingInfo) {
+      lines.push("=== THÔNG TIN BẢNG GIÁ / DỊCH VỤ STUDIO ===");
+      lines.push(aiPricingInfo);
+      lines.push("=== HẾT THÔNG TIN BẢNG GIÁ ===");
+      lines.push("");
+    }
+  } catch { /* bỏ qua */ }
+
   try {
     const services = await pool.query(`
-      SELECT name, code, price
+      SELECT name, code, price, description
       FROM services
       WHERE is_active = 1
-      ORDER BY id DESC
-      LIMIT 15
+      ORDER BY id ASC
+      LIMIT 30
     `);
-    const serviceLines = (services.rows as Array<{ name: string; code: string; price: string }>).map(
-      (s) => `- ${s.name} (${s.code ?? "N/A"}): ${Number(s.price || 0).toLocaleString("vi-VN")} đ`,
+    const serviceLines = (services.rows as Array<{ name: string; code: string; price: string; description: string | null }>).map(
+      (s) => `- ${s.name}${s.code ? ` (${s.code})` : ""}: ${Number(s.price || 0).toLocaleString("vi-VN")} đ${s.description ? ` — ${s.description}` : ""}`,
     );
-    lines.push("Dịch vụ tiêu biểu:", ...(serviceLines.length ? serviceLines : ["- Chưa có dữ liệu dịch vụ"]));
+    lines.push("Dịch vụ / gói chụp trong hệ thống:", ...(serviceLines.length ? serviceLines : ["- Chưa có dữ liệu dịch vụ"]));
   } catch {
-    lines.push("Dịch vụ tiêu biểu: chưa lấy được dữ liệu.");
+    lines.push("Dịch vụ: chưa lấy được dữ liệu.");
   }
 
   try {
