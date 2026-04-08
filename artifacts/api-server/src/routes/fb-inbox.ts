@@ -326,6 +326,11 @@ export async function processIncomingFacebookMessage(psid: string, text: string)
   }
 }
 
+function maskToken(t: string | null): string | null {
+  if (!t || t.length < 8) return t ? "****" : null;
+  return t.slice(0, 4) + "****" + t.slice(-4);
+}
+
 router.get("/fb-ai/config", async (req, res) => {
   const caller = await getCaller(req);
   if (!isAdmin(caller)) return res.status(403).json({ error: "Chỉ admin mới xem cấu hình" });
@@ -335,6 +340,9 @@ router.get("/fb-ai/config", async (req, res) => {
     hasOpenAiKey: !!cfg.openaiApiKey,
     hasVerifyToken: !!cfg.verifyToken,
     autoReplyEnabled: cfg.autoReplyEnabled,
+    pageAccessTokenHint: maskToken(cfg.pageAccessToken),
+    openAiKeyHint: maskToken(cfg.openaiApiKey),
+    verifyTokenHint: maskToken(cfg.verifyToken),
   });
 });
 

@@ -134,6 +134,9 @@ type FbAiConfig = {
   hasOpenAiKey: boolean;
   hasVerifyToken: boolean;
   autoReplyEnabled: boolean;
+  pageAccessTokenHint: string | null;
+  openAiKeyHint: string | null;
+  verifyTokenHint: string | null;
 };
 
 const token = () => localStorage.getItem("amazingStudioToken_v2");
@@ -377,47 +380,71 @@ export default function SettingsPage() {
         </div>
         <CardContent className="p-6 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <label className="text-sm font-medium">Facebook Page Access Token</label>
               <Input
                 type="password"
                 value={fbPageAccessToken}
                 onChange={(e) => setFbPageAccessToken(e.target.value)}
-                placeholder="Nhập token mới (để trống nếu giữ nguyên)"
+                placeholder={fbAiConfig?.pageAccessTokenHint ? `Đang dùng: ${fbAiConfig.pageAccessTokenHint}` : "Chưa có — nhập token mới"}
               />
+              {fbAiConfig?.pageAccessTokenHint && (
+                <p className="text-xs text-muted-foreground">Hiện tại: <code className="bg-muted px-1 rounded">{fbAiConfig.pageAccessTokenHint}</code> — nhập token mới để thay thế, bỏ trống để giữ nguyên</p>
+              )}
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <label className="text-sm font-medium">Webhook Verify Token</label>
               <Input
                 value={fbVerifyToken}
                 onChange={(e) => setFbVerifyToken(e.target.value)}
-                placeholder="Ví dụ: amazing-studio-verify-2026"
+                placeholder={fbAiConfig?.verifyTokenHint ? `Đang dùng: ${fbAiConfig.verifyTokenHint}` : "Ví dụ: amazing-studio-verify-2026"}
               />
+              {fbAiConfig?.verifyTokenHint && (
+                <p className="text-xs text-muted-foreground">Hiện tại: <code className="bg-muted px-1 rounded">{fbAiConfig.verifyTokenHint}</code></p>
+              )}
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <label className="text-sm font-medium">OpenAI API Key</label>
               <Input
                 type="password"
                 value={openAiApiKey}
                 onChange={(e) => setOpenAiApiKey(e.target.value)}
-                placeholder="sk-..."
+                placeholder={fbAiConfig?.openAiKeyHint ? `Đang dùng: ${fbAiConfig.openAiKeyHint}` : "sk-..."}
               />
+              {fbAiConfig?.openAiKeyHint && (
+                <p className="text-xs text-muted-foreground">Hiện tại: <code className="bg-muted px-1 rounded">{fbAiConfig.openAiKeyHint}</code> — nhập key mới để thay thế</p>
+              )}
             </div>
           </div>
 
-          <label className="text-sm font-medium flex items-center gap-2">
+          <label className="text-sm font-medium flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
               checked={fbAutoReplyEnabled}
               onChange={(e) => setFbAutoReplyEnabled(e.target.checked)}
+              className="rounded"
             />
             Bật tự động trả lời (AI chỉ tự gửi khi đúng kịch bản, ngoài phạm vi sẽ để nhân viên xử lý)
           </label>
 
           <div className="text-xs text-muted-foreground space-y-1 rounded-xl border p-3">
             <p>
-              Trạng thái hiện tại: FB Token <strong>{fbAiConfig?.hasPageAccessToken ? "OK" : "Thiếu"}</strong> | Verify Token <strong>{fbAiConfig?.hasVerifyToken ? "OK" : "Thiếu"}</strong> | OpenAI <strong>{fbAiConfig?.hasOpenAiKey ? "OK" : "Thiếu"}</strong> | Auto <strong>{fbAiConfig?.autoReplyEnabled ? "Bật" : "Tắt"}</strong>
+              Trạng thái hiện tại: FB Token <strong className={fbAiConfig?.hasPageAccessToken ? "text-green-600" : "text-red-500"}>{fbAiConfig?.hasPageAccessToken ? "✓ OK" : "✗ Thiếu"}</strong> | Verify Token <strong className={fbAiConfig?.hasVerifyToken ? "text-green-600" : "text-red-500"}>{fbAiConfig?.hasVerifyToken ? "✓ OK" : "✗ Thiếu"}</strong> | OpenAI <strong className={fbAiConfig?.hasOpenAiKey ? "text-green-600" : "text-red-500"}>{fbAiConfig?.hasOpenAiKey ? "✓ OK" : "✗ Thiếu"}</strong> | Auto <strong>{fbAiConfig?.autoReplyEnabled ? "Bật" : "Tắt"}</strong>
             </p>
+          </div>
+
+          {/* Save button inside the card */}
+          <div className="flex items-center gap-3 pt-2 border-t border-border">
+            {fbSaved && <span className="text-sm text-green-600 font-medium">✓ Đã lưu cấu hình Facebook AI</span>}
+            {saveFbMut.isError && <span className="text-sm text-red-600 font-medium">{(saveFbMut.error as Error).message}</span>}
+            <Button
+              className="gap-2 ml-auto"
+              onClick={() => saveFbMut.mutate()}
+              disabled={saveFbMut.isPending}
+            >
+              {saveFbMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4" />}
+              Lưu cấu hình Facebook + ChatGPT
+            </Button>
           </div>
 
           <div className="rounded-xl border border-dashed p-4 text-sm space-y-2">
@@ -437,12 +464,7 @@ export default function SettingsPage() {
 
       <div className="flex justify-end gap-3 items-center">
         {saved && <span className="text-sm text-green-600 font-medium">✓ Đã lưu thay đổi</span>}
-        {fbSaved && <span className="text-sm text-green-600 font-medium">✓ Đã lưu cấu hình Facebook AI</span>}
-        {saveFbMut.isError && <span className="text-sm text-red-600 font-medium">{(saveFbMut.error as Error).message}</span>}
-        <Button size="lg" variant="outline" className="gap-2 px-8" onClick={() => saveFbMut.mutate()} disabled={saveFbMut.isPending}>
-          {saveFbMut.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Bot className="w-5 h-5" />}
-          Lưu Facebook + ChatGPT
-        </Button>
+        {saveMut.isError && <span className="text-sm text-red-600 font-medium">{(saveMut.error as Error).message}</span>}
         <Button size="lg" className="gap-2 px-8" onClick={() => saveMut.mutate(form)} disabled={saveMut.isPending}>
           {saveMut.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
           Lưu thay đổi
