@@ -30,6 +30,7 @@ import bookingExtrasRouter from "./booking-extras";
 import attendanceRouter from "./attendance";
 import crmLeadsRouter from "./crm-leads";
 import webhookFacebookRouter from "./webhook-facebook";
+import fbInboxRouter from "./fb-inbox";
 import aiRouter from "./ai";
 import fbInboxRouter from "./fb-inbox";
 
@@ -66,6 +67,7 @@ router.use(bookingExtrasRouter);
 router.use(attendanceRouter);
 router.use(crmLeadsRouter);
 router.use(webhookFacebookRouter);
+router.use(fbInboxRouter);
 router.use(aiRouter);
 router.use(fbInboxRouter);
 
