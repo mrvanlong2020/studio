@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, Input, Button, Textarea } from "@/components/ui";
 import { CurrencyInput } from "@/components/ui/currency-input";
-import { Save, Store, Mail, Phone, MapPin, Building, Clock, Navigation, Loader2, LocateFixed, CheckCircle2, AlertCircle } from "lucide-react";
+import { Save, Store, Mail, Phone, MapPin, Building, Clock, Navigation, Loader2, LocateFixed, CheckCircle2, AlertCircle, Bot, MessageSquare } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -128,6 +128,13 @@ type Settings = {
   attendance_radius_m: number;
 };
 
+type FbAiConfig = {
+  hasPageAccessToken: boolean;
+  hasOpenAiKey: boolean;
+  hasVerifyToken: boolean;
+  autoReplyEnabled: boolean;
+};
+
 const token = () => localStorage.getItem("amazingStudioToken_v2");
 const authH = () => ({
   "Content-Type": "application/json",
@@ -138,6 +145,11 @@ export default function SettingsPage() {
   const qc = useQueryClient();
   const [form, setForm] = useState<Partial<Settings>>({});
   const [saved, setSaved] = useState(false);
+  const [fbPageAccessToken, setFbPageAccessToken] = useState("");
+  const [fbVerifyToken, setFbVerifyToken] = useState("");
+  const [openAiApiKey, setOpenAiApiKey] = useState("");
+  const [fbAutoReplyEnabled, setFbAutoReplyEnabled] = useState(false);
+  const [fbSaved, setFbSaved] = useState(false);
 
   const { data: settings, isLoading } = useQuery<Settings>({
     queryKey: ["settings"],
@@ -147,6 +159,19 @@ export default function SettingsPage() {
   useEffect(() => {
     if (settings) setForm(settings);
   }, [settings]);
+
+  const { data: fbAiConfig } = useQuery<FbAiConfig>({
+    queryKey: ["fb-ai-config"],
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/api/fb-ai/config`, { headers: authH() });
+      if (!r.ok) throw new Error("Lỗi tải cấu hình Facebook AI");
+      return r.json();
+    },
+  });
+
+  useEffect(() => {
+    if (fbAiConfig) setFbAutoReplyEnabled(fbAiConfig.autoReplyEnabled);
+  }, [fbAiConfig]);
 
   const saveMut = useMutation({
     mutationFn: async (body: Partial<Settings>) => {
@@ -158,6 +183,34 @@ export default function SettingsPage() {
       qc.invalidateQueries({ queryKey: ["settings"] });
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
+    },
+  });
+
+  const saveFbMut = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`${BASE}/api/fb-ai/config`, {
+        method: "PUT",
+        headers: authH(),
+        body: JSON.stringify({
+          pageAccessToken: fbPageAccessToken || undefined,
+          verifyToken: fbVerifyToken || undefined,
+          openaiApiKey: openAiApiKey || undefined,
+          autoReplyEnabled: fbAutoReplyEnabled,
+        }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error((d as { error?: string }).error || "Lưu cấu hình Facebook AI thất bại");
+      }
+      return r.json();
+    },
+    onSuccess: () => {
+      setFbSaved(true);
+      setTimeout(() => setFbSaved(false), 2500);
+      qc.invalidateQueries({ queryKey: ["fb-ai-config"] });
+      setFbPageAccessToken("");
+      setFbVerifyToken("");
+      setOpenAiApiKey("");
     },
   });
 
@@ -289,8 +342,84 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Facebook + ChatGPT */}
+      <Card>
+        <div className="p-6 border-b bg-muted/30">
+          <h3 className="text-lg font-bold flex items-center gap-2">
+            <Bot className="w-5 h-5 text-primary" /> Cấu hình Facebook Fanpage + ChatGPT
+          </h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Dành cho mô-đun Inbox Facebook AI. Có thể bàn giao cho khách tự thiết lập.
+          </p>
+        </div>
+        <CardContent className="p-6 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Facebook Page Access Token</label>
+              <Input
+                type="password"
+                value={fbPageAccessToken}
+                onChange={(e) => setFbPageAccessToken(e.target.value)}
+                placeholder="Nhập token mới (để trống nếu giữ nguyên)"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Webhook Verify Token</label>
+              <Input
+                value={fbVerifyToken}
+                onChange={(e) => setFbVerifyToken(e.target.value)}
+                placeholder="Ví dụ: amazing-studio-verify-2026"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">OpenAI API Key</label>
+              <Input
+                type="password"
+                value={openAiApiKey}
+                onChange={(e) => setOpenAiApiKey(e.target.value)}
+                placeholder="sk-..."
+              />
+            </div>
+          </div>
+
+          <label className="text-sm font-medium flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={fbAutoReplyEnabled}
+              onChange={(e) => setFbAutoReplyEnabled(e.target.checked)}
+            />
+            Bật tự động trả lời (AI chỉ tự gửi khi đúng kịch bản, ngoài phạm vi sẽ để nhân viên xử lý)
+          </label>
+
+          <div className="text-xs text-muted-foreground space-y-1 rounded-xl border p-3">
+            <p>
+              Trạng thái hiện tại: FB Token <strong>{fbAiConfig?.hasPageAccessToken ? "OK" : "Thiếu"}</strong> | Verify Token <strong>{fbAiConfig?.hasVerifyToken ? "OK" : "Thiếu"}</strong> | OpenAI <strong>{fbAiConfig?.hasOpenAiKey ? "OK" : "Thiếu"}</strong> | Auto <strong>{fbAiConfig?.autoReplyEnabled ? "Bật" : "Tắt"}</strong>
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-dashed p-4 text-sm space-y-2">
+            <p className="font-semibold flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-primary" /> Hướng dẫn bàn giao cho khách tự setup
+            </p>
+            <p><strong>Bước 1:</strong> Tạo Meta App, thêm Messenger, kết nối Fanpage cần dùng.</p>
+            <p><strong>Bước 2:</strong> Lấy <em>Page Access Token</em> dán vào ô tương ứng ở trên.</p>
+            <p><strong>Bước 3:</strong> Tạo chuỗi bí mật cho <em>Webhook Verify Token</em> (ví dụ `studio-verify-2026`) và lưu vào đây.</p>
+            <p><strong>Bước 4:</strong> Trên Meta Developer, cấu hình Webhook URL: <code>{window.location.origin}{BASE}/api/webhook/facebook</code> và Verify Token giống bước 3.</p>
+            <p><strong>Bước 5:</strong> Subscribe ít nhất các event: <code>messages</code>, <code>messaging_postbacks</code>.</p>
+            <p><strong>Bước 6:</strong> Tạo OpenAI API key và dán vào ô OpenAI API Key.</p>
+            <p><strong>Bước 7:</strong> Bật Auto Reply nếu muốn tự động trả lời, sau đó vào tab Inbox Facebook AI để theo dõi và xử lý ngoại lệ.</p>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="flex justify-end gap-3 items-center">
         {saved && <span className="text-sm text-green-600 font-medium">✓ Đã lưu thay đổi</span>}
+        {fbSaved && <span className="text-sm text-green-600 font-medium">✓ Đã lưu cấu hình Facebook AI</span>}
+        {saveFbMut.isError && <span className="text-sm text-red-600 font-medium">{(saveFbMut.error as Error).message}</span>}
+        <Button size="lg" variant="outline" className="gap-2 px-8" onClick={() => saveFbMut.mutate()} disabled={saveFbMut.isPending}>
+          {saveFbMut.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Bot className="w-5 h-5" />}
+          Lưu Facebook + ChatGPT
+        </Button>
         <Button size="lg" className="gap-2 px-8" onClick={() => saveMut.mutate(form)} disabled={saveMut.isPending}>
           {saveMut.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
           Lưu thay đổi

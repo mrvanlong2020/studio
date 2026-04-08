@@ -80,7 +80,6 @@
     "html2canvas": "^1.4.1",
     "jsqr": "^1.4.0",
     "leaflet": "^1.9.4",
-    "qrcode": "^1.5.4",
-    "vi": "link:date-fns/locale/vi"
+    "qrcode": "^1.5.4"
   }
 }

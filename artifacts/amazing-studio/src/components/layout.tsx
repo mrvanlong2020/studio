@@ -20,6 +20,7 @@ const ALL_NAV_ITEMS = [
   { href: "/calendar",        label: "Lịch chụp",            icon: CalendarDays,    adminOnly: false },
   { href: "/customers",       label: "Khách hàng",           icon: Users,           adminOnly: false },
   { href: "/crm-leads",       label: "CRM Leads",            icon: Funnel,          adminOnly: true  },
+  { href: "/facebook-inbox-ai", label: "Inbox Facebook AI",  icon: MessageSquare,    adminOnly: true },
   { href: "/bookings",        label: "Đơn hàng",             icon: ClipboardList,   adminOnly: false },
   { href: "/payments",        label: "Thu tiền",             icon: CreditCard,      adminOnly: false },
   { href: "/expenses",        label: "Chi tiền",             icon: TrendingDown,    adminOnly: true  },

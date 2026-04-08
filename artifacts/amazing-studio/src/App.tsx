@@ -27,6 +27,7 @@ import AttendancePage from "@/pages/attendance";
 import AttendanceCheckinPage from "@/pages/attendance-checkin";
 import MyProfilePage from "@/pages/my-profile";
 import CrmLeadsPage from "@/pages/crm-leads";
+import FacebookInboxAiPage from "@/pages/facebook-inbox-ai";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
 import { StaffAuthProvider, useStaffAuth } from "@/contexts/StaffAuthContext";
@@ -79,6 +80,7 @@ function Router() {
         <Route path="/attendance" component={AttendancePage} />
         <Route path="/internal-comms" component={InternalCommsPage} />
         <Route path="/crm-leads" component={() => <AdminRoute component={CrmLeadsPage} />} />
+        <Route path="/facebook-inbox-ai" component={() => <AdminRoute component={FacebookInboxAiPage} />} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { crmLeadsTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { crmLeadsTable, settingsTable } from "@workspace/db/schema";
+import { eq, inArray } from "drizzle-orm";
+import { processIncomingFacebookMessage } from "./fb-inbox";
 
 const router: IRouter = Router();
 
@@ -9,11 +10,23 @@ function ts(): string {
   return new Date().toISOString().slice(0, 16).replace("T", " ");
 }
 
-router.get("/webhook/facebook", (req, res) => {
+router.get("/webhook/facebook", async (req, res) => {
   const mode = req.query["hub.mode"];
   const challenge = req.query["hub.challenge"];
+  const token = req.query["hub.verify_token"];
+  let verifyToken = process.env.FB_VERIFY_TOKEN || process.env.FACEBOOK_VERIFY_TOKEN || null;
+  if (!verifyToken) {
+    try {
+      const rows = await db
+        .select()
+        .from(settingsTable)
+        .where(inArray(settingsTable.key, ["fb_verify_token"]))
+        .limit(1);
+      verifyToken = rows[0]?.value ?? null;
+    } catch {}
+  }
 
-  if (mode === "subscribe") {
+  if (mode === "subscribe" && (!verifyToken || token === verifyToken)) {
     return res.status(200).send(challenge);
   }
 
@@ -78,6 +91,10 @@ router.post("/webhook/facebook", async (req, res) => {
             .returning();
           console.log(`[CRM][${ts()}] Created lead #${newLead.id} (psid=${psid}): ${text.slice(0, 50)}`);
         }
+
+        processIncomingFacebookMessage(psid, text).catch((err) => {
+          console.error("[CRM] processIncomingFacebookMessage error:", err);
+        });
       }
     }
   } catch (err) {
