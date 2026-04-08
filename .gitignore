@@ -58,3 +58,8 @@ release/
 
 # Generated image attachments
 attached_assets/image_*.png
+
+# Database exports
+downloads/*.sql
+downloads/*.sql.gz
+downloads/*.zip
