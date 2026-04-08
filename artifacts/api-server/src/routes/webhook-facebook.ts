@@ -10,6 +10,30 @@ function ts(): string {
   return new Date().toISOString().slice(0, 16).replace("T", " ");
 }
 
+async function getPageAccessToken(): Promise<string | null> {
+  const envToken = process.env.FB_PAGE_ACCESS_TOKEN ?? null;
+  if (envToken) return envToken;
+  try {
+    const rows = await db.select().from(settingsTable).where(eq(settingsTable.key, "fb_page_access_token")).limit(1);
+    return rows[0]?.value ?? null;
+  } catch { return null; }
+}
+
+async function fetchFacebookProfile(psid: string, pageAccessToken: string): Promise<{ name: string; avatarUrl: string | null }> {
+  try {
+    const url = `https://graph.facebook.com/${psid}?fields=name,profile_pic&access_token=${pageAccessToken}`;
+    const res = await fetch(url);
+    if (!res.ok) return { name: "Khách Facebook " + psid.slice(-4), avatarUrl: null };
+    const data = await res.json() as { name?: string; profile_pic?: string };
+    return {
+      name: data.name || "Khách Facebook " + psid.slice(-4),
+      avatarUrl: data.profile_pic || null,
+    };
+  } catch {
+    return { name: "Khách Facebook " + psid.slice(-4), avatarUrl: null };
+  }
+}
+
 router.get("/webhook/facebook", async (req, res) => {
   const mode = req.query["hub.mode"];
   const challenge = req.query["hub.challenge"];
@@ -66,19 +90,28 @@ router.post("/webhook/facebook", async (req, res) => {
           .limit(1);
 
         if (existing.length > 0) {
-          await db
-            .update(crmLeadsTable)
-            .set({
-              lastMessage: text,
-              lastMessageAt: new Date(),
-            })
-            .where(eq(crmLeadsTable.facebookUserId, psid));
-          console.log(`[CRM][${ts()}] Updated lead #${existing[0].id} (psid=${psid}): ${text.slice(0, 50)}`);
+          const lead = existing[0];
+          const updateData: Record<string, unknown> = { lastMessage: text, lastMessageAt: new Date() };
+          if (!lead.avatarUrl || lead.name.startsWith("Khách Facebook ")) {
+            const token = await getPageAccessToken();
+            if (token) {
+              const profile = await fetchFacebookProfile(psid, token);
+              if (lead.name.startsWith("Khách Facebook ")) updateData.name = profile.name;
+              if (!lead.avatarUrl && profile.avatarUrl) updateData.avatarUrl = profile.avatarUrl;
+            }
+          }
+          await db.update(crmLeadsTable).set(updateData).where(eq(crmLeadsTable.facebookUserId, psid));
+          console.log(`[CRM][${ts()}] Updated lead #${lead.id} (psid=${psid}): ${text.slice(0, 50)}`);
         } else {
+          const token = await getPageAccessToken();
+          const profile = token
+            ? await fetchFacebookProfile(psid, token)
+            : { name: "Khách Facebook " + psid.slice(-4), avatarUrl: null };
           const [newLead] = await db
             .insert(crmLeadsTable)
             .values({
-              name: "Khách Facebook " + psid.slice(-4),
+              name: profile.name,
+              avatarUrl: profile.avatarUrl,
               phone: null,
               facebookUserId: psid,
               lastMessage: text,
@@ -89,7 +122,7 @@ router.post("/webhook/facebook", async (req, res) => {
               status: "new",
             })
             .returning();
-          console.log(`[CRM][${ts()}] Created lead #${newLead.id} (psid=${psid}): ${text.slice(0, 50)}`);
+          console.log(`[CRM][${ts()}] Created lead #${newLead.id} "${profile.name}" (psid=${psid}): ${text.slice(0, 50)}`);
         }
 
         processIncomingFacebookMessage(psid, text).catch((err) => {

@@ -23,6 +23,7 @@ type CrmLead = {
   channel: string | null;
   notes: string | null;
   facebookUserId: string | null;
+  avatarUrl: string | null;
   createdAt: string;
 };
 
@@ -283,7 +284,15 @@ export default function CrmLeadsPage() {
                       key={lead.id}
                       onClick={() => openDrawer(lead)}
                       className={`border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer ${i % 2 === 0 ? "" : "bg-muted/10"}`}>
-                      <td className="px-4 py-3 font-medium text-foreground">{lead.name}</td>
+                      <td className="px-4 py-3 font-medium text-foreground">
+                        <div className="flex items-center gap-2">
+                          {lead.avatarUrl
+                            ? <img src={lead.avatarUrl} alt={lead.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                            : <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-primary font-semibold text-xs">{lead.name.charAt(0).toUpperCase()}</div>
+                          }
+                          <span>{lead.name}</span>
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{lead.phone ?? "—"}</td>
                       <td className="px-4 py-3 text-muted-foreground max-w-[200px]">
                         {lead.lastMessage ? (
@@ -342,11 +351,12 @@ export default function CrmLeadsPage() {
             {/* Drawer header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                  <span className="text-sm font-bold text-primary">
-                    {selectedLead.name.charAt(0).toUpperCase()}
-                  </span>
-                </div>
+                {selectedLead.avatarUrl
+                  ? <img src={selectedLead.avatarUrl} alt={selectedLead.name} className="h-9 w-9 rounded-full object-cover shrink-0" />
+                  : <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <span className="text-sm font-bold text-primary">{selectedLead.name.charAt(0).toUpperCase()}</span>
+                    </div>
+                }
                 <div className="min-w-0">
                   <p className="font-semibold text-foreground truncate">{selectedLead.name}</p>
                   <Badge className={statusMeta(selectedLead.status).color}>

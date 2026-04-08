@@ -377,7 +377,7 @@ router.get("/fb-inbox/threads", async (req, res) => {
   `);
 
   const psids = (q.rows as Array<{ facebook_user_id: string }>).map((r) => r.facebook_user_id);
-  let leadsByPsid = new Map<string, { name: string; phone: string | null; status: string | null }>();
+  let leadsByPsid = new Map<string, { name: string; phone: string | null; status: string | null; avatarUrl: string | null }>();
   if (psids.length > 0) {
     const leads = await db
       .select({
@@ -385,13 +385,14 @@ router.get("/fb-inbox/threads", async (req, res) => {
         name: crmLeadsTable.name,
         phone: crmLeadsTable.phone,
         status: crmLeadsTable.status,
+        avatarUrl: crmLeadsTable.avatarUrl,
       })
       .from(crmLeadsTable)
       .where(inArray(crmLeadsTable.facebookUserId, psids));
     leadsByPsid = new Map(
       leads
         .filter((x) => !!x.facebookUserId)
-        .map((x) => [x.facebookUserId as string, { name: x.name, phone: x.phone, status: x.status }]),
+        .map((x) => [x.facebookUserId as string, { name: x.name, phone: x.phone, status: x.status, avatarUrl: x.avatarUrl ?? null }]),
     );
   }
 

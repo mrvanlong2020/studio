@@ -14,6 +14,7 @@ export const crmLeadsTable = pgTable("crm_leads", {
   type: text("type").default("unknown"),
   channel: text("channel").default("inbox"),
   facebookUserId: text("facebook_user_id").unique(),
+  avatarUrl: text("avatar_url"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
 });

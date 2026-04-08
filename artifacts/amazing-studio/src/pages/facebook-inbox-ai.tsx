@@ -20,7 +20,7 @@ type Thread = {
   lastMessage: string;
   lastDirection: "incoming" | "outgoing";
   lastAiDecision: string | null;
-  lead: { name: string; phone: string | null; status: string | null } | null;
+  lead: { name: string; phone: string | null; status: string | null; avatarUrl: string | null } | null;
 };
 
 type Message = {
@@ -130,17 +130,27 @@ export default function FacebookInboxAiPage() {
         <div className="bg-card border border-border rounded-2xl p-3 h-[70vh] overflow-y-auto">
           <h3 className="font-semibold mb-2">Hội thoại Fanpage</h3>
           <div className="space-y-2">
-            {threads.map((t) => (
-              <button
-                key={t.psid}
-                onClick={() => setSelectedPsid(t.psid)}
-                className={`w-full text-left border rounded-xl px-3 py-2 ${selectedPsid === t.psid ? "border-primary bg-primary/5" : "border-border"}`}
-              >
-                <p className="font-medium text-sm">{t.lead?.name ?? `Khách ${t.psid.slice(-4)}`}</p>
-                <p className="text-xs text-muted-foreground truncate">{t.lastMessage}</p>
-                <p className="text-[11px] text-muted-foreground mt-1">{new Date(t.lastAt).toLocaleString("vi-VN")}</p>
-              </button>
-            ))}
+            {threads.map((t) => {
+              const name = t.lead?.name ?? `Khách ${t.psid.slice(-4)}`;
+              const avatar = t.lead?.avatarUrl;
+              return (
+                <button
+                  key={t.psid}
+                  onClick={() => setSelectedPsid(t.psid)}
+                  className={`w-full text-left border rounded-xl px-3 py-2 flex items-center gap-2.5 ${selectedPsid === t.psid ? "border-primary bg-primary/5" : "border-border"}`}
+                >
+                  {avatar
+                    ? <img src={avatar} alt={name} className="w-9 h-9 rounded-full object-cover shrink-0" />
+                    : <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-primary font-semibold text-sm">{name.charAt(0)}</div>
+                  }
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm truncate">{name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{t.lastMessage}</p>
+                    <p className="text-[11px] text-muted-foreground">{new Date(t.lastAt).toLocaleString("vi-VN")}</p>
+                  </div>
+                </button>
+              );
+            })}
             {threads.length === 0 && <p className="text-sm text-muted-foreground">Chưa có hội thoại Facebook.</p>}
           </div>
         </div>
