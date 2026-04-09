@@ -156,6 +156,7 @@ export default function SettingsPage() {
   const [fbSaved, setFbSaved] = useState(false);
   const [pageInfo, setPageInfo] = useState<{ pageId: string; pageName: string; fanCount?: number; picture?: string | null } | null>(null);
   const [pageInfoError, setPageInfoError] = useState("");
+  const [showWebhookLog, setShowWebhookLog] = useState(false);
 
   const { data: settings, isLoading } = useQuery<Settings>({
     queryKey: ["settings"],
@@ -190,6 +191,14 @@ export default function SettingsPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     },
+  });
+
+  type WebhookEvent = { at: string; type: string; summary: string; psid?: string };
+  const { data: webhookLog, refetch: refetchWebhookLog, isFetching: webhookLogFetching } = useQuery<{ events: WebhookEvent[]; total: number }>({
+    queryKey: ["webhook-log"],
+    queryFn: () => fetch(`${BASE}/api/fb-ai/webhook-log`, { headers: authH() }).then(r => r.json()),
+    enabled: showWebhookLog,
+    refetchInterval: showWebhookLog ? 5000 : false,
   });
 
   const checkPageMut = useMutation({
@@ -500,6 +509,51 @@ export default function SettingsPage() {
               {saveFbMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4" />}
               Lưu cấu hình Facebook + ChatGPT
             </Button>
+          </div>
+
+          {/* Webhook Debug Log */}
+          <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold flex items-center gap-2">
+                <Bot className="w-4 h-4 text-primary" /> Debug: Log sự kiện webhook ({webhookLog?.total ?? 0} sự kiện)
+              </p>
+              <div className="flex gap-2">
+                {showWebhookLog && (
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => refetchWebhookLog()} disabled={webhookLogFetching}>
+                    {webhookLogFetching ? <Loader2 className="w-3 h-3 animate-spin" /> : "↻ Refresh"}
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => setShowWebhookLog(v => !v)}>
+                  {showWebhookLog ? "Ẩn log" : "Xem log webhook"}
+                </Button>
+              </div>
+            </div>
+            {showWebhookLog && (
+              <div className="space-y-1 max-h-64 overflow-y-auto">
+                {!webhookLog || webhookLog.events.length === 0 ? (
+                  <div className="rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-3 text-sm text-yellow-800 dark:text-yellow-300">
+                    <strong>⚠️ Chưa có sự kiện nào từ Facebook!</strong><br />
+                    Facebook chưa gửi bất kỳ request nào vào webhook này. Hãy kiểm tra các nguyên nhân bên dưới.
+                  </div>
+                ) : (
+                  webhookLog.events.map((ev, i) => (
+                    <div key={i} className={`text-xs rounded px-2 py-1 font-mono ${ev.type === "message" ? "bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-300" : ev.type === "error" ? "bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-300" : ev.type === "verification" ? "bg-blue-50 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300" : "bg-muted text-foreground"}`}>
+                      <span className="opacity-60">{ev.at.slice(0, 19).replace("T", " ")}</span> {ev.summary}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+            {showWebhookLog && webhookLog?.events.length === 0 && (
+              <div className="text-xs space-y-1 p-3 rounded-lg bg-muted border border-border text-muted-foreground">
+                <p className="font-semibold text-foreground">Checklist kiểm tra khi không nhận được tin nhắn:</p>
+                <p>1. <strong>App Facebook đang ở chế độ Development?</strong> → Vào Meta Developer → App Settings → đổi sang <em>Live Mode</em></p>
+                <p>2. <strong>Webhook URL đã được verify trên Meta Developer?</strong> → Messenger → Webhooks → thêm URL: <code className="text-xs bg-muted-foreground/20 px-1 rounded">{window.location.origin.replace("24230", "8080")}/api/webhook/facebook</code></p>
+                <p>3. <strong>Đã subscribe sự kiện <code>messages</code>?</strong> → Trong Webhooks, bấm "Edit" và chọn messages, messaging_postbacks</p>
+                <p>4. <strong>Verify Token đúng chưa?</strong> → Phải khớp giữa Meta Developer và ô "Webhook Verify Token" ở trên</p>
+                <p>5. <strong>Fanpage đã được kết nối app chưa?</strong> → Messenger → Cài đặt → Thêm trang → chọn đúng Fanpage</p>
+              </div>
+            )}
           </div>
 
           <div className="rounded-xl border border-dashed p-4 text-sm space-y-2">

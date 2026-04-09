@@ -4,6 +4,7 @@ import { db, pool } from "@workspace/db";
 import { crmLeadsTable, settingsTable } from "@workspace/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { verifyToken } from "./auth";
+import { webhookEvents } from "./webhook-log";
 
 const router: IRouter = Router();
 
@@ -378,6 +379,13 @@ router.put("/fb-ai/config", async (req, res) => {
       });
   }
   res.json({ success: true });
+});
+
+// GET /fb-ai/webhook-log — xem 50 sự kiện webhook gần nhất (chỉ admin)
+router.get("/fb-ai/webhook-log", async (req, res) => {
+  const caller = await getCaller(req);
+  if (!isAdmin(caller)) return res.status(403).json({ error: "Không có quyền" });
+  res.json({ events: webhookEvents, total: webhookEvents.length });
 });
 
 // GET /fb-ai/page-info — lấy thông tin fanpage đang được kết nối (dùng token lưu trong DB)
