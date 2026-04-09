@@ -75,8 +75,24 @@ router.post("/webhook/facebook", async (req, res) => {
       return;
     }
 
+    // Lấy page ID active từ DB để lọc (chỉ xử lý fanpage đang được cấu hình)
+    let activePageId: string | null = null;
+    try {
+      const rows = await db.select().from(settingsTable).where(eq(settingsTable.key, "fb_active_page_id")).limit(1);
+      activePageId = rows[0]?.value ?? null;
+    } catch { /* bỏ qua nếu lỗi */ }
+
     const entries: unknown[] = Array.isArray(body.entry) ? body.entry : [];
     for (const entry of entries) {
+      const entryPageId = (entry as Record<string, unknown>).id as string | undefined;
+
+      // Lọc: bỏ qua nếu entry đến từ fanpage khác
+      if (activePageId && entryPageId && entryPageId !== activePageId) {
+        logEvent({ at: new Date().toISOString(), type: "other", summary: `🚫 Bỏ qua entry từ page ${entryPageId} (chỉ xử lý page ${activePageId})` });
+        console.log(`[Webhook][${ts()}] 🚫 Bỏ qua entry từ page ${entryPageId} (active: ${activePageId})`);
+        continue;
+      }
+
       const messaging: unknown[] = Array.isArray((entry as Record<string, unknown>).messaging)
         ? ((entry as Record<string, unknown>).messaging as unknown[])
         : [];

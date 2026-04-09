@@ -422,6 +422,17 @@ router.post("/fb-ai/subscribe-webhook", async (req, res) => {
     );
     const subData = await subRes.json() as { success?: boolean; error?: { message?: string } };
     if (!subRes.ok || !subData.success) return res.status(400).json({ error: subData.error?.message ?? "Đăng ký webhook thất bại" });
+
+    // Lưu page ID active vào DB để lọc webhook
+    await db
+      .insert(settingsTable)
+      .values({ key: "fb_active_page_id", value: meData.id! })
+      .onConflictDoUpdate({ target: settingsTable.key, set: { value: meData.id! } });
+    await db
+      .insert(settingsTable)
+      .values({ key: "fb_active_page_name", value: meData.name ?? "" })
+      .onConflictDoUpdate({ target: settingsTable.key, set: { value: meData.name ?? "" } });
+
     res.json({ success: true, pageId: meData.id, pageName: meData.name });
   } catch (e) {
     res.status(500).json({ error: String(e) });
