@@ -86,13 +86,6 @@ router.post("/webhook/facebook", async (req, res) => {
     for (const entry of entries) {
       const entryPageId = (entry as Record<string, unknown>).id as string | undefined;
 
-      // Lọc: bỏ qua nếu entry đến từ fanpage khác
-      if (activePageId && entryPageId && entryPageId !== activePageId) {
-        logEvent({ at: new Date().toISOString(), type: "other", summary: `🚫 Bỏ qua entry từ page ${entryPageId} (chỉ xử lý page ${activePageId})` });
-        console.log(`[Webhook][${ts()}] 🚫 Bỏ qua entry từ page ${entryPageId} (active: ${activePageId})`);
-        continue;
-      }
-
       const messaging: unknown[] = Array.isArray((entry as Record<string, unknown>).messaging)
         ? ((entry as Record<string, unknown>).messaging as unknown[])
         : [];
@@ -100,7 +93,24 @@ router.post("/webhook/facebook", async (req, res) => {
       for (const event of messaging) {
         const e = event as Record<string, unknown>;
         const sender = e.sender as Record<string, unknown> | undefined;
+        const recipient = e.recipient as Record<string, unknown> | undefined;
         const msg = e.message as Record<string, unknown> | undefined;
+        const recipientPageId = recipient?.id as string | undefined;
+        const eventPageId = entryPageId || recipientPageId;
+
+        // Lọc cứng theo fanpage active:
+        // - Nếu đã cấu hình activePageId thì mọi event không map được page hoặc lệch page đều bị bỏ qua.
+        if (activePageId && eventPageId !== activePageId) {
+          logEvent({
+            at: new Date().toISOString(),
+            type: "other",
+            summary: `🚫 Bỏ qua event page=${eventPageId ?? "unknown"} (active=${activePageId})`,
+          });
+          console.log(
+            `[Webhook][${ts()}] 🚫 Bỏ qua event page=${eventPageId ?? "unknown"} (active=${activePageId}, entry=${entryPageId ?? "unknown"}, recipient=${recipientPageId ?? "unknown"})`,
+          );
+          continue;
+        }
 
         const psid: string | undefined = sender?.id as string | undefined;
         const text: string | undefined = msg?.text as string | undefined;
