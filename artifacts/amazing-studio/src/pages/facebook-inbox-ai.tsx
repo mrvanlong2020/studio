@@ -110,6 +110,20 @@ export default function FacebookInboxAiPage() {
     onError: (e: Error) => setLocalHint(e.message),
   });
 
+  const syncProfilesMutation = useMutation({
+    mutationFn: async () => {
+      const r = await authFetch(`${BASE}/api/fb-ai/sync-profiles`, { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Đồng bộ thất bại");
+      return d as { success: boolean; scanned: number; updated: number; failed: number };
+    },
+    onSuccess: (d) => {
+      setLocalHint(`Đã đồng bộ ${d.updated}/${d.scanned} khách (lỗi: ${d.failed}).`);
+      qc.invalidateQueries({ queryKey: ["fb-inbox-threads"] });
+    },
+    onError: (e: Error) => setLocalHint(e.message),
+  });
+
   return (
     <div className="space-y-4">
       <div className="bg-card border border-border rounded-2xl p-4">
@@ -120,9 +134,18 @@ export default function FacebookInboxAiPage() {
               Phần cấu hình token/key đã chuyển sang trang Cài đặt để dễ bàn giao cho khách tự thiết lập.
             </p>
           </div>
-          <Link href="/settings" className="inline-flex items-center rounded-xl border px-3 py-2 text-sm font-medium hover:bg-muted">
-            Mở Cài đặt
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => syncProfilesMutation.mutate()}
+              disabled={syncProfilesMutation.isPending}
+              className="inline-flex items-center rounded-xl border px-3 py-2 text-sm font-medium hover:bg-muted"
+            >
+              {syncProfilesMutation.isPending ? "Đang đồng bộ..." : "Đồng bộ tên/avatar"}
+            </button>
+            <Link href="/settings" className="inline-flex items-center rounded-xl border px-3 py-2 text-sm font-medium hover:bg-muted">
+              Mở Cài đặt
+            </Link>
+          </div>
         </div>
       </div>
 

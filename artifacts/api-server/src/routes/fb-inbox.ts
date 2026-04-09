@@ -94,6 +94,22 @@ async function sendFacebookMessage(psid: string, text: string, pageAccessToken: 
   }
 }
 
+async function fetchFacebookProfile(psid: string, pageAccessToken: string): Promise<{ name: string | null; avatarUrl: string | null }> {
+  try {
+    const url = `https://graph.facebook.com/${psid}?fields=first_name,last_name,name,profile_pic&access_token=${encodeURIComponent(pageAccessToken)}`;
+    const r = await fetch(url);
+    if (!r.ok) return { name: null, avatarUrl: null };
+    const data = (await r.json()) as { first_name?: string; last_name?: string; name?: string; profile_pic?: string };
+    const fullName = `${data.first_name ?? ""} ${data.last_name ?? ""}`.trim();
+    return {
+      name: fullName || data.name || null,
+      avatarUrl: data.profile_pic || null,
+    };
+  } catch {
+    return { name: null, avatarUrl: null };
+  }
+}
+
 async function buildStudioContext(): Promise<string> {
   const lines: string[] = [];
 
@@ -437,6 +453,59 @@ router.post("/fb-ai/subscribe-webhook", async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
+});
+
+// POST /fb-ai/sync-profiles — đồng bộ lại tên/avatar cho toàn bộ khách Facebook cũ
+router.post("/fb-ai/sync-profiles", async (req, res) => {
+  const caller = await getCaller(req);
+  if (!isAdmin(caller)) return res.status(403).json({ error: "Không có quyền" });
+
+  const cfg = await getConfig();
+  if (!cfg.pageAccessToken) return res.status(400).json({ error: "Chưa cấu hình Page Access Token" });
+
+  const leads = await db
+    .select({
+      id: crmLeadsTable.id,
+      facebookUserId: crmLeadsTable.facebookUserId,
+      name: crmLeadsTable.name,
+      avatarUrl: crmLeadsTable.avatarUrl,
+    })
+    .from(crmLeadsTable)
+    .where(eq(crmLeadsTable.source, "facebook"));
+
+  let scanned = 0;
+  let updated = 0;
+  let failed = 0;
+
+  for (const lead of leads) {
+    const psid = lead.facebookUserId?.trim();
+    if (!psid) continue;
+    scanned += 1;
+
+    const shouldUpdateName = !lead.name || lead.name.startsWith("Khách Facebook ");
+    const shouldUpdateAvatar = !lead.avatarUrl;
+    if (!shouldUpdateName && !shouldUpdateAvatar) continue;
+
+    const profile = await fetchFacebookProfile(psid, cfg.pageAccessToken);
+    const nextName = shouldUpdateName ? profile.name : null;
+    const nextAvatar = shouldUpdateAvatar ? profile.avatarUrl : null;
+
+    if (!nextName && !nextAvatar) {
+      failed += 1;
+      continue;
+    }
+
+    await db
+      .update(crmLeadsTable)
+      .set({
+        ...(nextName ? { name: nextName } : {}),
+        ...(nextAvatar ? { avatarUrl: nextAvatar } : {}),
+      })
+      .where(eq(crmLeadsTable.id, lead.id));
+    updated += 1;
+  }
+
+  res.json({ success: true, scanned, updated, failed });
 });
 
 router.get("/fb-inbox/threads", async (req, res) => {
