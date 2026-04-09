@@ -22,12 +22,13 @@ async function getPageAccessToken(): Promise<string | null> {
 
 async function fetchFacebookProfile(psid: string, pageAccessToken: string): Promise<{ name: string; avatarUrl: string | null }> {
   try {
-    const url = `https://graph.facebook.com/${psid}?fields=name,profile_pic&access_token=${pageAccessToken}`;
+    const url = `https://graph.facebook.com/${psid}?fields=first_name,last_name,name,profile_pic&access_token=${pageAccessToken}`;
     const res = await fetch(url);
     if (!res.ok) return { name: "Khách Facebook " + psid.slice(-4), avatarUrl: null };
-    const data = await res.json() as { name?: string; profile_pic?: string };
+    const data = await res.json() as { first_name?: string; last_name?: string; name?: string; profile_pic?: string };
+    const fullName = `${data.first_name ?? ""} ${data.last_name ?? ""}`.trim();
     return {
-      name: data.name || "Khách Facebook " + psid.slice(-4),
+      name: fullName || data.name || "Khách Facebook " + psid.slice(-4),
       avatarUrl: data.profile_pic || null,
     };
   } catch {
